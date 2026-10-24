@@ -137,3 +137,86 @@ export function formatPlayerDisplayName(
     }
     return intlFull || localFull || player.name || 'Unnamed Player';
 }
+
+/**
+ * Splits a full name string into first name, middle name, and last name smartly.
+ * Handles Thai titles/honorifics (e.g. "นาย", "นาง", "นางสาว", "ด.ช.", "ด.ญ.", etc.)
+ * Handles Western titles (e.g. "Mr.", "Mrs.", "Ms.", "Dr.")
+ * Handles 1-part, 2-part, and multi-part names.
+ */
+export function parseFullName(input: string): {
+    firstName: string;
+    middleName: string;
+    lastName: string;
+} {
+    const trimmed = (input || "").trim();
+    if (!trimmed) {
+        return { firstName: "", middleName: "", lastName: "" };
+    }
+
+    const parts = trimmed.split(/\s+/);
+    if (parts.length === 1) {
+        return {
+            firstName: parts[0],
+            middleName: "",
+            lastName: ""
+        };
+    }
+
+    // Common titles/honorifics that may be separated with a space
+    const titles = [
+        "นาย", "นาง", "นางสาว", "น.ส.", "ด.ช.", "ด.ญ.", "เด็กชาย", "เด็กหญิง",
+        "mr.", "mr", "mrs.", "mrs", "ms.", "ms", "miss", "dr.", "dr"
+    ];
+
+    let startIndex = 0;
+    let titlePrefix = "";
+
+    // If first word is a standalone title and there are more words
+    if (titles.includes(parts[0].toLowerCase()) && parts.length >= 2) {
+        titlePrefix = parts[0] + " ";
+        startIndex = 1;
+    }
+
+    const remaining = parts.slice(startIndex);
+    if (remaining.length === 0) {
+        return {
+            firstName: parts[0],
+            middleName: "",
+            lastName: ""
+        };
+    }
+
+    if (remaining.length === 1) {
+        return {
+            firstName: titlePrefix + remaining[0],
+            middleName: "",
+            lastName: ""
+        };
+    }
+
+    if (remaining.length === 2) {
+        return {
+            firstName: titlePrefix + remaining[0],
+            middleName: "",
+            lastName: remaining[1]
+        };
+    }
+
+    // 3 words remaining: e.g. "John Michael Doe" or "สมชาย วงศ์สวรรค์ ใจดี"
+    if (remaining.length === 3) {
+        return {
+            firstName: titlePrefix + remaining[0],
+            middleName: remaining[1],
+            lastName: remaining[2]
+        };
+    }
+
+    // 4 or more words: first word is first name, rest joined as last name
+    return {
+        firstName: titlePrefix + remaining[0],
+        middleName: "",
+        lastName: remaining.slice(1).join(" ")
+    };
+}
+

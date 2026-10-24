@@ -245,6 +245,7 @@ export async function createTeam(prevState: ActionResponse, formData: FormData):
         revalidatePath("/manager/my-teams");
         revalidatePath("/manager/dashboard");
         revalidatePath("/organizer/dashboard"); 
+        revalidatePath("/my-teams");
         revalidatePath("/dashboard/teams");
         
         return { success: true };
@@ -503,6 +504,7 @@ export async function updateTeamGlobal(teamId: string, formData: FormData, _tour
         revalidatePath("/manager/my-teams");
         revalidatePath("/manager/my-registrations");
         revalidatePath(`/manager/my-teams/${teamId}`);
+        revalidatePath(`/my-teams/${teamId}`);
         revalidatePath(`/dashboard/teams/${teamId}`);
         revalidatePath(`/dashboard/tournament-teams/${teamId}`);
         return { success: true };
@@ -532,6 +534,7 @@ export async function deleteTeamGlobal(teamId: string, _tournamentId?: string): 
             return { success: false, error: err.error || "Failed to delete team" };
         }
 
+        revalidatePath("/my-teams");
         revalidatePath("/dashboard/teams");
         revalidatePath("/manager/my-teams");
         return { success: true };
@@ -549,26 +552,27 @@ export async function toggleRosterLock(teamId: string, isLocked: boolean): Promi
         const session = await getServerSession();
         if (!session?.user) return { success: false, error: "Authentication required" };
 
-        const res = await fetch(`${API_BASE_URL}/teams/${teamId}`, {
-            method: 'PUT',
+        let res = await fetch(`${API_BASE_URL}/teams/${teamId}/lock`, {
+            method: 'PATCH',
             headers: {
                 'Content-Type': 'application/json',
                 Authorization: `Bearer ${session.token}`,
             },
-            body: JSON.stringify({ is_roster_locked: isLocked }),
+            body: JSON.stringify({ is_locked: isLocked, is_roster_locked: isLocked }),
         });
 
         if (!res.ok) {
-            await fetch(`${API_BASE_URL}/tournaments/00000000-0000-0000-0000-000000000000/registrations/${teamId}/lock`, {
+            res = await fetch(`${API_BASE_URL}/tournaments/00000000-0000-0000-0000-000000000000/registrations/${teamId}/lock`, {
                 method: 'PATCH',
                 headers: {
                     'Content-Type': 'application/json',
                     Authorization: `Bearer ${session.token}`,
                 },
                 body: JSON.stringify({ is_locked: isLocked }),
-            }).catch(() => {});
+            }).catch(() => res);
         }
 
+        revalidatePath(`/my-teams/${teamId}`);
         revalidatePath(`/dashboard/teams/${teamId}`);
         revalidatePath(`/manager/my-teams/${teamId}`);
         return { success: true };
@@ -666,7 +670,8 @@ export async function getPlayers(teamId: string): Promise<ActionResponse<Player[
             }
         }
 
-        const mappedPlayers: Player[] = (players || []).map((p: any) => {
+        const activeRawPlayers = (players || []).filter((p: any) => !p.deleted_at);
+        const mappedPlayers: Player[] = activeRawPlayers.map((p: any) => {
             const rawName = p.name || `${p.first_name || ''} ${p.last_name && p.last_name !== '-' ? p.last_name : ''}`.trim() || 'Unnamed Player';
             const cleanName = rawName.replace(/\s*-\s*$/, '').trim();
             const shirtNum = p.jersey_number !== undefined && p.jersey_number !== null
@@ -844,6 +849,7 @@ export async function addPlayer(
             return { success: false, error: errData.error || "Failed to add player" };
         }
 
+        revalidatePath(`/my-teams/${teamId}`);
         revalidatePath(`/dashboard/teams/${teamId}`);
         revalidatePath(`/manager/my-teams/${teamId}`);
         return { success: true };
@@ -888,6 +894,7 @@ export async function addPlayersBatch(
             });
         }
 
+        revalidatePath(`/my-teams/${teamId}`);
         revalidatePath(`/dashboard/teams/${teamId}`);
         revalidatePath(`/manager/my-teams/${teamId}`);
         return { success: true };
@@ -955,6 +962,7 @@ export async function addPlayersBatchForm(
             });
         }
 
+        revalidatePath(`/my-teams/${teamId}`);
         revalidatePath(`/dashboard/teams/${teamId}`);
         revalidatePath(`/manager/my-teams/${teamId}`);
         return { success: true };
@@ -1040,6 +1048,7 @@ export async function updatePlayer(
             return { success: false, error: lastError };
         }
 
+        revalidatePath(`/my-teams/${teamId}`);
         revalidatePath(`/dashboard/teams/${teamId}`);
         revalidatePath(`/dashboard/tournament-teams/${teamId}`);
         revalidatePath(`/manager/my-teams/${teamId}`);
@@ -1072,6 +1081,7 @@ export async function deletePlayer(playerId: string, teamId: string): Promise<Ac
             });
         }
 
+        revalidatePath(`/my-teams/${teamId}`);
         revalidatePath(`/dashboard/teams/${teamId}`);
         revalidatePath(`/dashboard/tournament-teams/${teamId}`);
         revalidatePath(`/manager/my-teams/${teamId}`);
@@ -1313,7 +1323,8 @@ export async function submitTeamManagementRequest(
         });
 
         if (res.ok) {
-            revalidatePath("/dashboard/teams");
+            revalidatePath("/my-teams");
+        revalidatePath("/dashboard/teams");
             return { success: true };
         }
 

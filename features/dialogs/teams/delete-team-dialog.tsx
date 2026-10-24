@@ -43,7 +43,7 @@ export function DeleteTeamDialog({
     trigger,
     disabled = false,
     onSuccess,
-    redirectTo = "/dashboard/teams",
+    redirectTo = "/my-teams",
 }: DeleteTeamDialogProps) {
     const t = useTranslations("Team");
     const tCommon = useTranslations("Common");

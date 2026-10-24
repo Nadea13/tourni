@@ -31,7 +31,7 @@ import { compressAndConvertToAvif } from "@/lib/image-compression";
 import { getPositionOptions } from "@/lib/positions";
 import { cn } from "@/lib/utils";
 import { resolveStorageUrl } from "@/lib/storage-utils";
-import { isEnglishOrLatin } from "@/lib/name-helper";
+import { isEnglishOrLatin, parseFullName } from "@/lib/name-helper";
 
 interface AddPlayerFormProps {
     teamId: string;
@@ -108,6 +108,7 @@ export function AddPlayerForm({ teamId, onSuccess, effectivelyLocked, sport, cla
 
     // Primary Quick inputs
     const [memberType, setMemberType] = useState<MemberType>("player");
+    const [fullName, setFullName] = useState("");
     const [firstName, setFirstName] = useState("");
     const [lastName, setLastName] = useState("");
     const [newNumber, setNewNumber] = useState("");
@@ -225,53 +226,40 @@ export function AddPlayerForm({ teamId, onSuccess, effectivelyLocked, sport, cla
         }
     };
 
-    const handleFirstNameChange = (val: string) => {
-        setFirstName(val);
+    const handleFullNameChange = (val: string) => {
+        setFullName(val);
+        const parsed = parseFullName(val);
+        setFirstName(parsed.firstName);
+        setLastName(parsed.lastName);
+
         if (isEnglishOrLatin(val)) {
-            setFirstNameIntl(val);
-            // If local was previously holding this english text, clear it
+            setFirstNameIntl(parsed.firstName);
+            setMiddleNameIntl(parsed.middleName);
+            setLastNameIntl(parsed.lastName);
             if (isEnglishOrLatin(firstNameLocal)) {
                 setFirstNameLocal("");
-            }
-        } else {
-            setFirstNameLocal(val);
-        }
-        if (selectedMasterPlayerId) {
-            setSelectedMasterPlayerId(null);
-        }
-        const full = `${val} ${lastName}`.trim();
-        if (full.length > 0) {
-            setIsPopoverOpen(true);
-            handleSearch(full);
-        } else {
-            setIsPopoverOpen(false);
-            setSearchResults([]);
-        }
-    };
-
-    const handleLastNameChange = (val: string) => {
-        setLastName(val);
-        if (isEnglishOrLatin(val)) {
-            setLastNameIntl(val);
-            if (isEnglishOrLatin(lastNameLocal)) {
+                setMiddleNameLocal("");
                 setLastNameLocal("");
             }
         } else {
-            setLastNameLocal(val);
+            setFirstNameLocal(parsed.firstName);
+            setMiddleNameLocal(parsed.middleName);
+            setLastNameLocal(parsed.lastName);
         }
+
         if (selectedMasterPlayerId) {
             setSelectedMasterPlayerId(null);
         }
-        const full = `${firstName} ${val}`.trim();
-        if (full.length > 0) {
+
+        const query = val.trim();
+        if (query.length > 0) {
             setIsPopoverOpen(true);
-            handleSearch(full);
+            handleSearch(query);
         } else {
             setIsPopoverOpen(false);
             setSearchResults([]);
         }
     };
-
     const handleSelectGlobalPlayer = (gp: MasterPlayerSearchResult) => {
         const localFirst = gp.first_name_local || gp.first_name_th || "";
         const localLast = gp.last_name_local || gp.last_name_th || "";
@@ -281,13 +269,16 @@ export function AddPlayerForm({ teamId, onSuccess, effectivelyLocked, sport, cla
         const chosenFirst = (isThai ? (localFirst || intlFirst) : (intlFirst || localFirst)) || "";
         const chosenLast = (isThai ? (localLast || intlLast) : (intlLast || localLast)) || "";
 
+        const displayName = gp.name || [chosenFirst, chosenLast].filter(Boolean).join(" ");
+        setFullName(displayName);
+
         if (chosenFirst) {
             setFirstName(chosenFirst);
             setLastName(chosenLast || "");
         } else {
-            const parts = gp.name.split(" ");
-            setFirstName(parts[0] || "");
-            setLastName(parts.slice(1).join(" ") || "");
+            const parts = parseFullName(displayName);
+            setFirstName(parts.firstName || "");
+            setLastName(parts.lastName || "");
         }
 
         // Fill detailed fields
@@ -316,35 +307,49 @@ export function AddPlayerForm({ teamId, onSuccess, effectivelyLocked, sport, cla
 
     const handleAddPlayer = async (e: React.FormEvent) => {
         e.preventDefault();
-        const effectiveFirst = firstName.trim() || firstNameLocal.trim() || firstNameIntl.trim();
-        const effectiveLast = lastName.trim() || lastNameLocal.trim() || lastNameIntl.trim();
+        const effectiveFull = fullName.trim();
+        const parsed = parseFullName(effectiveFull);
+        const effectiveFirst = parsed.firstName || firstName.trim() || firstNameLocal.trim() || firstNameIntl.trim();
+        const effectiveMiddle = parsed.middleName || middleNameLocal.trim() || middleNameIntl.trim();
+        const effectiveLast = parsed.lastName || lastName.trim() || lastNameLocal.trim() || lastNameIntl.trim();
 
         if (!effectiveFirst) return;
 
         setIsSaving(true);
         const formData = new FormData();
-        const fullName = `${effectiveFirst} ${effectiveLast}`.trim();
+        const submissionName = effectiveFull || `${effectiveFirst} ${effectiveLast}`.trim();
         
-        formData.append("name", fullName);
-        formData.append("first_name_local", firstNameLocal.trim());
-        formData.append("middle_name_local", middleNameLocal.trim());
-        formData.append("last_name_local", lastNameLocal.trim());
-        formData.append("first_name_intl", firstNameIntl.trim());
-        formData.append("middle_name_intl", middleNameIntl.trim());
-        formData.append("last_name_intl", lastNameIntl.trim());
+        formData.append("name", submissionName);
+
+        const isEng = isEnglishOrLatin(submissionName);
+        const localFirst = firstNameLocal.trim() || (!isEng ? effectiveFirst : "");
+        const localMiddle = middleNameLocal.trim() || (!isEng ? effectiveMiddle : "");
+        const localLast = lastNameLocal.trim() || (!isEng ? effectiveLast : "");
+        const intlFirst = firstNameIntl.trim() || (isEng ? effectiveFirst : "");
+        const intlMiddle = middleNameIntl.trim() || (isEng ? effectiveMiddle : "");
+        const intlLast = lastNameIntl.trim() || (isEng ? effectiveLast : "");
+
+        formData.append("first_name_local", localFirst);
+        formData.append("middle_name_local", localMiddle);
+        formData.append("last_name_local", localLast);
+        formData.append("first_name_intl", intlFirst);
+        formData.append("middle_name_intl", intlMiddle);
+        formData.append("last_name_intl", intlLast);
         // Backward compatibility keys
-        formData.append("firstNameTh", firstNameLocal.trim());
-        formData.append("middleNameTh", middleNameLocal.trim());
-        formData.append("lastNameTh", lastNameLocal.trim());
-        formData.append("firstNameEn", firstNameIntl.trim());
-        formData.append("middleNameEn", middleNameIntl.trim());
-        formData.append("lastNameEn", lastNameIntl.trim());
-        formData.append("first_name_th", firstNameLocal.trim());
-        formData.append("middle_name_th", middleNameLocal.trim());
-        formData.append("last_name_th", lastNameLocal.trim());
-        formData.append("first_name_en", firstNameIntl.trim());
+        formData.append("firstNameTh", localFirst);
+        formData.append("middleNameTh", localMiddle);
+        formData.append("lastNameTh", localLast);
+        formData.append("firstNameEn", intlFirst);
+        formData.append("middleNameEn", intlMiddle);
+        formData.append("lastNameEn", intlLast);
+        formData.append("first_name_th", localFirst);
+        formData.append("middle_name_th", localMiddle);
+        formData.append("last_name_th", localLast);
+        formData.append("first_name_en", intlFirst);
         formData.append("middle_name_en", middleNameIntl.trim());
-        formData.append("last_name_en", lastNameIntl.trim());
+        formData.append("last_name_en", intlLast);
+        formData.append("first_name", effectiveFirst);
+        formData.append("last_name", effectiveLast);
         formData.append("nickname", nickname.trim());
         formData.append("gender", gender);
         formData.append("birthday", birthday);
@@ -377,6 +382,7 @@ export function AddPlayerForm({ teamId, onSuccess, effectivelyLocked, sport, cla
 
         if (result.success) {
             toast({ title: tCommon("success"), description: t("added_success") });
+            setFullName("");
             setFirstName("");
             setLastName("");
             setFirstNameLocal("");
@@ -476,51 +482,26 @@ export function AddPlayerForm({ teamId, onSuccess, effectivelyLocked, sport, cla
                         </button>
                     </div>
 
-                    {/* First Name (ชื่อ) with Master Search Popover */}
-                    <div className="space-y-1 flex-1 min-w-[140px] relative">
+                    {/* Full Name (ชื่อ - นามสกุล) with Master Search Popover */}
+                    <div className="space-y-1 flex-1 sm:flex-[2] min-w-[200px] relative">
                         <Label className="text-[11px]">
-                            {isThai ? "ชื่อ" : "First Name"} <span className="text-destructive">*</span>
+                            {isThai ? "ชื่อ - นามสกุล" : "Full Name"} <span className="text-destructive">*</span>
                         </Label>
                         <Input
-                            value={firstName}
-                            onChange={e => handleFirstNameChange(e.target.value)}
-                            placeholder={isThai ? "ชื่อ (ไทย หรือ อังกฤษ)" : "First name (TH/EN)"}
+                            value={fullName}
+                            onChange={e => handleFullNameChange(e.target.value)}
+                            placeholder={isThai ? "สมชาย ใจดี" : "John Doe"}
                             size="sm"
                             onFocus={() => {
-                                const full = `${firstName} ${lastName}`.trim();
-                                if (full.length > 0) {
+                                if (fullName.trim().length > 0) {
                                     setIsPopoverOpen(true);
-                                    handleSearch(full);
+                                    handleSearch(fullName.trim());
                                 }
                             }}
                             onBlur={() => {
                                 setTimeout(() => setIsPopoverOpen(false), 250);
                             }}
                             required
-                            className="focus-visible:ring-0 w-full text-xs"
-                        />
-                    </div>
-
-                    {/* Last Name (นามสกุล) with Master Search Popover */}
-                    <div className="space-y-1 flex-1 min-w-[140px] relative">
-                        <Label className="text-[11px]">
-                            {isThai ? "นามสกุล" : "Last Name"}
-                        </Label>
-                        <Input
-                            value={lastName}
-                            onChange={e => handleLastNameChange(e.target.value)}
-                            placeholder={isThai ? "นามสกุล (ไทย หรือ อังกฤษ)" : "Last name (TH/EN)"}
-                            size="sm"
-                            onFocus={() => {
-                                const full = `${firstName} ${lastName}`.trim();
-                                if (full.length > 0) {
-                                    setIsPopoverOpen(true);
-                                    handleSearch(full);
-                                }
-                            }}
-                            onBlur={() => {
-                                setTimeout(() => setIsPopoverOpen(false), 250);
-                            }}
                             className="focus-visible:ring-0 w-full text-xs"
                         />
                     </div>
@@ -535,7 +516,7 @@ export function AddPlayerForm({ teamId, onSuccess, effectivelyLocked, sport, cla
                                     onChange={e => setNewNumber(e.target.value)}
                                     type="text"
                                     size="sm"
-                                    placeholder={isThai ? "เช่น 10" : "e.g. 10"}
+                                    placeholder="10"
                                     className="focus-visible:ring-0 text-xs text-center"
                                 />
                             </div>
@@ -577,7 +558,7 @@ export function AddPlayerForm({ teamId, onSuccess, effectivelyLocked, sport, cla
                             type="submit"
                             size="sm"
                             className="w-full sm:w-auto h-8 px-4 text-xs font-bold"
-                            disabled={isSaving || !firstName.trim() || effectivelyLocked}
+                            disabled={isSaving || !fullName.trim() || effectivelyLocked}
                         >
                             {isSaving ? (
                                 <Loader2 className="h-4 w-4 animate-spin" />
@@ -659,7 +640,7 @@ export function AddPlayerForm({ teamId, onSuccess, effectivelyLocked, sport, cla
                                         value={firstNameLocal}
                                         onChange={e => {
                                             setFirstNameLocal(e.target.value);
-                                            if (isThai && !isEnglishOrLatin(e.target.value)) setFirstName(e.target.value);
+                                            if (isThai && !isEnglishOrLatin(e.target.value)) { setFirstName(e.target.value); setFullName([e.target.value, lastNameLocal].filter(Boolean).join(" ")); }
                                         }}
                                         placeholder={isThai ? "ชื่อจริง (ภาษาท้องถิ่น)" : "First name (Local)"}
                                         size="sm"
@@ -680,7 +661,7 @@ export function AddPlayerForm({ teamId, onSuccess, effectivelyLocked, sport, cla
                                         value={lastNameLocal}
                                         onChange={e => {
                                             setLastNameLocal(e.target.value);
-                                            if (isThai && !isEnglishOrLatin(e.target.value)) setLastName(e.target.value);
+                                            if (isThai && !isEnglishOrLatin(e.target.value)) { setLastName(e.target.value); setFullName([firstNameLocal, e.target.value].filter(Boolean).join(" ")); }
                                         }}
                                         placeholder={isThai ? "นามสกุล (ภาษาท้องถิ่น)" : "Last name (Local)"}
                                         size="sm"
@@ -701,7 +682,7 @@ export function AddPlayerForm({ teamId, onSuccess, effectivelyLocked, sport, cla
                                         value={firstNameIntl}
                                         onChange={e => {
                                             setFirstNameIntl(e.target.value);
-                                            if (!isThai || isEnglishOrLatin(e.target.value)) setFirstName(e.target.value);
+                                            if (!isThai || isEnglishOrLatin(e.target.value)) { setFirstName(e.target.value); setFullName([e.target.value, lastNameIntl].filter(Boolean).join(" ")); }
                                         }}
                                         placeholder={isThai ? "ชื่อจริง (English)" : "First name (Intl)"}
                                         size="sm"
@@ -722,7 +703,7 @@ export function AddPlayerForm({ teamId, onSuccess, effectivelyLocked, sport, cla
                                         value={lastNameIntl}
                                         onChange={e => {
                                             setLastNameIntl(e.target.value);
-                                            if (!isThai || isEnglishOrLatin(e.target.value)) setLastName(e.target.value);
+                                            if (!isThai || isEnglishOrLatin(e.target.value)) { setLastName(e.target.value); setFullName([firstNameIntl, e.target.value].filter(Boolean).join(" ")); }
                                         }}
                                         placeholder={isThai ? "นามสกุล (English)" : "Last name (Intl)"}
                                         size="sm"
@@ -740,7 +721,7 @@ export function AddPlayerForm({ teamId, onSuccess, effectivelyLocked, sport, cla
                                 <Input
                                     value={nickname}
                                     onChange={e => setNickname(e.target.value)}
-                                    placeholder={isThai ? "เช่น บอย, ตั้ม" : "e.g. Nick"}
+                                    placeholder={isThai ? "บอย, ตั้ม" : "Nick"}
                                     size="sm"
                                     className="text-xs"
                                 />

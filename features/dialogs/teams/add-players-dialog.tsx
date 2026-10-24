@@ -897,7 +897,7 @@ export function AddPlayersDialog({ teamId, onSuccess, effectivelyLocked, sport, 
                                                     <Input
                                                         value={player.nickname}
                                                         onChange={e => updateBulkPlayer(idx, "nickname", e.target.value)}
-                                                        placeholder={isThai ? "เช่น บอย" : "e.g. Nick"}
+                                                        placeholder={isThai ? "บอย" : "Nick"}
                                                         size="sm"
                                                         className="text-xs"
                                                     />

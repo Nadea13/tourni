@@ -287,7 +287,7 @@ export function SquadManagement({ team, initialPlayers, backHref }: SquadManagem
                     description: "ถอนทีมเรียบร้อยแล้ว"
                 });
                 setShowWithdrawDialog(false);
-                router.push(`/${locale}/dashboard/inboxes`);
+                router.push(`/${locale}/inboxes`);
                 router.refresh();
             } else {
                 toast({ title: tCommon("error"), description: result.error, variant: "destructive" });
@@ -305,7 +305,7 @@ export function SquadManagement({ team, initialPlayers, backHref }: SquadManagem
             <div className="flex md:items-start justify-between gap-2 lg:gap-4">
                 <div className="flex items-center gap-1 lg:gap-2">
                     <Button variant="ghost" size="icon-sm" asChild className="shrink-0 hover:bg-primary/10 hover:text-primary transition-all">
-                        <Link href={backHref || (team.isParticipation || team.tournament_id ? "/dashboard/inboxes" : "/dashboard/teams")}>
+                        <Link href={backHref || (team.isParticipation || team.tournament_id ? "/inboxes" : "/my-teams")}>
                             <ArrowLeft className="h-4 w-4" />
                         </Link>
                     </Button>

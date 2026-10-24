@@ -366,7 +366,7 @@ export function CreateTeamForm({ iconOnlyMobile = false }: CreateTeamFormProps) 
                                     size="sm"
                                     value={contactEmail}
                                     onChange={(e) => setContactEmail(e.target.value)}
-                                    placeholder={t("contact_email_placeholder") || "e.g. contact@example.com"}
+                                    placeholder={t("contact_email_placeholder") || "contact@example.com"}
                                     disabled={isPending}
                                     className="w-full"
                                 />

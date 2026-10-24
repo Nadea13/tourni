@@ -3,6 +3,7 @@ import React, { useState, useRef, useEffect } from "react";
 import Image from "next/image";
 import { Player, Team } from "@/types/index";
 import { cn, getPlayerInitials } from "@/lib/utils";
+import { PlayerAvatar } from "@/components/shared/player-avatar";
 import { updatePlayer } from "@/actions/manager/team";
 import { updateGlobalPlayerPhoto } from "@/actions/tournaments/master-player";
 import { validateUploadedFile } from "@/lib/file-validation";
@@ -292,18 +293,16 @@ export function SquadList({
                                                                 e.stopPropagation();
                                                                 editFileInputRef.current?.click();
                                                             }}
-                                                            className="h-8 w-8 rounded-full border transition-all flex items-center justify-center overflow-hidden relative group"
+                                                            className="h-8 w-8 rounded-full border transition-all flex items-center justify-center overflow-hidden relative group shrink-0"
                                                         >
-                                                            {(() => {
-                                                                const photoUrl = player.photo_url || player.profile_img || player.master_player?.profile_img || player.global_player?.photo_url || player.global_player?.profile_img;
-                                                                return editPhotoPreview ? (
-                                                                    <Image src={editPhotoPreview} alt="Preview" width={32} height={32} className="h-full w-full object-cover" />
-                                                                ) : photoUrl ? (
-                                                                    <Image src={photoUrl} alt="Current" width={32} height={32} className="h-full w-full object-cover" />
-                                                                ) : (
-                                                                    <Camera className="h-4 w-4 text-primary" />
-                                                                );
-                                                            })()}
+                                                            <PlayerAvatar
+                                                                photoUrl={editPhotoPreview || undefined}
+                                                                player={player}
+                                                                name={editName}
+                                                                number={editNumber}
+                                                                size="sm"
+                                                                showNumberBadge={false}
+                                                            />
                                                             <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
                                                                 <Camera className="h-4 w-4 text-foreground" />
                                                             </div>
@@ -368,44 +367,7 @@ export function SquadList({
                                                 </>
                                             ) : (
                                                 <>
-                                                    <div className="relative h-10 w-10 shrink-0">
-                                                        {(() => {
-                                                            const photoUrl = player.photo_url || player.profile_img || player.master_player?.profile_img || player.global_player?.photo_url || player.global_player?.profile_img;
-                                                            const initials = getPlayerInitials(player.name);
-                                                            const hasNumber = player.number != null && String(player.number).trim() !== "" && String(player.number).trim() !== "-";
-
-                                                            return photoUrl ? (
-                                                                <>
-                                                                    <div className="h-full w-full rounded-full flex items-center justify-center overflow-hidden border">
-                                                                        <Image
-                                                                            src={photoUrl}
-                                                                            alt={player.name}
-                                                                            width={40}
-                                                                            height={40}
-                                                                            className="h-full w-full object-cover"
-                                                                        />
-                                                                    </div>
-                                                                    {hasNumber && (
-                                                                        <div className="absolute -bottom-0.5 -right-0.5 bg-primary px-1 text-black text-[11px] font-bold min-w-4 rounded-full flex items-center justify-center border border-background">
-                                                                            {player.number}
-                                                                        </div>
-                                                                    )}
-                                                                </>
-                                                            ) : (
-                                                                <div className="h-full w-full rounded-full flex items-center justify-center overflow-hidden border">
-                                                                    {hasNumber ? (
-                                                                        <span className="text-lg font-black text-primary">
-                                                                            {player.number}
-                                                                        </span>
-                                                                    ) : (
-                                                                        <span className="text-lg font-black text-primary uppercase">
-                                                                            {initials}
-                                                                        </span>
-                                                                    )}
-                                                                </div>
-                                                            );
-                                                        })()}
-                                                    </div>
+                                                    <PlayerAvatar player={player} size="md" showNumberBadge={true} />
 
                                                     <div className="min-w-0 flex-1 flex flex-col gap-1">
                                                         <div className="flex items-center gap-2">

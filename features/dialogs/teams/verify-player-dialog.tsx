@@ -383,7 +383,7 @@ export function VerifyPlayerDialog({
                                                 type="text"
                                                 value={firstNameTh}
                                                 onChange={(e) => setFirstNameTh(e.target.value)}
-                                                placeholder={isThai ? "เช่น สมชาย" : "e.g. สมชาย"}
+                                                placeholder="สมชาย"
                                                 disabled={isPending}
                                             />
                                         </div>
@@ -407,7 +407,7 @@ export function VerifyPlayerDialog({
                                                 type="text"
                                                 value={lastNameTh}
                                                 onChange={(e) => setLastNameTh(e.target.value)}
-                                                placeholder={isThai ? "เช่น ใจดี" : "e.g. ใจดี"}
+                                                placeholder="ใจดี"
                                                 disabled={isPending}
                                             />
                                         </div>
@@ -427,7 +427,7 @@ export function VerifyPlayerDialog({
                                                 type="text"
                                                 value={firstNameEn}
                                                 onChange={(e) => setFirstNameEn(e.target.value)}
-                                                placeholder={isThai ? "เช่น Somchai" : "e.g. Somchai"}
+                                                placeholder="Somchai"
                                                 disabled={isPending}
                                             />
                                         </div>
@@ -451,7 +451,7 @@ export function VerifyPlayerDialog({
                                                 type="text"
                                                 value={lastNameEn}
                                                 onChange={(e) => setLastNameEn(e.target.value)}
-                                                placeholder={isThai ? "เช่น Jaidee" : "e.g. Jaidee"}
+                                                placeholder="Jaidee"
                                                 disabled={isPending}
                                             />
                                         </div>
@@ -466,7 +466,7 @@ export function VerifyPlayerDialog({
                                         type="tel"
                                         value={tel}
                                         onChange={(e) => setTel(e.target.value)}
-                                        placeholder={isThai ? "เช่น 081-234-5678" : "e.g. 081-234-5678"}
+                                        placeholder="081-234-5678"
                                         disabled={isPending}
                                     />
                                 </div>

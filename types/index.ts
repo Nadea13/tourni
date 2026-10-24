@@ -31,6 +31,8 @@ export interface Tournament {
     payment_id?: string | null;
     payment_method?: string | null;
     sport: SportType;
+    sport_name?: string;
+    sport_id?: string | number;
     created_at: string;
     updated_at?: string;
     document_deadline?: string | null;

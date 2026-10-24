@@ -11,6 +11,7 @@ import { Tab, TabOption } from "@/components/ui/tab";
 import { Header } from "@/components/ui/header";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/dropdown";
 import { TournamentSearchHeader } from "@/features/tournaments/public/tournament-search-bar";
+import { isPastDocumentDeadline } from "@/lib/date";
 
 interface SportItem {
     id: string;
@@ -93,16 +94,7 @@ export function PublicTournamentsListClient({
         return matchesSearch && matchesSport;
     });
 
-    // Helper to check if a tournament has passed its document submission deadline
-    const isPastDocumentDeadline = (docDeadline?: string | null) => {
-        if (!docDeadline) return false;
-        const deadlineDate = new Date(docDeadline);
-        if (isNaN(deadlineDate.getTime())) return false;
-        if (docDeadline.length <= 10) {
-            deadlineDate.setHours(23, 59, 59, 999);
-        }
-        return new Date() > deadlineDate;
-    };
+
 
     // Categorize status: upcoming (registration phase), ongoing, completed
     const ongoingTournaments = filteredTournaments.filter(t => {
@@ -124,6 +116,12 @@ export function PublicTournamentsListClient({
             return false;
         }
         
+        // If registration is closed, remove from upcoming registration list
+        const settings = (t as any).settings || {};
+        if (t.is_registration_open === false || settings.is_registration_open === false || settings.is_registration_open === "false") {
+            return false;
+        }
+
         // If document deadline is specified and has passed, remove from upcoming registration list
         if (isPastDocumentDeadline(t.document_deadline)) {
             return false;

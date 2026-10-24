@@ -12,8 +12,12 @@ export default async function RegistrationsListPage() {
     // Fetch list of sports for filtering tab from Go backend
     const sports = await getPublicSports();
 
-    // Fetch initial public tournaments on server
-    const initialTournaments = (await getPublicTournaments()) as unknown as Tournament[];
+    // Fetch initial public tournaments on server (filter out closed registrations)
+    const rawTournaments = (await getPublicTournaments()) as unknown as Tournament[];
+    const initialTournaments = rawTournaments.filter(t => {
+        const settings = (t as any).settings || {};
+        return t.is_registration_open !== false && settings.is_registration_open !== false && settings.is_registration_open !== "false";
+    });
 
     return (
         <div className="flex flex-col min-h-screen">

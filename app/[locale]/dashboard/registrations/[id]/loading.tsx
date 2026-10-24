@@ -10,7 +10,7 @@ export default function Loading() {
             <div className="flex md:items-start justify-between gap-2 md:gap-4">
                 <div className="flex items-center gap-1 md:gap-2">
                     <Button variant="ghost" size="icon-sm" asChild className="h-8 w-8 shrink-0 hover:bg-primary/10 hover:text-primary transition-all">
-                        <Link href="/dashboard">
+                        <Link href="/home">
                             <ArrowLeft className="h-4 w-4" />
                         </Link>
                     </Button>

@@ -75,11 +75,34 @@ interface DashboardClientProps {
     initialMasterPlayer: MasterPlayer | null;
 }
 
+
+const THAI_SPORT_NAMES: Record<string, string> = {
+    football: "ฟุตบอล",
+    basketball: "บาสเกตบอล",
+    volleyball: "วอลเลย์บอล",
+    futsal: "ฟุตซอล",
+    badminton: "แบดมินตัน",
+    cricket: "คริกเก็ต",
+    takraw: "เซปักตะกร้อ",
+    "sepak takraw": "เซปักตะกร้อ",
+    tennis: "เทนนิส",
+};
+
 export function DashboardClient({ initialTournaments, initialMasterPlayer }: DashboardClientProps) {
     const locale = useLocale();
     const isThai = locale === 'th';
     const t = useTranslations("Dashboard");
     const tCommon = useTranslations("Common");
+
+    const getTournamentSportName = (tour: Tournament) => {
+        const rawSportId = (tour as any).sport_id || (tour as any).settings?.sport_id;
+        const matchedSport = rawSportId ? sportsList.find(s => String(s.id) === String(rawSportId)) : null;
+        const rawName = tour.sport_name || (tour as any).sports?.sport_name || matchedSport?.sport_name || (tour as any).settings?.sport_name || (tour.sport ? String(tour.sport) : "Football");
+        if (locale === "th") {
+            return THAI_SPORT_NAMES[rawName.toLowerCase()] || rawName;
+        }
+        return rawName;
+    };
 
     const [searchQuery, setSearchQuery] = useState("");
     const [masterPlayer, setMasterPlayer] = useState<MasterPlayer | null>(initialMasterPlayer);
@@ -203,7 +226,7 @@ export function DashboardClient({ initialTournaments, initialMasterPlayer }: Das
 
     // Filter tournaments based on search query (only show tournaments open for registration)
     const filteredTournaments = initialTournaments
-        .filter(t => Boolean(t.is_registration_open || (t as any).settings?.is_registration_open))
+        .filter(t => t.is_registration_open !== false && (t as any).settings?.is_registration_open !== false && (t as any).settings?.is_registration_open !== "false")
         .filter(t =>
             t.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
             t.description?.toLowerCase().includes(searchQuery.toLowerCase())
@@ -278,7 +301,7 @@ export function DashboardClient({ initialTournaments, initialMasterPlayer }: Das
                             {filteredTournaments.map((tournament) => (
                                 <Link
                                     key={tournament.id}
-                                    href={`/dashboard/registrations/${tournament.id}`}
+                                    href={`/home/registrations/${tournament.id}`}
                                     className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 md:gap-4 hover:bg-muted/40 transition-colors block group"
                                 >
                                     <div className="flex items-center gap-3 overflow-hidden">
@@ -290,8 +313,8 @@ export function DashboardClient({ initialTournaments, initialMasterPlayer }: Das
                                             <span className="text-base font-black leading-tight tracking-tight group-hover:text-primary transition-colors truncate">
                                                 {tournament.name}
                                             </span>
-                                            <span className="text-xs text-muted-foreground capitalize">
-                                                {t("status")}: {tCommon(tournament.status || 'draft')}
+                                            <span className="text-xs text-muted-foreground">
+                                                {getTournamentSportName(tournament)}
                                             </span>
                                         </div>
                                     </div>

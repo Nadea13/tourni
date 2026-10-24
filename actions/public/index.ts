@@ -41,7 +41,14 @@ export async function getPublicTournaments(query?: string, sportId?: string): Pr
             const teamsCount = typeof t.teams_count === "number" ? t.teams_count : (typeof settings.teams_count === "number" ? settings.teams_count : 0);
             const maxTeams = typeof t.max_teams === "number" && t.max_teams > 0 ? t.max_teams : (typeof settings.max_teams === "number" ? settings.max_teams : 16);
             const sportName = t.sport_name || settings.sport_name || (t.sport_id ? "football" : "football");
-            const isOpen = t.is_registration_open ?? settings.is_registration_open ?? (rawStatus === "registration_open" || rawStatus === "published" || rawStatus === "draft" || rawStatus === "upcoming");
+            let isOpen = true;
+            if (settings.is_registration_open === false || settings.is_registration_open === "false" || t.is_registration_open === false) {
+                isOpen = false;
+            } else if (settings.is_registration_open === true || settings.is_registration_open === "true" || t.is_registration_open === true) {
+                isOpen = true;
+            } else {
+                isOpen = rawStatus === "registration_open" || rawStatus === "published" || rawStatus === "draft" || rawStatus === "upcoming";
+            }
 
             return {
                 id: t.id,

@@ -268,27 +268,48 @@ export async function createMasterPlayer(formData: FormData): Promise<ActionResp
 
 export async function getAllPublicTournaments(): Promise<Tournament[]> {
     try {
-        const resp = await ApiClient.fetch<{ data: any[] }>('/tournaments?status=registration_open');
+        const resp = await ApiClient.fetch<{ data: any[] }>('/tournaments');
         const tournaments = resp.data || [];
 
-        return tournaments.map((t: any) => ({
-            id: t.id,
-            name: t.name,
-            logo_img: t.logo_url || null,
-            cover_img: t.banner_url || null,
-            description: t.description || null,
-            location_name: t.location || null,
-            google_map_url: null,
-            status: t.status,
-            is_registration_open: t.status === 'registration_open' || (t.settings?.is_registration_open === true),
-            start_date: t.start_date,
-            end_date: t.end_date,
-            document_deadline: null,
-            bank_name: null,
-            bank_account_name: null,
-            bank_account_number: null,
-            registration_fee: 0,
-        })) as unknown as Tournament[];
+        return tournaments
+            .map((t: any) => {
+                const settings = t.settings || {};
+                let isRegOpen = true;
+                if (settings.is_registration_open === false || settings.is_registration_open === "false" || t.is_registration_open === false) {
+                    isRegOpen = false;
+                } else if (settings.is_registration_open === true || settings.is_registration_open === "true" || t.is_registration_open === true) {
+                    isRegOpen = true;
+                } else {
+                    isRegOpen = t.status === "registration_open" || t.status === "published" || t.status === "draft" || t.status === "upcoming";
+                }
+
+                return {
+                    id: t.id,
+                    name: t.name,
+                    logo_img: t.logo_url || null,
+                    cover_img: t.banner_url || null,
+                    description: t.description || null,
+                    location_name: t.location || null,
+                    google_map_url: settings.google_map_url || null,
+                    status: t.status,
+                    is_registration_open: isRegOpen,
+                    sport: (t.sport_name || settings.sport_name || 'football').toLowerCase(),
+                    sport_name: t.sport_name || settings.sport_name || undefined,
+                    sport_id: t.sport_id || settings.sport_id || undefined,
+                    start_date: t.start_date,
+                    end_date: t.end_date,
+                    document_deadline: t.document_deadline || settings.document_deadline || null,
+                    bank_name: settings.bank_name || null,
+                    bank_account_name: settings.bank_account_name || null,
+                    bank_account_number: settings.bank_account_number || null,
+                    registration_fee: 0,
+                    settings: {
+                        ...settings,
+                        is_registration_open: isRegOpen,
+                    },
+                };
+            })
+            .filter((t: any) => t.is_registration_open !== false) as unknown as Tournament[];
     } catch (err) {
         console.error("Error fetching tournaments from Go backend:", err);
         return [];

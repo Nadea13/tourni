@@ -1,5 +1,6 @@
 "use client"
 
+import { useState, useEffect } from "react"
 import { Link } from "@/i18n/routing"
 import { useTheme } from "next-themes"
 import { Laptop, Moon, Sun, LogOut, User, CreditCard, Shield } from "lucide-react"
@@ -53,16 +54,25 @@ export function UserDropdown({
     const tSettings = useTranslations("DashboardSettings")
 
     const profileHref = '/dashboard/settings'
-    const displayName = name || (email ? email.split('@')[0] : "");
+    const [mounted, setMounted] = useState(false)
+
+    useEffect(() => {
+        setMounted(true)
+    }, [])
+
+    const effectiveName = mounted ? name : undefined
+    const effectiveEmail = mounted ? email : undefined
+    const effectiveAvatar = mounted ? avatar : undefined
+    const displayName = effectiveName || (effectiveEmail ? effectiveEmail.split('@')[0] : "");
 
     return (
         <ActionMenu>
             <ActionMenuTrigger asChild>
                 <Button suppressHydrationWarning variant="ghost" size="lg" className={cn("w-full justify-center md:justify-start md:group-hover/sidebar:justify-start p-0 md:py-2 md:group-hover/sidebar:p-2 h-auto transition-all duration-300 ease-in-out text-left overflow-hidden", className)}>
                     <div className="w-8 h-8 rounded-full overflow-hidden flex items-center justify-center bg-muted/10 text-muted-foreground/60 shrink-0 transition-all duration-300 ease-in-out">
-                        {avatar ? (
+                        {effectiveAvatar ? (
                             <Image
-                                src={avatar}
+                                src={effectiveAvatar}
                                 alt={displayName || "User"}
                                 width={36}
                                 height={36}
@@ -77,7 +87,7 @@ export function UserDropdown({
                     {!hideText && (
                         <div className="flex flex-col min-w-0 transition-all duration-300 ease-in-out opacity-100 w-auto md:opacity-0 md:w-0 md:group-hover/sidebar:opacity-100 md:group-hover/sidebar:w-auto md:group-hover/sidebar:ml-2 overflow-hidden">
                             <span className="text-xs font-bold text-foreground truncate">{displayName || "..."}</span>
-                            {email && <span className="text-[10px] text-muted-foreground truncate">{email}</span>}
+                            {effectiveEmail && <span className="text-[10px] text-muted-foreground truncate">{effectiveEmail}</span>}
                         </div>
                     )}
                 </Button>

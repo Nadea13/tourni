@@ -753,6 +753,6 @@ func (r *MatchRepository) DeleteEvent(ctx context.Context, id uuid.UUID) (*uuid.
 }
 
 func (r *MatchRepository) DeleteByCategory(ctx context.Context, categoryID uuid.UUID) error {
-	_, err := r.db.Exec(ctx, `DELETE FROM matches WHERE tournament_category_id = $1`, categoryID)
+	_, err := r.db.Exec(ctx, `DELETE FROM matches WHERE category_id = $1 OR tournament_category_id = $1`, categoryID)
 	return err
 }

@@ -25,10 +25,17 @@ function parseJwt(token: string): { user_id?: string; email?: string; role?: str
 
 export function DashboardShell({ children }: { children: React.ReactNode }) {
     const router = useRouter();
-    const [user, setUser] = useState<UserProfile | null>(() => ApiClient.getCachedProfile());
-    const [_isLoading, setIsLoading] = useState(!user);
+    const [user, setUser] = useState<UserProfile | null>(null);
+    const [_isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
+        // Fast sync from cache immediately after mount to avoid SSR hydration mismatch
+        const cached = ApiClient.getCachedProfile();
+        if (cached) {
+            setUser(cached);
+            setIsLoading(false);
+        }
+
         const fetchUserProfile = async () => {
             try {
                 const token = ApiClient.getToken();

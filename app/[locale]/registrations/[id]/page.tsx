@@ -21,7 +21,7 @@ import {
     ArrowUpRight,
     ArrowLeft
 } from "lucide-react";
-import { formatDate } from "@/lib/date";
+import { formatDate, isPastDocumentDeadline } from "@/lib/date";
 import { Header } from "@/components/ui/header";
 import { cn } from "@/lib/utils";
 import { getLandingSportIcon } from "@/components/shared/sport-icons";
@@ -206,7 +206,7 @@ export default async function RegisterPage({ params, searchParams }: RegisterPag
         : (Number(tournament.max_teams || settings.max_teams || 0) > 0 ? Number(tournament.max_teams || settings.max_teams) : 8);
 
     const isFull = (registeredTeams?.length || 0) >= categoryMaxTeams;
-    const isPastDeadline = tournament.document_deadline ? new Date(tournament.document_deadline) < new Date() : false;
+    const isPastDeadline = isPastDocumentDeadline(tournament.document_deadline);
     const isRegistrationDisabled = isFull || isPastDeadline || !isRegistrationOpen;
 
     // Check if tournament has meaningful text description (strips HTML tags and entities left by rich text editor)
@@ -515,7 +515,7 @@ export default async function RegisterPage({ params, searchParams }: RegisterPag
                             </div>
 
                             {/* Right side (2 Columns): Tournament Registration Form */}
-                            <div className="lg:col-span-2 order-2 lg:sticky lg:top-24 self-start h-fit space-y-4">
+                            <div className="lg:col-span-2 order-2 lg:sticky lg:top-18 self-start h-fit space-y-4">
                                 <RegistrationForm
                                     tournament={{
                                         id: tournament.id,

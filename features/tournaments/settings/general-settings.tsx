@@ -416,7 +416,7 @@ export function GeneralSettings({ tournament, className, onNavigateDangerZone }:
                                 setName(e.target.value);
                                 setLastModifiedField('name');
                             }}
-                            placeholder={isThai ? "เช่น ฟุตบอลเยาวชน ชิงถ้วยนายก ครั้งที่ 1" : "e.g. Youth Champions League 2026"}
+                            placeholder={isThai ? "ฟุตบอลเยาวชน ชิงถ้วยนายก ครั้งที่ 1" : "Youth Champions League 2026"}
                             className="w-full"
                             required
                         />
@@ -601,7 +601,7 @@ export function GeneralSettings({ tournament, className, onNavigateDangerZone }:
                                     setLastModifiedField('description');
                                 }}
                                 className="pro-editor h-auto text-foreground"
-                                placeholder={isThai ? "เช่น กติกาการแข่งขัน เงินรางวัล และช่องทางการติดต่อผู้จัด..." : "e.g. Tournament rules, prize pool, and contact details..."}
+                                placeholder={isThai ? "กติกาการแข่งขัน เงินรางวัล และช่องทางการติดต่อผู้จัด..." : "Tournament rules, prize pool, and contact details..."}
                                 modules={{
                                     toolbar: [
                                         [{ 'header': [1, 2, false] }],
@@ -642,7 +642,7 @@ export function GeneralSettings({ tournament, className, onNavigateDangerZone }:
                                 setLocationName(e.target.value);
                                 setLastModifiedField('location');
                             }}
-                            placeholder={isThai ? "เช่น สนามกีฬาเฉลิมพระเกียรติ 80 พรรษา" : "e.g. National Stadium Bangkok"}
+                            placeholder={isThai ? "สนามกีฬาเฉลิมพระเกียรติ 80 พรรษา" : "National Stadium Bangkok"}
                             className="w-full"
                         />
                         {activeActionField === 'location' && renderActionButtons()}

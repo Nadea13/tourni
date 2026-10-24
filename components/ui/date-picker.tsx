@@ -100,14 +100,25 @@ export function DatePicker({
     // Calendar navigation view date
     const [viewDate, setViewDate] = useState<Date>(() => {
         if (parsedDate) return parsedDate;
-        const boundedYear = Math.min(Math.max(defaultViewYear, minYear), maxYear);
-        return new Date(boundedYear, 0, 1);
+        const now = new Date();
+        const targetYear = defaultViewYear !== undefined ? defaultViewYear : now.getFullYear();
+        const boundedYear = Math.min(Math.max(targetYear, minYear), maxYear);
+        const targetMonth = targetYear === now.getFullYear() ? now.getMonth() : 0;
+        return new Date(boundedYear, targetMonth, 1);
     });
 
     const handleOpenChange = (newOpen: boolean) => {
         setOpen(newOpen);
-        if (newOpen && parsedDate) {
-            setViewDate(parsedDate);
+        if (newOpen) {
+            if (parsedDate) {
+                setViewDate(parsedDate);
+            } else {
+                const now = new Date();
+                const targetYear = defaultViewYear !== undefined ? defaultViewYear : now.getFullYear();
+                const boundedYear = Math.min(Math.max(targetYear, minYear), maxYear);
+                const targetMonth = targetYear === now.getFullYear() ? now.getMonth() : 0;
+                setViewDate(new Date(boundedYear, targetMonth, 1));
+            }
         }
     };
 

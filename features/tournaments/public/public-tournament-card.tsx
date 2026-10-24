@@ -23,7 +23,7 @@ import { MatchManager } from "@/features/tournaments/matches/match-manager";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/dropdown";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
 import { addDays, subDays, addMonths, subMonths, format, startOfMonth, endOfMonth, eachDayOfInterval, getDay } from "date-fns";
-import { formatDate } from "@/lib/date";
+import { formatDate, isPastDocumentDeadline } from "@/lib/date";
 import { cn, getTeamInitials } from "@/lib/utils";
 import { getLandingSportIcon } from "@/components/shared/sport-icons";
 
@@ -72,13 +72,7 @@ export function PublicTournamentCard({ tournament, href }: PublicTournamentCardP
     const currentTeams = tournament.tournament_teams?.[0]?.count || 0;
     const isFull = tournament.max_teams ? currentTeams >= tournament.max_teams : false;
     const isPastDeadline = useMemo(() => {
-        if (!tournament.document_deadline) return false;
-        const d = new Date(tournament.document_deadline);
-        if (isNaN(d.getTime())) return false;
-        if (tournament.document_deadline.length <= 10) {
-            d.setHours(23, 59, 59, 999);
-        }
-        return new Date() > d;
+        return isPastDocumentDeadline(tournament.document_deadline);
     }, [tournament.document_deadline]);
     const isNotOpenYet = tournament.is_registration_open === false;
     const isClosed = isFull || isPastDeadline || isNotOpenYet;

@@ -299,7 +299,10 @@ export async function registerTeam(formData: FormData): Promise<ActionResponse> 
         }
 
         revalidatePath(`/registrations/${tournamentId}`);
+        revalidatePath(`/home/registrations/${tournamentId}`);
+        revalidatePath(`/dashboard/registrations/${tournamentId}`);
         revalidatePath(`/tournaments/${tournamentId}`);
+        revalidatePath(`/my-tournaments/${tournamentId}`);
         revalidatePath(`/dashboard/tournaments/${tournamentId}`);
 
         return { success: true, message: "Registration submitted successfully! Please wait for organizer approval." };

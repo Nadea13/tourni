@@ -32,7 +32,7 @@ import { searchMasterPlayers } from "@/actions/common/user";
 import { submitRosterWithSender } from "@/actions/tournaments/registration";
 import { EmptyState } from "@/components/shared/empty-state";
 import { Player } from "@/types/index";
-import { formatDate } from "@/lib/date";
+import { formatDate, isPastDocumentDeadline } from "@/lib/date";
 import { cn } from "@/lib/utils";
 import { getPositionOptions } from "@/lib/positions";
 import { resolveStorageUrl } from "@/lib/storage-utils";
@@ -523,9 +523,7 @@ export function DocumentSubmissionClient({
         });
     };
 
-    const isPastDeadline = tournament.document_deadline
-        ? new Date(tournament.document_deadline) < new Date()
-        : false;
+    const isPastDeadline = isPastDocumentDeadline(tournament.document_deadline);
 
     return (
         <div className="space-y-2 md:space-y-4 pb-4">

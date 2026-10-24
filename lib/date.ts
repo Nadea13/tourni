@@ -63,3 +63,17 @@ export function formatDate(
         locale: locale === 'th' ? th : enUS 
     });
 }
+
+/**
+ * Checks if a document deadline has passed.
+ * For date-only strings (e.g. YYYY-MM-DD), the deadline is valid through 23:59:59.999 of that day.
+ */
+export function isPastDocumentDeadline(deadlineStr?: string | null): boolean {
+    if (!deadlineStr) return false;
+    const deadlineDate = new Date(deadlineStr);
+    if (isNaN(deadlineDate.getTime())) return false;
+    if (deadlineStr.length <= 10) {
+        deadlineDate.setHours(23, 59, 59, 999);
+    }
+    return new Date() > deadlineDate;
+}

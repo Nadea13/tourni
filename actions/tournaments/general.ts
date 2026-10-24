@@ -188,6 +188,7 @@ export async function addTeam(
     }
 
     revalidatePath(`/organizer/tournaments/${tournamentId}`);
+    revalidatePath(`/my-tournaments/${tournamentId}`);
     revalidatePath(`/dashboard/tournaments/${tournamentId}`);
     revalidatePath(`/registrations/${tournamentId}`);
     await logActivity('ADD_TEAM', 'tournament', tournamentId, { team_name: name });
@@ -360,7 +361,11 @@ export async function updateTournament(
             if (formData.has("description")) updateData.description = formData.get("description") as string;
             if (formData.has("start_date")) updateData.start_date = formData.get("start_date") as string || null;
             if (formData.has("end_date")) updateData.end_date = formData.get("end_date") as string || null;
-            if (formData.has("document_deadline")) currentSettings.document_deadline = formData.get("document_deadline") as string || null;
+            delete currentSettings.document_deadline;
+            if (formData.has("document_deadline")) {
+                const dl = (formData.get("document_deadline") as string) || null;
+                updateData.document_deadline = dl;
+            }
             if (formData.has("bank_name")) currentSettings.bank_name = formData.get("bank_name") as string;
             if (formData.has("bank_account_name")) currentSettings.bank_account_name = formData.get("bank_account_name") as string;
             if (formData.has("bank_account_number")) currentSettings.bank_account_number = formData.get("bank_account_number") as string;
@@ -465,7 +470,8 @@ export async function updateTournament(
             return { success: false, error: errData.error || "Failed to update tournament" };
         }
 
-        revalidatePath(`/dashboard/tournaments/${tournamentId}`);
+        revalidatePath(`/my-tournaments/${tournamentId}`);
+    revalidatePath(`/dashboard/tournaments/${tournamentId}`);
         revalidatePath(`/organizer/tournaments/${tournamentId}`);
         await logActivity('UPDATE_TOURNAMENT', 'tournament', tournamentId, updateData);
         return { success: true };
@@ -547,7 +553,8 @@ export async function updateTournamentStatus(
             console.error("Error updating tournament settings for status unlock:", settingsErr);
         }
 
-        revalidatePath(`/dashboard/tournaments/${tournamentId}`);
+        revalidatePath(`/my-tournaments/${tournamentId}`);
+    revalidatePath(`/dashboard/tournaments/${tournamentId}`);
         revalidatePath(`/tournaments/${tournamentId}`);
         revalidatePath(`/organizer/tournaments/${tournamentId}`);
         await logActivity('UPDATE_TOURNAMENT_STATUS', 'tournament', tournamentId, { status, ...options });
@@ -630,7 +637,8 @@ export async function requestTournamentStatusChange(
             return { success: false, error: "Failed to submit status change request" };
         }
 
-        revalidatePath(`/dashboard/tournaments/${tournamentId}`);
+        revalidatePath(`/my-tournaments/${tournamentId}`);
+    revalidatePath(`/dashboard/tournaments/${tournamentId}`);
         revalidatePath(`/tournaments/${tournamentId}`);
         revalidatePath(`/organizer/tournaments/${tournamentId}`);
         revalidatePath(`/admin`);
@@ -694,7 +702,8 @@ export async function cancelTournamentStatusChangeRequest(tournamentId: string):
             return { success: false, error: "Failed to cancel status change request" };
         }
 
-        revalidatePath(`/dashboard/tournaments/${tournamentId}`);
+        revalidatePath(`/my-tournaments/${tournamentId}`);
+    revalidatePath(`/dashboard/tournaments/${tournamentId}`);
         revalidatePath(`/tournaments/${tournamentId}`);
         revalidatePath(`/organizer/tournaments/${tournamentId}`);
         revalidatePath(`/admin`);
@@ -725,7 +734,7 @@ export async function deleteTournament(tournamentId: string) {
     }
 
     await logActivity('DELETE_TOURNAMENT', 'tournament', tournamentId, {});
-    redirect("/dashboard/tournaments");
+    redirect("/my-tournaments");
 }
 
 export async function cancelTournament(tournamentId: string): Promise<ActionResponse> {
@@ -773,7 +782,8 @@ export async function cancelTournament(tournamentId: string): Promise<ActionResp
             return { success: false, error: errData.error || "Failed to cancel tournament" };
         }
 
-        revalidatePath(`/dashboard/tournaments/${tournamentId}`);
+        revalidatePath(`/my-tournaments/${tournamentId}`);
+    revalidatePath(`/dashboard/tournaments/${tournamentId}`);
         revalidatePath(`/organizer/tournaments/${tournamentId}`);
         await logActivity('CANCEL_TOURNAMENT', 'tournament', tournamentId, updateData);
         return { success: true };
@@ -863,10 +873,10 @@ export async function createTournament(_prevState: ActionResponse, formData: For
                 location: location_name || null,
                 banner_url: cover_img || null,
                 logo_url: logo_img || null,
+                document_deadline: document_deadline || null,
                 settings: {
                     sport_id,
                     google_map_url,
-                    document_deadline,
                 }
             }),
         });
@@ -879,6 +889,7 @@ export async function createTournament(_prevState: ActionResponse, formData: For
         const newTournament = await res.json();
 
         revalidatePath("/dashboard");
+        revalidatePath("/my-tournaments");
         revalidatePath("/dashboard/tournaments");
         return { success: true, data: newTournament };
     } catch (_error) {
@@ -1115,7 +1126,8 @@ export async function createTournamentCategory(
             registration_fee: registrationFee
         });
 
-        revalidatePath(`/dashboard/tournaments/${tournamentId}`);
+        revalidatePath(`/my-tournaments/${tournamentId}`);
+    revalidatePath(`/dashboard/tournaments/${tournamentId}`);
         revalidatePath(`/${tournamentId}`);
         return { success: true };
     } catch (error) {
@@ -1236,7 +1248,8 @@ export async function updateMatch(
             return { success: false, error: errData.error || "Failed to update match" };
         }
 
-        revalidatePath(`/dashboard/tournaments/${tournamentId}`);
+        revalidatePath(`/my-tournaments/${tournamentId}`);
+    revalidatePath(`/dashboard/tournaments/${tournamentId}`);
         await logActivity('UPDATE_MATCH', 'match', matchId, { tournament_id: tournamentId, ...data });
         return { success: true };
     } catch (err: any) {
@@ -1253,7 +1266,8 @@ export async function deleteMatch(matchId: string, tournamentId: string): Promis
         await ApiClient.fetch(`/matches/${matchId}`, {
             method: 'DELETE'
         });
-        revalidatePath(`/dashboard/tournaments/${tournamentId}`);
+        revalidatePath(`/my-tournaments/${tournamentId}`);
+    revalidatePath(`/dashboard/tournaments/${tournamentId}`);
         return { success: true };
     } catch (err: any) {
         console.error("Error deleting match via Go API:", err);
@@ -1265,6 +1279,7 @@ export async function advanceStage(tournamentId: string): Promise<ActionResponse
     const access = await validateTournamentAccess(tournamentId, 'editor');
     if (!access.success) return { success: false, error: access.error };
 
+    revalidatePath(`/my-tournaments/${tournamentId}`);
     revalidatePath(`/dashboard/tournaments/${tournamentId}`);
     revalidatePath(`/tournaments/${tournamentId}`);
     return { success: true };
@@ -1321,7 +1336,8 @@ export async function updateTournamentCategory(
             rules_config: rulesConfig
         });
 
-        revalidatePath(`/dashboard/tournaments/${tournamentId}`);
+        revalidatePath(`/my-tournaments/${tournamentId}`);
+    revalidatePath(`/dashboard/tournaments/${tournamentId}`);
         revalidatePath(`/${tournamentId}`);
         return { success: true };
     } catch (error) {
@@ -1398,7 +1414,8 @@ export async function deleteTournamentCategory(
             tournament_id: tournamentId
         });
 
-        revalidatePath(`/dashboard/tournaments/${tournamentId}`);
+        revalidatePath(`/my-tournaments/${tournamentId}`);
+    revalidatePath(`/dashboard/tournaments/${tournamentId}`);
         revalidatePath(`/${tournamentId}`);
         return { success: true };
     } catch (error) {

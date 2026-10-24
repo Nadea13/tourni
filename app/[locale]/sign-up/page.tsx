@@ -29,7 +29,7 @@ export default function SignUpPage() {
                     <BrandLogo 
                         href="/" 
                         size="lg"
-                        className="inline-flex items-center justify-center gap-2 mx-auto group transition-transform hover:scale-105"
+                        className="inline-flex items-center justify-center mx-auto"
                     />
 
                     <div className="space-y-2">

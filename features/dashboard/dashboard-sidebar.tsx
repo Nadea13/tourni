@@ -12,7 +12,7 @@ import { FeedbackDialog } from "@/features/dialogs"
 import { UserDropdown } from "@/features/dashboard/user-dropdown"
 import { BecomeOrganizerDialog } from "@/features/dialogs"
 import { BecomeTeamManagerDialog } from "@/features/dialogs"
-import { Logo } from "@/components/shared/logo"
+import { Logo, BrandText } from "@/components/shared/logo"
 
 export function DashboardSidebar({ 
     className, 
@@ -100,7 +100,7 @@ export function DashboardSidebar({
                         <Logo className="w-8 h-8 transition-all duration-300 ease-in-out" color="#00C49A" />
                     </div>
                     <div className="flex flex-col transition-all duration-300 ease-in-out opacity-100 w-auto md:opacity-0 md:w-0 md:group-hover/sidebar:opacity-100 md:group-hover/sidebar:w-auto overflow-hidden">
-                        <span className="text-xl font-black tracking-tighter text-foreground whitespace-nowrap">Tourni</span>
+                        <BrandText className="text-xl whitespace-nowrap" />
                     </div>
                 </Link>
             </div>

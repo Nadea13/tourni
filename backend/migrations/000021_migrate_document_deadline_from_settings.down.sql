@@ -1,0 +1,1 @@
+-- Irreversible migration: settings is stripped, column remains

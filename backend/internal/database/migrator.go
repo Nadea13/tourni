@@ -68,6 +68,20 @@ func RunMigrations(pool *pgxpool.Pool) error {
 		log.Printf("⚠️ Self-healing tournament_status_requests schema: %v", err)
 	}
 
+	// 1.3 Self-healing schema: Migrate document_deadline from settings JSON to tournaments.document_deadline column
+	syncDocDeadlineSQL := `
+	UPDATE tournaments 
+	SET document_deadline = CASE 
+	        WHEN settings->>'document_deadline' ~ '^\\d{4}-\\d{2}-\\d{2}' THEN (settings->>'document_deadline')::date 
+	        ELSE document_deadline 
+	    END,
+	    settings = settings - 'document_deadline'
+	WHERE settings ? 'document_deadline';
+	`
+	if _, err := pool.Exec(ctx, syncDocDeadlineSQL); err != nil {
+		log.Printf("⚠️ Self-healing tournament document_deadline schema: %v", err)
+	}
+
 	// 2. Discover migrations directory reliably (supports Docker /app, relative, and local)
 	candidates := []string{
 		"/app/migrations",

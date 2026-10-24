@@ -155,6 +155,10 @@ func (s *TeamService) HasSoftDeletedPlayers(ctx context.Context, teamID uuid.UUI
 	return s.teamRepo.HasSoftDeletedPlayers(ctx, teamID)
 }
 
+func (s *TeamService) LockRoster(ctx context.Context, teamID uuid.UUID, locked bool) error {
+	return s.teamRepo.LockRoster(ctx, teamID, locked)
+}
+
 func isASCII(s string) bool {
 	for i := 0; i < len(s); i++ {
 		if s[i] > 127 {

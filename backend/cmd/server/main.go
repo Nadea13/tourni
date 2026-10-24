@@ -209,6 +209,9 @@ func main() {
 	teams.Delete("/:id/players/:playerId", middleware.Protected(cfg), teamHandler.DeletePlayer)
 	teams.Post("/:id/reset-roster", middleware.Protected(cfg), teamHandler.ResetRoster)
 	teams.Post("/:id/restore-roster", middleware.Protected(cfg), teamHandler.RestoreRoster)
+	teams.Patch("/:id/lock", middleware.Protected(cfg), teamHandler.LockRoster)
+	teams.Put("/:id/lock", middleware.Protected(cfg), teamHandler.LockRoster)
+	teams.Post("/:id/lock", middleware.Protected(cfg), teamHandler.LockRoster)
 	teams.Get("/:id/has-deleted-players", teamHandler.HasSoftDeletedPlayers)
 
 	// Team Management Requests

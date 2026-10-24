@@ -20,17 +20,18 @@ func NewTournamentService(repo *repository.TournamentRepository) *TournamentServ
 }
 
 type CreateTournamentInput struct {
-	Name        string                 `json:"name"`
-	Description *string                `json:"description,omitempty"`
-	Format      model.TournamentFormat `json:"format"`
-	StartDate   string                 `json:"start_date"`
-	EndDate     string                 `json:"end_date"`
-	Location    *string                `json:"location,omitempty"`
-	BannerURL   *string                `json:"banner_url,omitempty"`
-	LogoURL     *string                `json:"logo_url,omitempty"`
-	Rules       *string                `json:"rules,omitempty"`
-	Settings    map[string]interface{} `json:"settings"`
-	Categories  []CreateCategoryInput  `json:"categories,omitempty"`
+	Name             string                 `json:"name"`
+	Description      *string                `json:"description,omitempty"`
+	Format           model.TournamentFormat `json:"format"`
+	StartDate        string                 `json:"start_date"`
+	EndDate          string                 `json:"end_date"`
+	DocumentDeadline *string                `json:"document_deadline,omitempty"`
+	Location         *string                `json:"location,omitempty"`
+	BannerURL        *string                `json:"banner_url,omitempty"`
+	LogoURL          *string                `json:"logo_url,omitempty"`
+	Rules            *string                `json:"rules,omitempty"`
+	Settings         map[string]interface{} `json:"settings"`
+	Categories       []CreateCategoryInput  `json:"categories,omitempty"`
 }
 
 type CreateCategoryInput struct {
@@ -76,20 +77,29 @@ func (s *TournamentService) Create(ctx context.Context, organizerID uuid.UUID, i
 		input.Settings = make(map[string]interface{})
 	}
 
+	docDeadline := input.DocumentDeadline
+	if docDeadline == nil {
+		if val, ok := input.Settings["document_deadline"].(string); ok && val != "" {
+			docDeadline = &val
+		}
+	}
+	delete(input.Settings, "document_deadline")
+
 	tournament := &model.Tournament{
-		OrganizerID: organizerID,
-		Name:        input.Name,
-		Slug:        slug,
-		Description: input.Description,
-		Format:      input.Format,
-		Status:      model.StatusDraft,
-		StartDate:   input.StartDate,
-		EndDate:     input.EndDate,
-		Location:    input.Location,
-		BannerURL:   input.BannerURL,
-		LogoURL:     input.LogoURL,
-		Rules:       input.Rules,
-		Settings:    input.Settings,
+		OrganizerID:    organizerID,
+		Name:           input.Name,
+		Slug:           slug,
+		Description:    input.Description,
+		Format:         input.Format,
+		Status:         model.StatusDraft,
+		StartDate:      input.StartDate,
+		EndDate:        input.EndDate,
+		DocDeadlineStr: docDeadline,
+		Location:       input.Location,
+		BannerURL:      input.BannerURL,
+		LogoURL:        input.LogoURL,
+		Rules:          input.Rules,
+		Settings:       input.Settings,
 	}
 
 	if err := s.repo.Create(ctx, tournament); err != nil {

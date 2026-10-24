@@ -209,6 +209,31 @@ func (h *TeamHandler) Update(c *fiber.Ctx) error {
 	return c.JSON(fiber.Map{"message": "Team updated successfully", "team": team})
 }
 
+func (h *TeamHandler) LockRoster(c *fiber.Ctx) error {
+	id, err := uuid.Parse(c.Params("id"))
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid team ID"})
+	}
+
+	var req struct {
+		IsLocked       bool  `json:"is_locked"`
+		IsRosterLocked *bool `json:"is_roster_locked"`
+	}
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid payload"})
+	}
+
+	locked := req.IsLocked
+	if req.IsRosterLocked != nil {
+		locked = *req.IsRosterLocked
+	}
+
+	if err := h.teamService.LockRoster(c.Context(), id, locked); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": err.Error()})
+	}
+	return c.JSON(fiber.Map{"message": "Team roster lock status updated", "is_roster_locked": locked})
+}
+
 func (h *TeamHandler) Delete(c *fiber.Ctx) error {
 	id, err := uuid.Parse(c.Params("id"))
 	if err != nil {

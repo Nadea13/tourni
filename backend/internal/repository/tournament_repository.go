@@ -97,9 +97,7 @@ func (r *TournamentRepository) List(ctx context.Context, status string, organize
 		t.TeamsCount = teamsCount
 		t.MaxTeams = maxTeams
 		t.DocDeadlineStr = docDeadline
-		if docDeadline != nil && *docDeadline != "" {
-			t.Settings["document_deadline"] = *docDeadline
-		}
+		delete(t.Settings, "document_deadline")
 		if sportName != "" {
 			t.Settings["sport_name"] = sportName
 		}
@@ -163,9 +161,7 @@ func (r *TournamentRepository) GetByID(ctx context.Context, id uuid.UUID) (*mode
 	t.TeamsCount = teamsCount
 	t.MaxTeams = maxTeams
 	t.DocDeadlineStr = docDeadline
-	if docDeadline != nil && *docDeadline != "" {
-		t.Settings["document_deadline"] = *docDeadline
-	}
+	delete(t.Settings, "document_deadline")
 	if sportName != "" {
 		t.Settings["sport_name"] = sportName
 	}
@@ -185,15 +181,16 @@ func (r *TournamentRepository) GetByID(ctx context.Context, id uuid.UUID) (*mode
 
 func (r *TournamentRepository) Create(ctx context.Context, t *model.Tournament) error {
 	query := `
-		INSERT INTO tournaments (organizer_id, name, slug, description, format, status, start_date, end_date, location, banner_url, logo_url, rules, settings)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)
+		INSERT INTO tournaments (organizer_id, name, slug, description, format, status, start_date, end_date, location, banner_url, logo_url, rules, settings, document_deadline)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, CASE WHEN $14::text = '' OR $14::text IS NULL THEN NULL ELSE $14::date END)
 		RETURNING id, created_at, updated_at
 	`
+	delete(t.Settings, "document_deadline")
 	settingsJSON, _ := json.Marshal(t.Settings)
 	err := r.db.QueryRow(
 		ctx, query,
 		t.OrganizerID, t.Name, t.Slug, t.Description, t.Format, t.Status,
-		t.StartDate, t.EndDate, t.Location, t.BannerURL, t.LogoURL, t.Rules, settingsJSON,
+		t.StartDate, t.EndDate, t.Location, t.BannerURL, t.LogoURL, t.Rules, settingsJSON, t.DocDeadlineStr,
 	).Scan(&t.ID, &t.CreatedAt, &t.UpdatedAt)
 
 	if err != nil {
@@ -238,6 +235,9 @@ func (r *TournamentRepository) Update(ctx context.Context, t *model.Tournament) 
 	if t.Rules == nil {
 		t.Rules = existing.Rules
 	}
+	if t.DocDeadlineStr == nil {
+		t.DocDeadlineStr = existing.DocDeadlineStr
+	}
 	if t.Settings == nil {
 		t.Settings = existing.Settings
 	} else {
@@ -254,19 +254,22 @@ func (r *TournamentRepository) Update(ctx context.Context, t *model.Tournament) 
 		}
 		t.Settings = merged
 	}
+	delete(t.Settings, "document_deadline")
 
 	query := `
 		UPDATE tournaments
 		SET name = $1, description = $2, format = $3, status = $4,
 		    start_date = $5, end_date = $6, location = $7, banner_url = $8,
-		    logo_url = $9, rules = $10, settings = $11, updated_at = NOW()
-		WHERE id = $12
+		    logo_url = $9, rules = $10, settings = $11,
+		    document_deadline = CASE WHEN $12::text = '' OR $12::text IS NULL THEN NULL ELSE $12::date END,
+		    updated_at = NOW()
+		WHERE id = $13
 	`
 	settingsJSON, _ := json.Marshal(t.Settings)
 	_, err = r.db.Exec(ctx, query,
 		t.Name, t.Description, t.Format, t.Status,
 		t.StartDate, t.EndDate, t.Location, t.BannerURL,
-		t.LogoURL, t.Rules, settingsJSON, t.ID,
+		t.LogoURL, t.Rules, settingsJSON, t.DocDeadlineStr, t.ID,
 	)
 	return err
 }

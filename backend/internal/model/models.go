@@ -104,12 +104,12 @@ type Tournament struct {
 	Rules              *string                `json:"rules,omitempty"`
 	RegistrationOpen   *time.Time             `json:"registration_open,omitempty"`
 	RegistrationClosed *time.Time             `json:"registration_closed,omitempty"`
-	DocumentDeadline   *time.Time             `json:"document_deadline,omitempty"`
+	DocumentDeadline   *time.Time             `json:"-"`
 	IsPublic           bool                   `json:"is_public"`
 	SportName          string                 `json:"sport_name,omitempty"`
 	TeamsCount         int                    `json:"teams_count"`
 	MaxTeams           int                    `json:"max_teams"`
-	DocDeadlineStr     *string                `json:"document_deadline_str,omitempty"`
+	DocDeadlineStr     *string                `json:"document_deadline,omitempty"`
 	Settings           map[string]interface{} `json:"settings"`
 	CreatedAt          time.Time              `json:"created_at"`
 	UpdatedAt          time.Time              `json:"updated_at"`

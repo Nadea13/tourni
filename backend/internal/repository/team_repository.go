@@ -123,15 +123,34 @@ func (r *TeamRepository) Create(ctx context.Context, team *model.Team) error {
 func (r *TeamRepository) Update(ctx context.Context, team *model.Team) error {
 	query := `
 		UPDATE teams
-		SET name = $1, short_name = $2, description = $3, logo_url = $4, logo_img = $5,
-		    contact_name = $6, contact_phone = $7, contact_email = $8, updated_at = NOW()
-		WHERE id = $9 AND deleted_at IS NULL
+		SET name = CASE WHEN $1 = '' THEN name ELSE $1 END,
+		    short_name = CASE WHEN $2 = '' THEN short_name ELSE $2 END,
+		    description = CASE WHEN $3 = '' THEN description ELSE $3 END,
+		    logo_url = CASE WHEN $4 = '' THEN logo_url ELSE $4 END,
+		    logo_img = CASE WHEN $5 = '' THEN logo_img ELSE $5 END,
+		    contact_name = CASE WHEN $6 IS NULL THEN contact_name ELSE $6 END,
+		    contact_phone = CASE WHEN $7 IS NULL THEN contact_phone ELSE $7 END,
+		    contact_email = CASE WHEN $8 IS NULL THEN contact_email ELSE $8 END,
+		    is_roster_locked = $9,
+		    updated_at = NOW()
+		WHERE id = $10 AND deleted_at IS NULL
 	`
 	_, err := r.db.Exec(ctx, query,
 		team.Name, team.ShortName, team.Description, team.LogoURL, team.LogoImg,
-		team.ContactName, team.ContactPhone, team.ContactEmail, team.ID,
+		team.ContactName, team.ContactPhone, team.ContactEmail, team.IsRosterLocked, team.ID,
 	)
 	return err
+}
+
+func (r *TeamRepository) LockRoster(ctx context.Context, id uuid.UUID, locked bool) error {
+	resolvedID, err := r.ResolveTeamID(ctx, id)
+	if err != nil {
+		resolvedID = id
+	}
+
+	_, _ = r.db.Exec(ctx, `UPDATE teams SET is_roster_locked = $1, updated_at = NOW() WHERE id = $2 AND deleted_at IS NULL`, locked, resolvedID)
+	_, _ = r.db.Exec(ctx, `UPDATE tournament_teams SET is_roster_locked = $1, updated_at = NOW() WHERE id = $2 OR team_id = $2`, locked, id)
+	return nil
 }
 
 func (r *TeamRepository) Delete(ctx context.Context, id uuid.UUID) error {
@@ -165,7 +184,7 @@ func (r *TeamRepository) GetPlayers(ctx context.Context, teamID uuid.UUID) ([]*m
 		       mp.tel, p.created_at, p.updated_at
 		FROM players p
 		LEFT JOIN master_players mp ON p.master_player_id = mp.id
-		WHERE p.team_id = $1
+		WHERE p.team_id = $1 AND p.deleted_at IS NULL
 		ORDER BY p.jersey_number ASC NULLS LAST, p.first_name ASC
 	`
 	rows, err := r.db.Query(ctx, query, resolvedID)
@@ -195,7 +214,7 @@ func (r *TeamRepository) GetPlayerByID(ctx context.Context, playerID uuid.UUID) 
 		       mp.tel, p.created_at, p.updated_at
 		FROM players p
 		LEFT JOIN master_players mp ON p.master_player_id = mp.id
-		WHERE p.id = $1
+		WHERE p.id = $1 AND p.deleted_at IS NULL
 	`
 	var p model.Player
 	err := r.db.QueryRow(ctx, query, playerID).Scan(
@@ -211,6 +230,19 @@ func (r *TeamRepository) GetPlayerByID(ctx context.Context, playerID uuid.UUID) 
 func (r *TeamRepository) AddPlayer(ctx context.Context, p *model.Player) error {
 	resolvedID, _ := r.ResolveTeamID(ctx, p.TeamID)
 	p.TeamID = resolvedID
+
+	// Auto-create master_player record if not provided
+	if p.MasterPlayerID == nil || *p.MasterPlayerID == uuid.Nil {
+		var newMasterID uuid.UUID
+		err := r.db.QueryRow(ctx, `
+			INSERT INTO master_players (first_name_local, last_name_local, birthday, photo_url, status, verified)
+			VALUES ($1, COALESCE(NULLIF($2, ''), '-'), NULLIF($3, '')::date, $4, 'active', false)
+			RETURNING id
+		`, p.FirstName, p.LastName, p.DateOfBirth, p.PhotoURL).Scan(&newMasterID)
+		if err == nil && newMasterID != uuid.Nil {
+			p.MasterPlayerID = &newMasterID
+		}
+	}
 
 	query := `
 		INSERT INTO players (team_id, first_name, last_name, jersey_number, position, photo_url, date_of_birth, master_player_id)
@@ -232,7 +264,7 @@ func (r *TeamRepository) UpdatePlayer(ctx context.Context, p *model.Player) erro
 		    photo_url = COALESCE(NULLIF($5, ''), photo_url),
 		    date_of_birth = COALESCE(NULLIF($6, '')::date, date_of_birth),
 		    updated_at = NOW()
-		WHERE id = $7
+		WHERE id = $7 AND deleted_at IS NULL
 	`
 	_, err := r.db.Exec(ctx, query, p.FirstName, p.LastName, p.JerseyNumber, p.Position, p.PhotoURL, p.DateOfBirth, p.ID)
 	return err

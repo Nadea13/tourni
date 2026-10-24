@@ -46,7 +46,7 @@ export default async function MatchConsoleReadOnlyPage(props: {
     const catId = rawMatch.category_id || rawMatch.tournament_category_id;
     if ((!rawMatch.home_team_id || !rawMatch.away_team_id) && catId) {
         try {
-            await syncCategoryBracket(id, catId, true);
+            await syncCategoryBracket(id, catId, true, true);
             const refreshed = await ApiClient.fetch<any>(`/matches/${matchId}`);
             if (refreshed && refreshed.id) {
                 rawMatch = refreshed;

@@ -44,7 +44,7 @@ export function DashboardNavbar({
             {/* Mobile Bottom Navigation Bar */}
             <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 bg-card border-t border-border flex justify-around py-1.5 items-center px-2 shadow-lg">
                 {navItems.map((item) => {
-                    const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
+                    const isActive = pathname === item.href || (item.href !== "/home" && item.href !== "/dashboard" && pathname.startsWith(item.href));
                     return (
                         <Link
                             key={item.href}
@@ -52,12 +52,12 @@ export function DashboardNavbar({
                             target={item.openInNewTab ? "_blank" : undefined}
                             rel={item.openInNewTab ? "noopener noreferrer" : undefined}
                             onClick={(e) => {
-                                if (item.href === "/dashboard/tournaments" && !isOrganizer) {
+                                if ((item.href === "/my-tournaments" || item.href === "/dashboard/tournaments") && !isOrganizer) {
                                     e.preventDefault();
                                     setShowOrganizerDialog(true);
                                     return;
                                 }
-                                if (item.href === "/dashboard/teams" && !isTeamManager) {
+                                if ((item.href === "/my-teams" || item.href === "/dashboard/teams") && !isTeamManager) {
                                     e.preventDefault();
                                     setShowManagerDialog(true);
                                     return;
@@ -79,7 +79,7 @@ export function DashboardNavbar({
             <header className={cn("sticky top-0 z-40 flex h-14 md:h-20 items-center justify-between border-b bg-card backdrop-blur-xl px-2 w-full", className)}>
                 <div className="flex items-center gap-1 md:gap-2">
                     <BrandLogo 
-                        href="/dashboard" 
+                        href="/home" 
                         size="sm"
                         className="transition-transform group"
                         iconClassName="w-7 h-7 md:w-8 md:h-8"

@@ -76,6 +76,7 @@ export async function addMatchEvent(
         }
 
         const data = await res.json();
+        revalidatePath(`/my-tournaments/${tournamentId}`);
         revalidatePath(`/dashboard/tournaments/${tournamentId}`);
         return { success: true, data };
     } catch (err: any) {
@@ -107,6 +108,7 @@ export async function deleteMatchEvent(eventId: string, tournamentId: string, ma
             return { success: false, error: errData.error || "Failed to delete match event" };
         }
 
+        revalidatePath(`/my-tournaments/${tournamentId}`);
         revalidatePath(`/dashboard/tournaments/${tournamentId}`);
         return { success: true };
     } catch (err: any) {

@@ -63,7 +63,7 @@ export function EmailLoginForm({ authError }: EmailLoginFormProps = {}) {
                     description: `ยินดีต้อนรับ ${resp.user?.full_name || ''}`,
                 });
 
-                router.push(`/${locale}/dashboard`);
+                router.push(`/${locale}/home`);
                 router.refresh();
             }
         } catch (err: any) {

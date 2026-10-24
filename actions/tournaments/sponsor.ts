@@ -136,6 +136,7 @@ export async function addSponsor(
         }
 
         revalidatePath(`/organizer/tournaments/${tournamentId}`);
+        revalidatePath(`/my-tournaments/${tournamentId}`);
         revalidatePath(`/dashboard/tournaments/${tournamentId}`);
         return { success: true };
     } catch (error) {
@@ -150,6 +151,7 @@ export async function updateSponsorsOrder(
 ): Promise<ActionResponse> {
     try {
         revalidatePath(`/organizer/tournaments/${tournamentId}`);
+        revalidatePath(`/my-tournaments/${tournamentId}`);
         revalidatePath(`/dashboard/tournaments/${tournamentId}`);
         return { success: true };
     } catch (error) {
@@ -254,6 +256,7 @@ export async function updateSponsor(
         }
 
         revalidatePath(`/organizer/tournaments/${tournamentId}`);
+        revalidatePath(`/my-tournaments/${tournamentId}`);
         revalidatePath(`/dashboard/tournaments/${tournamentId}`);
         return { success: true };
     } catch (error) {
@@ -283,6 +286,7 @@ export async function deleteSponsor(sponsorId: string, tournamentId: string): Pr
         }
 
         revalidatePath(`/organizer/tournaments/${tournamentId}`);
+        revalidatePath(`/my-tournaments/${tournamentId}`);
         revalidatePath(`/dashboard/tournaments/${tournamentId}`);
         return { success: true };
     } catch (error) {

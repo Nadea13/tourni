@@ -34,7 +34,7 @@ export function BecomeTeamManagerDialog({ open, onOpenChange }: BecomeTeamManage
                 onOpenChange(false);
 
                 // Navigate immediately to teams page
-                router.push('/dashboard/teams');
+                router.push('/my-teams');
 
                 // Refresh to update server-side role check
                 setTimeout(() => {

@@ -192,7 +192,7 @@ export function CategorySetup({ tournamentId, ageCategories, tournamentName }: C
                                             value={customAge}
                                             disabled={isPending}
                                             onChange={(e) => setCustomAge(e.target.value)}
-                                            placeholder={isThai ? "เช่น U13 หรือ 30+" : "e.g. U13 or 30+"}
+                                            placeholder={isThai ? "U13 หรือ 30+" : "U13 or 30+"}
                                             className="w-full"
                                         />
                                     </div>

@@ -95,6 +95,7 @@ export async function updateMatch(
             return { success: false, error: errData.error || "Failed to update match" };
         }
 
+        revalidatePath(`/my-tournaments/${tournamentId}`);
         revalidatePath(`/dashboard/tournaments/${tournamentId}`);
         await logActivity('UPDATE_MATCH', 'match', matchId, { tournament_id: tournamentId, ...data });
         return { success: true };

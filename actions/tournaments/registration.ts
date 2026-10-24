@@ -109,6 +109,7 @@ export async function approveRegistration(
             return { success: false, error: err.error || "Failed to approve registration" };
         }
 
+        revalidatePath(`/my-tournaments/${tournamentId}`);
         revalidatePath(`/dashboard/tournaments/${tournamentId}`);
         revalidatePath(`/organizer/tournaments/${tournamentId}`);
         return { success: true, message: "Registration approved and synced!" };
@@ -143,6 +144,7 @@ export async function rejectRegistration(
             return { success: false, error: err.error || "Failed to reject registration" };
         }
 
+        revalidatePath(`/my-tournaments/${tournamentId}`);
         revalidatePath(`/dashboard/tournaments/${tournamentId}`);
         revalidatePath(`/organizer/tournaments/${tournamentId}`);
         return { success: true, message: "Registration rejected" };
@@ -212,6 +214,7 @@ export async function submitRosterWithSender(
         }
 
         revalidatePath(`/dashboard/tournament-teams/${tournamentTeamId}`);
+        revalidatePath(`/inboxes`);
         revalidatePath(`/dashboard/inboxes`);
         return { success: true, message: "Roster submitted successfully!" };
     } catch (e: any) {
@@ -244,6 +247,7 @@ export async function approveRoster(
         }
 
         revalidatePath(`/organizer/tournaments/${tournamentId}`);
+        revalidatePath(`/inboxes`);
         revalidatePath(`/dashboard/inboxes`);
         return { success: true, message: "Roster approved successfully!" };
     } catch (e) {
@@ -276,6 +280,7 @@ export async function rejectRoster(
         }
 
         revalidatePath(`/organizer/tournaments/${tournamentId}`);
+        revalidatePath(`/inboxes`);
         revalidatePath(`/dashboard/inboxes`);
         return { success: true, message: "Roster rejected successfully!" };
     } catch (e) {
@@ -308,6 +313,7 @@ export async function approveSingleRosterSubmission(
             return { success: false, error: err.error || "Failed to approve player" };
         }
 
+        revalidatePath(`/inboxes`);
         revalidatePath(`/dashboard/inboxes`);
         revalidatePath(`/organizer/tournaments/${tournamentId}`);
         return { success: true, message: "Player approved successfully!" };
@@ -346,6 +352,7 @@ export async function approveSelectedRosterSubmissions(
             return { success: false, error: err.error || "Failed to approve selected players" };
         }
 
+        revalidatePath(`/inboxes`);
         revalidatePath(`/dashboard/inboxes`);
         revalidatePath(`/organizer/tournaments/${tournamentId}`);
         return { success: true, message: `Approved ${submissionIds.length} players successfully!` };
@@ -381,6 +388,7 @@ export async function rejectSingleRosterSubmission(
             return { success: false, error: err.error || "Failed to reject player" };
         }
 
+        revalidatePath(`/inboxes`);
         revalidatePath(`/dashboard/inboxes`);
         revalidatePath(`/organizer/tournaments/${tournamentId}`);
         return { success: true, message: "Player rejected successfully!" };
@@ -475,6 +483,7 @@ export async function submitTournamentRoster(
             body: JSON.stringify({ roster_status: 'pending' })
         }).catch(() => {});
 
+        revalidatePath(`/inboxes`);
         revalidatePath(`/dashboard/inboxes`);
         revalidatePath(`/dashboard/tournament-teams/${tournamentTeamId}`);
         return { success: true, message: "Roster submitted to inbox successfully!" };
@@ -653,8 +662,10 @@ export async function withdrawTournamentTeam(
             return { success: false, error: errData.error || "Failed to withdraw team" };
         }
 
+        revalidatePath(`/my-teams`);
         revalidatePath(`/dashboard/teams`);
         revalidatePath(`/dashboard/tournament-teams/${registrationId}`);
+        revalidatePath(`/inboxes`);
         revalidatePath(`/dashboard/inboxes`);
         revalidatePath(`/tournaments`);
 

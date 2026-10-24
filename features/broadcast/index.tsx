@@ -1451,7 +1451,7 @@ export function BroadcastEditor({ matchId, tournamentId, sport = "football", act
                                             <Input
                                                 value={headerText}
                                                 onChange={(e) => setHeaderText(e.target.value)}
-                                                placeholder="e.g. TOURNI CHAMPIONSHIP 2026"
+                                                placeholder="TOURNI CHAMPIONSHIP 2026"
                                                 className="h-10 text-xs font-bold"
                                             />
                                             <p className="text-[11px] text-muted-foreground">
@@ -1500,7 +1500,7 @@ export function BroadcastEditor({ matchId, tournamentId, sport = "football", act
                                                 <Input
                                                     value={nameHome}
                                                     onChange={(e) => setNameHome(e.target.value)}
-                                                    placeholder="e.g. TEAM ALPHA"
+                                                    placeholder="TEAM ALPHA"
                                                     className="h-10 text-xs font-bold"
                                                 />
                                             </div>
@@ -1553,7 +1553,7 @@ export function BroadcastEditor({ matchId, tournamentId, sport = "football", act
                                                 <Input
                                                     value={nameAway}
                                                     onChange={(e) => setNameAway(e.target.value)}
-                                                    placeholder="e.g. TEAM BETA"
+                                                    placeholder="TEAM BETA"
                                                     className="h-10 text-xs font-bold"
                                                 />
                                             </div>
@@ -1816,7 +1816,7 @@ export function BroadcastEditor({ matchId, tournamentId, sport = "football", act
                                                 <Input
                                                     value={homeScorerInput}
                                                     onChange={(e) => setHomeScorerInput(e.target.value)}
-                                                    placeholder="e.g. Somchai (12')"
+                                                    placeholder="Somchai (12')"
                                                     className="h-8 text-xs font-semibold"
                                                 />
                                                 <Button
@@ -1897,7 +1897,7 @@ export function BroadcastEditor({ matchId, tournamentId, sport = "football", act
                                                 <Input
                                                     value={awayScorerInput}
                                                     onChange={(e) => setAwayScorerInput(e.target.value)}
-                                                    placeholder="e.g. John (45')"
+                                                    placeholder="John (45')"
                                                     className="h-8 text-xs font-semibold"
                                                 />
                                                 <Button

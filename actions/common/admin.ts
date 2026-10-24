@@ -569,9 +569,11 @@ export async function approveTournamentStatusRequest(tournamentId: string): Prom
         // 4. Activity notification logged
         console.log(`[approveTournamentStatusRequest] Status approved for tournament ${tournamentId} to ${targetStatus}`)
 
+        revalidatePath(`/my-tournaments/${tournamentId}`)
         revalidatePath(`/dashboard/tournaments/${tournamentId}`)
         revalidatePath(`/tournaments/${tournamentId}`)
         revalidatePath(`/organizer/tournaments/${tournamentId}`)
+        revalidatePath(`/inboxes`)
         revalidatePath(`/dashboard/inboxes`)
         revalidatePath(`/dashboard/notifications`)
         revalidatePath(`/admin`)
@@ -647,9 +649,11 @@ export async function rejectTournamentStatusRequest(tournamentId: string, reject
         // 4. Activity notification logged
         console.log(`[rejectTournamentStatusRequest] Status rejected for tournament ${tournamentId}`)
 
+        revalidatePath(`/my-tournaments/${tournamentId}`)
         revalidatePath(`/dashboard/tournaments/${tournamentId}`)
         revalidatePath(`/tournaments/${tournamentId}`)
         revalidatePath(`/organizer/tournaments/${tournamentId}`)
+        revalidatePath(`/inboxes`)
         revalidatePath(`/dashboard/inboxes`)
         revalidatePath(`/dashboard/notifications`)
         revalidatePath(`/admin`)

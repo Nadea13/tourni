@@ -348,7 +348,7 @@ export function CreateCategoryForm({
                                             value={customAge}
                                             disabled={isPending}
                                             onChange={(e) => setCustomAge(e.target.value)}
-                                            placeholder={isThai ? "เช่น U13 หรือ 30+" : "e.g. U13 or 30+"}
+                                            placeholder={isThai ? "U13 หรือ 30+" : "U13 or 30+"}
                                             className="w-full"
                                         />
                                     </div>
@@ -411,7 +411,7 @@ export function CreateCategoryForm({
                                         const val = e.target.value.replace(/[^0-9]/g, "");
                                         setMaxTeams(val);
                                     }}
-                                    placeholder={isThai ? "เช่น 8, 16, 32" : "e.g. 8, 16, 32"}
+                                    placeholder="8, 16, 32"
                                     className="w-full"
                                 />
                             </div>
@@ -444,7 +444,7 @@ export function CreateCategoryForm({
                                             setRegistrationFee(val);
                                         }
                                     }}
-                                    placeholder={isThai ? "เช่น 500 (หรือ 0 สำหรับฟรี)" : "e.g. 500 (or 0 for free)"}
+                                    placeholder={isThai ? "500 (หรือ 0 สำหรับฟรี)" : "500 (or 0 for free)"}
                                     className="w-full"
                                 />
                             </div>

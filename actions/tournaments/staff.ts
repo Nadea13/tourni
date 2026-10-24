@@ -41,6 +41,7 @@ export async function inviteStaff(
         }
 
         const data = await res.json();
+        revalidatePath(`/my-tournaments/${tournamentId}`);
         revalidatePath(`/dashboard/tournaments/${tournamentId}`);
         revalidatePath(`/organizer/tournaments/${tournamentId}`);
         await logActivity('INVITE_MEMBER', 'tournament', tournamentId, { email, role });
@@ -138,6 +139,7 @@ export async function updateStaffRole(
             return { success: false, error: err.error || "Failed to update staff role" };
         }
 
+        revalidatePath(`/my-tournaments/${tournamentId}`);
         revalidatePath(`/dashboard/tournaments/${tournamentId}`);
         revalidatePath(`/organizer/tournaments/${tournamentId}`);
         await logActivity('UPDATE_MEMBER_ROLE', 'tournament', tournamentId, { member_id: memberId, role });
@@ -169,6 +171,7 @@ export async function removeStaff(
             return { success: false, error: err.error || "Failed to remove staff" };
         }
 
+        revalidatePath(`/my-tournaments/${tournamentId}`);
         revalidatePath(`/dashboard/tournaments/${tournamentId}`);
         revalidatePath(`/organizer/tournaments/${tournamentId}`);
         await logActivity('REMOVE_MEMBER', 'tournament', tournamentId, { member_id: memberId });
@@ -225,6 +228,7 @@ export async function acceptInvite(
         // Refresh relevant paths
         revalidatePath(`/organizer/tournaments/${tournamentId}`);
         revalidatePath(`/dashboard/invites`);
+        revalidatePath(`/inboxes`);
         revalidatePath(`/dashboard/inboxes`);
         revalidatePath(`/dashboard`);
 
@@ -308,6 +312,7 @@ export async function rejectInvite(
 
         revalidatePath(`/dashboard/invites`);
         revalidatePath(`/dashboard/notifications`);
+        revalidatePath(`/inboxes`);
         revalidatePath(`/dashboard/inboxes`);
         revalidatePath(`/dashboard`);
 
@@ -551,7 +556,9 @@ export async function approveTeamManagementRequest(
             return { success: false, error: err.error || "Failed to approve request" };
         }
 
+        revalidatePath(`/inboxes`);
         revalidatePath(`/dashboard/inboxes`);
+        revalidatePath(`/my-teams`);
         revalidatePath(`/dashboard/teams`);
         revalidatePath(`/dashboard`);
 
@@ -587,7 +594,9 @@ export async function rejectTeamManagementRequest(
             return { success: false, error: err.error || "Failed to reject request" };
         }
 
+        revalidatePath(`/inboxes`);
         revalidatePath(`/dashboard/inboxes`);
+        revalidatePath(`/my-teams`);
         revalidatePath(`/dashboard/teams`);
         revalidatePath(`/dashboard`);
 
@@ -657,7 +666,7 @@ export async function getUserSystemNotifications(): Promise<ActionResponse<Array
                     message: `แอดมินได้อนุมัติคำขอเปลี่ยนสถานะเป็น "${targetStatus}" เรียบร้อยแล้ว พร้อมปลดล็อคการจัดการสายการแข่งขัน`,
                     type: 'system',
                     status: 'approved',
-                    link: `/dashboard/tournaments/${item.tournament_id}`,
+                    link: `/my-tournaments/${item.tournament_id}`,
                     is_read: false,
                     created_at: item.reviewed_at || item.updated_at || item.created_at || new Date().toISOString(),
                 });
@@ -668,7 +677,7 @@ export async function getUserSystemNotifications(): Promise<ActionResponse<Array
                     message: `แอดมินได้ปฏิเสธคำขอเปลี่ยนสถานะเป็น "${targetStatus}"${item.reject_reason ? ` (เหตุผล: ${item.reject_reason})` : ''}`,
                     type: 'system',
                     status: 'rejected',
-                    link: `/dashboard/tournaments/${item.tournament_id}`,
+                    link: `/my-tournaments/${item.tournament_id}`,
                     is_read: false,
                     created_at: item.reviewed_at || item.updated_at || item.created_at || new Date().toISOString(),
                 });
@@ -679,7 +688,7 @@ export async function getUserSystemNotifications(): Promise<ActionResponse<Array
                     message: `คำขอเปลี่ยนสถานะเป็น "${targetStatus}" อยู่ระหว่างการพิจารณาตรวจสอบโดยผู้ดูแลระบบ`,
                     type: 'system',
                     status: 'pending',
-                    link: `/dashboard/tournaments/${item.tournament_id}`,
+                    link: `/my-tournaments/${item.tournament_id}`,
                     is_read: false,
                     created_at: item.created_at || new Date().toISOString(),
                 });

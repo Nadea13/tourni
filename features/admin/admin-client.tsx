@@ -718,7 +718,7 @@ export function AdminClient({ initialPayments, initialUsers, initialMasterPlayer
                                                 <TableCell>
                                                     <div className="flex flex-col">
                                                         <Link
-                                                            href={`/dashboard/tournaments/${req.tournament_id}`}
+                                                            href={`/my-tournaments/${req.tournament_id}`}
                                                             target="_blank"
                                                             className="font-bold text-foreground hover:text-primary transition-colors flex items-center gap-1"
                                                         >
@@ -1241,7 +1241,7 @@ export function AdminClient({ initialPayments, initialUsers, initialMasterPlayer
                                     size="sm"
                                     value={adminRejectReason}
                                     onChange={(e) => setAdminRejectReason(e.target.value)}
-                                    placeholder="เช่น ไม่อนุญาตเนื่องจากการแข่งขันจบสิ้นสมบูรณ์แล้ว"
+                                    placeholder="ไม่อนุญาตเนื่องจากการแข่งขันจบสิ้นสมบูรณ์แล้ว"
                                 />
                             </div>
                         </AlertDialogDescription>

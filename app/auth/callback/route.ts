@@ -13,8 +13,8 @@ export async function GET(request: NextRequest) {
         return NextResponse.redirect(`${origin}/${locale}/sign-in?error=${encodeURIComponent(errorMsg)}`);
     }
 
-    // Redirect to dashboard and attach session cookie
-    const response = NextResponse.redirect(`${origin}/${locale}/dashboard`);
+    // Redirect to home and attach session cookie
+    const response = NextResponse.redirect(`${origin}/${locale}/home`);
     response.cookies.set("tourni_access_token", token, {
         path: "/",
         maxAge: 60 * 60 * 24 * 7, // 7 days

@@ -56,7 +56,7 @@ export async function createStripeCheckoutSession({
 
             // Simulated Stripe session mode for local development without actual Stripe keys
             const dummySessionId = `cs_test_${Math.random().toString(36).substring(2, 12)}`;
-            const redirectUrl = `${origin}/dashboard/settings?tab=billing&session_id=${dummySessionId}&success=true`;
+            const redirectUrl = `${origin}/settings?tab=billing&session_id=${dummySessionId}&success=true`;
             return {
                 success: true,
                 data: {
@@ -166,8 +166,8 @@ export async function createStripeCheckoutSession({
                 planName: cleanPlanName,
                 tournamentId: tournamentId || '',
             },
-            success_url: `${origin}/dashboard/settings?tab=billing&session_id={CHECKOUT_SESSION_ID}&success=true`,
-            cancel_url: `${origin}/dashboard/settings?tab=billing&canceled=true`,
+            success_url: `${origin}/settings?tab=billing&session_id={CHECKOUT_SESSION_ID}&success=true`,
+            cancel_url: `${origin}/settings?tab=billing&canceled=true`,
         };
 
 
@@ -223,7 +223,7 @@ export async function createStripeCustomerPortalSession(): Promise<ActionRespons
             return {
                 success: true,
                 data: {
-                    url: `${origin}/dashboard/settings?tab=billing`
+                    url: `${origin}/settings?tab=billing`
                 }
             };
         }
@@ -249,7 +249,7 @@ export async function createStripeCustomerPortalSession(): Promise<ActionRespons
 
         const portalSession = await stripe.billingPortal.sessions.create({
             customer: customerId,
-            return_url: `${origin}/dashboard/settings?tab=billing`,
+            return_url: `${origin}/settings?tab=billing`,
         });
 
         return {
@@ -327,6 +327,7 @@ export async function verifyStripeCheckoutSession(sessionId: string): Promise<Ac
         }
 
         revalidatePath("/", "layout");
+        revalidatePath("/settings", "page");
         revalidatePath("/dashboard/settings", "page");
 
         return { success: true, data: { paid: true } };

@@ -569,7 +569,7 @@ export function NodeSettings({ currentTournamentStatus, onStatusChange }: NodeSe
                                 size="sm"
                                 value={data.label as string}
                                 onChange={(e) => updateNodeData(id, { label: e.target.value })}
-                                placeholder={locale === "th" ? "เช่น สาย A, รอบ 8 ทีมสุดท้าย, ผู้สนับสนุน..." : "e.g. Group A, Quarter Finals, Sponsors..."}
+                                placeholder={locale === "th" ? "สาย A, รอบ 8 ทีมสุดท้าย, ผู้สนับสนุน..." : "Group A, Quarter Finals, Sponsors..."}
                             />
                         </div>
                     )}
@@ -911,7 +911,7 @@ export function NodeSettings({ currentTournamentStatus, onStatusChange }: NodeSe
                                                     id="reg_fee"
                                                     value={regFee}
                                                     onChange={(e) => setRegFee(e.target.value === "" ? "" : Number(e.target.value))}
-                                                    placeholder={locale === "th" ? "เช่น 500 (หรือ 0 สำหรับฟรี)" : "e.g. 500 (or 0 for free)"}
+                                                    placeholder={locale === "th" ? "500 (หรือ 0 สำหรับฟรี)" : "500 (or 0 for free)"}
                                                     min="0"
                                                     step="0.01"
                                                 />
@@ -925,7 +925,7 @@ export function NodeSettings({ currentTournamentStatus, onStatusChange }: NodeSe
                                                     id="reg_promptpay"
                                                     value={bankNumber}
                                                     onChange={(e) => setBankNumber(e.target.value)}
-                                                    placeholder={locale === "th" ? "เช่น 081-234-5678 หรือ 1234567890123" : "e.g. 081-234-5678 or ID card / TAX ID"}
+                                                    placeholder={locale === "th" ? "081-234-5678 หรือ 1234567890123" : "081-234-5678 or ID card / TAX ID"}
                                                 />
                                             </div>
                                         </div>
@@ -950,7 +950,7 @@ export function NodeSettings({ currentTournamentStatus, onStatusChange }: NodeSe
                                                     id="reg_acc_name"
                                                     value={accountName}
                                                     onChange={(e) => setAccountName(e.target.value)}
-                                                    placeholder={locale === "th" ? "เช่น นายสมชาย ใจดี" : "e.g. John Doe"}
+                                                    placeholder={locale === "th" ? "นายสมชาย ใจดี" : "John Doe"}
                                                 />
                                             </div>
                                         </div>

@@ -22,7 +22,7 @@ export default async function TournamentTeamDetailPage({
     }
 
     if (!team) {
-        redirect(`/${locale}/dashboard/teams`);
+        redirect(`/${locale}/my-teams`);
     }
 
     const playersResult = await getPlayers(id);
@@ -33,7 +33,7 @@ export default async function TournamentTeamDetailPage({
             <SquadManagement
                 team={team}
                 initialPlayers={initialPlayers}
-                backHref={`/${locale}/dashboard/inboxes`}
+                backHref={`/${locale}/inboxes`}
             />
         </div>
     );

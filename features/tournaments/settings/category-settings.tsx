@@ -545,7 +545,7 @@ export function CategorySettings({
                                         setCustomAge(e.target.value);
                                         setLastModifiedField('age');
                                     }}
-                                    placeholder={isThai ? "เช่น U13 หรือ 30+" : "e.g. U13 or 30+"}
+                                    placeholder={isThai ? "U13 หรือ 30+" : "U13 or 30+"}
                                     className="w-full"
                                 />
                             </div>
@@ -618,7 +618,7 @@ export function CategorySettings({
                                 setMaxTeams(val);
                                 setLastModifiedField('maxTeams');
                             }}
-                            placeholder={isThai ? "เช่น 8, 16, 32" : "e.g. 8, 16, 32"}
+                            placeholder="8, 16, 32"
                             className="w-full"
                         />
                         {activeActionField === 'maxTeams' && renderActionButtons()}
@@ -653,7 +653,7 @@ export function CategorySettings({
                                     setLastModifiedField('fee');
                                 }
                             }}
-                            placeholder={isThai ? "เช่น 500 (หรือ 0 สำหรับฟรี)" : "e.g. 500 (or 0 for free)"}
+                            placeholder={isThai ? "500 (หรือ 0 สำหรับฟรี)" : "500 (or 0 for free)"}
                             className="w-full"
                         />
                         {activeActionField === 'fee' && renderActionButtons()}

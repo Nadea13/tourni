@@ -32,7 +32,8 @@ export async function saveBracketCanvas(
 export async function saveBracketCanvasInternal(
     tournamentId: string,
     canvasData: BracketCanvasData,
-    inputCategoryId?: string
+    inputCategoryId?: string,
+    skipRevalidate = false
 ): Promise<ActionResponse<BracketCanvasData>> {
 
     const apiUrl = process.env.INTERNAL_API_URL || process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1';
@@ -384,9 +385,16 @@ export async function saveBracketCanvasInternal(
         console.error("Error evaluating tournament champion status:", statusCheckErr);
     }
 
-    revalidatePath(`/dashboard/tournaments/${tournamentId}`);
-    revalidatePath(`/tournaments/${tournamentId}`);
-    revalidatePath(`/organizer/tournaments/${tournamentId}`);
+    if (!skipRevalidate) {
+        try {
+            revalidatePath(`/my-tournaments/${tournamentId}`);
+            revalidatePath(`/dashboard/tournaments/${tournamentId}`);
+            revalidatePath(`/tournaments/${tournamentId}`);
+            revalidatePath(`/organizer/tournaments/${tournamentId}`);
+        } catch (e) {
+            console.warn("revalidatePath skipped during render:", e);
+        }
+    }
 
     return { success: true, data: returnData };
 }
@@ -394,7 +402,8 @@ export async function saveBracketCanvasInternal(
 export async function syncCategoryBracket(
     tournamentId: string,
     categoryId?: string,
-    skipAuth = false
+    skipAuth = false,
+    skipRevalidate = false
 ): Promise<ActionResponse<BracketCanvasData>> {
     if (!skipAuth) {
         const access = await validateTournamentAccess(tournamentId, "editor");
@@ -426,7 +435,7 @@ export async function syncCategoryBracket(
         return { success: false, error: "Bracket canvas data not found" };
     }
 
-    return saveBracketCanvasInternal(tournamentId, canvasData, targetCatId);
+    return saveBracketCanvasInternal(tournamentId, canvasData, targetCatId, skipRevalidate);
 }
 
 

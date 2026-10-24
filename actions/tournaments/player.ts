@@ -157,6 +157,7 @@ export async function addTournamentPlayer(
             return { success: false, error: err.error || "Failed to add player to tournament" };
         }
 
+        revalidatePath(`/my-tournaments`);
         revalidatePath(`/dashboard/tournaments`);
         return { success: true };
     } catch (err) {
@@ -196,6 +197,7 @@ export async function deleteTournamentPlayer(
             return { success: false, error: err.error || "Failed to delete player" };
         }
 
+        revalidatePath(`/my-tournaments`);
         revalidatePath(`/dashboard/tournaments`);
         return { success: true };
     } catch (err) {
@@ -246,6 +248,7 @@ export async function updateTournamentPlayer(
             return { success: false, error: errBody.error || "Failed to update tournament player" };
         }
 
+        revalidatePath(`/my-tournaments`);
         revalidatePath(`/dashboard/tournaments`);
         revalidatePath(`/dashboard/tournament-teams/${tournamentTeamId}`);
         return { success: true };

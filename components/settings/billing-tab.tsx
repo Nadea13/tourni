@@ -160,7 +160,7 @@ export function BillingTab() {
                 const res = await verifyStripeCheckoutSession(sessionId);
                 if (res.success) {
                     await loadData();
-                    router.replace("/dashboard/settings?tab=billing");
+                    router.replace("/settings?tab=billing");
                 }
             });
         }

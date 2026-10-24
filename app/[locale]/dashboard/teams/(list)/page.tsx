@@ -1,10 +1,14 @@
-import { getMyTeams } from "@/actions/manager/team";
-import { MyTeamsClient } from "@/features/teams/my-teams-client";
-import { Team } from "@/types/index";
+import { redirect } from "next/navigation";
 
-export default async function TeamsPage() {
-    const result = await getMyTeams();
-    const teams = result.success ? (result.data as Team[] || []) : [];
-
-    return <MyTeamsClient initialTeams={teams} />;
+export default async function DashboardTeamsRedirect({
+    params,
+    searchParams,
+}: {
+    params: Promise<{ locale: string }>;
+    searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
+    const { locale } = await params;
+    const sp = await searchParams;
+    const queryString = new URLSearchParams(sp as Record<string, string>).toString();
+    redirect(`/${locale}/my-teams${queryString ? `?${queryString}` : ""}`);
 }

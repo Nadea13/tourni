@@ -88,6 +88,7 @@ async function syncPenaltyScore(matchId: string) {
         });
 
         if (matchData.tournament_id) {
+            revalidatePath(`/my-tournaments/${matchData.tournament_id}`);
             revalidatePath(`/dashboard/tournaments/${matchData.tournament_id}`);
         }
     } catch (err) {

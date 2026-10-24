@@ -31,7 +31,7 @@ test.describe('Tourni E2E Page Tests', () => {
   });
 
   test('Settings Billing Tab - check Event pricing and discount tag', async ({ page }) => {
-    await page.goto('/th/dashboard/settings?tab=billing');
+    await page.goto('/th/settings?tab=billing');
     // Page will either render billing tab or redirect to sign-in
     const url = page.url();
     if (url.includes('/sign-in') || url.includes('/login')) {

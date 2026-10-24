@@ -359,7 +359,7 @@ export function MatchNodeSettings({
                                     }
 
                                     if (targetId) {
-                                        router.push(`/dashboard/tournaments/${tournamentId}/matches/${targetId}`);
+                                        router.push(`/my-tournaments/${tournamentId}/matches/${targetId}`);
                                     } else {
                                         toast({
                                             title: locale === "th" ? "เกิดข้อผิดพลาด" : "Error",

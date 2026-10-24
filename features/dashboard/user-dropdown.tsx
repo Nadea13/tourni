@@ -53,7 +53,7 @@ export function UserDropdown({
     const tCommon = useTranslations("Common")
     const tSettings = useTranslations("DashboardSettings")
 
-    const profileHref = '/dashboard/settings'
+    const profileHref = '/settings'
     const [mounted, setMounted] = useState(false)
 
     useEffect(() => {
@@ -123,7 +123,7 @@ export function UserDropdown({
                         </Link>
                     </ActionMenuItem>
                     <ActionMenuItem asChild className="group hover:text-primary transition-colors cursor-pointer py-2 rounded-sm">
-                        <Link href="/dashboard/settings?tab=billing" className="w-full flex items-center gap-2 md:gap-3">
+                        <Link href="/settings?tab=billing" className="w-full flex items-center gap-2 md:gap-3">
                             <CreditCard className="h-4 w-4 text-muted-foreground group-hover:text-primary shrink-0" />
                             <span className="text-xs text-muted-foreground font-bold tracking-tight group-hover:text-primary">{tSettings("billing")}</span>
                         </Link>

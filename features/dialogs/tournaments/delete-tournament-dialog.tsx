@@ -36,7 +36,7 @@ export function DeleteTournamentDialog({
     onOpenChange: controlledOnOpenChange,
     trigger,
     onSuccess,
-    redirectTo = "/dashboard/tournaments",
+    redirectTo = "/my-tournaments",
 }: DeleteTournamentDialogProps) {
     const t = useTranslations("Settings");
     const tCommon = useTranslations("Common");

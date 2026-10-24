@@ -316,7 +316,7 @@ function BracketMatchCard({ match, isFinal, isPublic }: { match: Match; isFinal?
     const hasPenalties = !isScheduled && ((match.penalty_home_score ?? 0) > 0 || (match.penalty_away_score ?? 0) > 0);
     const url = isPublic
         ? `/${tournamentId}/matches/${match.id}`
-        : `/dashboard/tournaments/${tournamentId}/matches/${match.id}`;
+        : `/my-tournaments/${tournamentId}/matches/${match.id}`;
 
     return (
         <Link

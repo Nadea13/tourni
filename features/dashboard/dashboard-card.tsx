@@ -128,7 +128,7 @@ function TournamentCard({
     };
 
     return (
-        <Link href={`/dashboard/tournaments/${tournament.id}`} className="block h-full group">
+        <Link href={`/my-tournaments/${tournament.id}`} className="block h-full group">
             <Card className="flex flex-col justify-between h-full bg-card border rounded-sm transition-all hover:border-primary/50 hover:shadow-md overflow-hidden relative cursor-pointer min-h-[160px] p-4 gap-4">
                 {/* Background Cover Image */}
                 {coverUrl ? (
@@ -220,7 +220,7 @@ function TournamentCard({
                 <div className="flex items-end justify-between gap-2 relative z-10">
                     <div className="flex flex-col gap-1.5 min-w-0 flex-1">
                         <h3 className={cn(
-                            "text-xl md:text-2xl font-black tracking-tight line-clamp-1 group-hover:text-primary transition-colors",
+                            "text-xl md:text-2xl font-black tracking-tight line-clamp-1  transition-colors",
                             coverUrl ? "text-white" : "text-foreground"
                         )}>
                             {tournament.name}
@@ -302,7 +302,7 @@ function TournamentListItem({
 
     return (
         <Link
-            href={`/dashboard/tournaments/${tournament.id}`}
+            href={`/my-tournaments/${tournament.id}`}
             className="block group relative transition-all hover:bg-muted/30 cursor-pointer p-4 overflow-hidden"
         >
             {/* Subtle ambient radial gradient from top left */}
@@ -385,13 +385,13 @@ function TeamCard({
 }) {
     const resolvedTeamLogo = resolveStorageUrl((team as any).logo_img || team.logo_url);
     const dominantColor = useImageColor(resolvedTeamLogo);
-    const [teamHref, setTeamHref] = useState(`/dashboard/teams/${team.id}`);
+    const [teamHref, setTeamHref] = useState(`/my-teams/${team.id}`);
 
     useEffect(() => {
         try {
             const saved = localStorage.getItem("squad_view_mode");
             const mode = saved === "card" || saved === "grid" ? "card" : "list";
-            setTeamHref(`/dashboard/teams/${team.id}?view=${mode}`);
+            setTeamHref(`/my-teams/${team.id}?view=${mode}`);
         } catch {}
     }, [team.id]);
 
@@ -457,7 +457,7 @@ function TeamCard({
 
                 {/* Bottom Info: Team Name & Description */}
                 <div className="flex flex-col gap-1.5 relative z-10">
-                    <h3 className="text-xl md:text-2xl font-black tracking-tight text-foreground line-clamp-1 group-hover:text-primary transition-colors">
+                    <h3 className="text-xl md:text-2xl font-black tracking-tight text-foreground line-clamp-1 transition-colors">
                         {team.name}
                     </h3>
                     <p className="text-sm font-medium text-foreground/80 dark:text-muted-foreground line-clamp-1 leading-relaxed">
@@ -480,13 +480,13 @@ function TeamListItem({
 }) {
     const resolvedTeamLogo = resolveStorageUrl((team as any).logo_img || team.logo_url);
     const dominantColor = useImageColor(resolvedTeamLogo);
-    const [teamHref, setTeamHref] = useState(`/dashboard/teams/${team.id}`);
+    const [teamHref, setTeamHref] = useState(`/my-teams/${team.id}`);
 
     useEffect(() => {
         try {
             const saved = localStorage.getItem("squad_view_mode");
             const mode = saved === "card" || saved === "grid" ? "card" : "list";
-            setTeamHref(`/dashboard/teams/${team.id}?view=${mode}`);
+            setTeamHref(`/my-teams/${team.id}?view=${mode}`);
         } catch {}
     }, [team.id]);
 

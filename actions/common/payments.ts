@@ -136,8 +136,10 @@ export async function createPaymentRecord(
         // Revalidate layout and settings paths
         revalidatePath("/", "layout");
         revalidatePath("/[locale]/dashboard", "layout");
+        revalidatePath("/settings", "page");
         revalidatePath("/dashboard/settings", "page");
         if (tournamentId) {
+            revalidatePath(`/my-tournaments/${tournamentId}`, "layout");
             revalidatePath(`/dashboard/tournaments/${tournamentId}`, "layout");
         }
 

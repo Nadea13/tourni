@@ -390,7 +390,7 @@ export function MatchCard({
 
     const url = isPublic
         ? `/tournaments/${tournamentId}/matches/${match.id}${querySuffix}`
-        : `/dashboard/tournaments/${tournamentId}/matches/${match.id}${querySuffix}`;
+        : `/my-tournaments/${tournamentId}/matches/${match.id}${querySuffix}`;
 
     const handleCardClick = (e: React.MouseEvent) => {
         if (!canOpen) return;

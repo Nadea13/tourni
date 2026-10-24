@@ -35,7 +35,7 @@ export default function TournamentError({
                     Try Again
                 </Button>
                 <Button asChild>
-                    <Link href="/dashboard">Back to Dashboard</Link>
+                    <Link href="/home">Back to Home</Link>
                 </Button>
             </div>
         </div>

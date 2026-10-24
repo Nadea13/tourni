@@ -1,21 +1,14 @@
-import { getDashboardTournaments } from "@/actions/tournaments/general";
-import { getUserSubscriptionPlan } from "@/actions/common/user";
-import { MyTournamentsClient } from "@/features/tournaments/management/my-tournaments-client";
-import type { Metadata } from "next";
+import { redirect } from "next/navigation";
 
-export const metadata: Metadata = {
-    title: "Tournaments",
-    description: "Browse and search for active and completed football tournaments.",
-};
-
-export default async function TournamentsPage() {
-    const tournaments = await getDashboardTournaments();
-    const userPlan = await getUserSubscriptionPlan();
-
-    return (
-        <MyTournamentsClient
-            initialTournaments={tournaments}
-            userPlan={userPlan}
-        />
-    );
+export default async function DashboardTournamentsRedirect({
+    params,
+    searchParams,
+}: {
+    params: Promise<{ locale: string }>;
+    searchParams: Promise<{ [key: string]: string | string[] | undefined }>;
+}) {
+    const { locale } = await params;
+    const sp = await searchParams;
+    const queryString = new URLSearchParams(sp as Record<string, string>).toString();
+    redirect(`/${locale}/my-tournaments${queryString ? `?${queryString}` : ""}`);
 }

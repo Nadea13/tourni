@@ -260,7 +260,7 @@ export function ProfileForm({
                                 setFullName(e.target.value);
                                 setLastModifiedField('fullName');
                             }}
-                            placeholder={isThai ? "เช่น สมชาย ใจดี" : "e.g. John Doe"}
+                            placeholder={isThai ? "สมชาย ใจดี" : "John Doe"}
                             required
                             className="w-full"
                         />
@@ -293,7 +293,7 @@ export function ProfileForm({
                                 setPhone(e.target.value);
                                 setLastModifiedField('phone');
                             }}
-                            placeholder={isThai ? "เช่น 081-234-5678" : "e.g. 081-234-5678"}
+                            placeholder="081-234-5678"
                             className="w-full"
                         />
                         {activeActionField === 'phone' && renderActionButtons()}

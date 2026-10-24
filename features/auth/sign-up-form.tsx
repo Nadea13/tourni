@@ -279,7 +279,7 @@ export function SignUpForm() {
                     description: `ยินดีต้อนรับ ${resp.user.full_name}!`,
                 });
 
-                router.push(`/${locale}/dashboard`);
+                router.push(`/${locale}/home`);
                 router.refresh();
             }
         } catch (err: any) {

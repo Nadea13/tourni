@@ -1366,7 +1366,7 @@ function CanvasInternal({
                 <div className="flex items-center gap-2">
                     <div className="flex items-center gap-2">
                         <Button variant="ghost" size="icon-sm" asChild className="shrink-0 hover:bg-primary/10 hover:text-primary transition-all">
-                            <Link href="/dashboard/tournaments">
+                            <Link href="/my-tournaments">
                                 <ArrowLeft className="size-4" />
                             </Link>
                         </Button>

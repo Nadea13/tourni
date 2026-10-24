@@ -59,7 +59,7 @@ export function SettingsView({ user, profile, activeTab = "general", onProfileUp
     ];
 
     const handleTabChange = (val: SettingsTabValue) => {
-        router.push(`/dashboard/settings?tab=${val}`);
+        router.push(`/settings?tab=${val}`);
     };
 
     return (

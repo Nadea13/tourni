@@ -464,7 +464,7 @@ export function DangerZone({
                                 type="text"
                                 value={statusReason}
                                 onChange={(e) => setStatusReason(e.target.value)}
-                                placeholder={isThai ? "เช่น ต้องการแข่งขันนัดตัดสินใหม่, แก้ไขผลคะแนนผิดพลาด" : "e.g. Replay playoff match, score correction"}
+                                placeholder={isThai ? "ต้องการแข่งขันนัดตัดสินใหม่, แก้ไขผลคะแนนผิดพลาด" : "Replay playoff match, score correction"}
                                 className="w-full px-3 py-1.5 text-xs bg-background border border-border rounded-sm focus:outline-none focus:ring-1 focus:ring-primary"
                             />
                         </div>

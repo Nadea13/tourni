@@ -351,7 +351,7 @@ export function TournamentCreate({ iconOnlyMobile = false, isDisabled = false }:
                                     size="sm"
                                     value={name}
                                     onChange={(e) => setName(e.target.value)}
-                                    placeholder={isThai ? "เช่น ฟุตบอลเยาวชน ชิงถ้วยนายก ครั้งที่ 1" : "e.g. Youth Champions League 2026"}
+                                    placeholder={isThai ? "ฟุตบอลเยาวชน ชิงถ้วยนายก ครั้งที่ 1" : "Youth Champions League 2026"}
                                     disabled={isPending}
                                     required
                                     className="w-full"
@@ -474,7 +474,7 @@ export function TournamentCreate({ iconOnlyMobile = false, isDisabled = false }:
                                     size="sm"
                                     value={locationName}
                                     onChange={(e) => setLocationName(e.target.value)}
-                                    placeholder={isThai ? "เช่น สนามกีฬาเฉลิมพระเกียรติ 80 พรรษา" : "e.g. National Stadium Bangkok"}
+                                    placeholder={isThai ? "สนามกีฬาเฉลิมพระเกียรติ 80 พรรษา" : "National Stadium Bangkok"}
                                     disabled={isPending}
                                     className="w-full"
                                 />
@@ -527,7 +527,7 @@ export function TournamentCreate({ iconOnlyMobile = false, isDisabled = false }:
                                         value={description}
                                         onChange={setDescription}
                                         className="pro-editor h-auto text-foreground"
-                                        placeholder={isThai ? "เช่น กติกาการแข่งขัน เงินรางวัล และช่องทางการติดต่อผู้จัด..." : "e.g. Tournament rules, prize pool, and contact details..."}
+                                        placeholder={isThai ? "กติกาการแข่งขัน เงินรางวัล และช่องทางการติดต่อผู้จัด..." : "Tournament rules, prize pool, and contact details..."}
                                         readOnly={isPending}
                                         modules={{
                                             toolbar: [

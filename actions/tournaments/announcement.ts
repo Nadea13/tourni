@@ -57,6 +57,7 @@ export async function addAnnouncement(
 
         const data = await res.json();
 
+        revalidatePath(`/my-tournaments/${tournamentId}`);
         revalidatePath(`/dashboard/tournaments/${tournamentId}`);
         revalidatePath(`/organizer/tournaments/${tournamentId}`);
         revalidatePath(`/tournaments/${tournamentId}`);
@@ -88,6 +89,7 @@ export async function deleteAnnouncement(announcementId: string, tournamentId: s
             return { success: false, error: err.error || "Failed to delete announcement" };
         }
 
+        revalidatePath(`/my-tournaments/${tournamentId}`);
         revalidatePath(`/dashboard/tournaments/${tournamentId}`);
         revalidatePath(`/organizer/tournaments/${tournamentId}`);
         revalidatePath(`/tournaments/${tournamentId}`);
@@ -123,6 +125,7 @@ export async function toggleAnnouncementPin(announcementId: string, isPinned: bo
             return { success: false, error: err.error || "Failed to update announcement" };
         }
 
+        revalidatePath(`/my-tournaments/${tournamentId}`);
         revalidatePath(`/dashboard/tournaments/${tournamentId}`);
         revalidatePath(`/organizer/tournaments/${tournamentId}`);
         revalidatePath(`/tournaments/${tournamentId}`);

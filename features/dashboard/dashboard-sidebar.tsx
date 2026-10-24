@@ -63,7 +63,7 @@ export function DashboardSidebar({
             const ackCountStr = localStorage.getItem("acknowledgedNotificationsCount");
             const ackCount = ackCountStr ? parseInt(ackCountStr, 10) : 0;
 
-            if (pathname === "/dashboard/inboxes" || pathname === "/dashboard/notifications") {
+            if (pathname === "/inboxes" || pathname === "/dashboard/inboxes" || pathname === "/dashboard/notifications") {
                 localStorage.setItem("acknowledgedNotificationsCount", String(total));
                 setHasUnread(false);
             } else {
@@ -95,7 +95,7 @@ export function DashboardSidebar({
     return (
         <div className={cn("flex h-full max-h-screen flex-col gap-0 fixed md:w-[64px] hover:md:w-[200px] hover:lg:w-[220px] bg-card border-r z-50 transition-all duration-300 ease-in-out group/sidebar overflow-hidden shadow-lg", className)}>
             <div className="flex items-center justify-center md:justify-start p-4">
-                <Link href="/dashboard" className="flex items-center gap-0 md:group-hover/sidebar:gap-3 transition-all duration-300 ease-in-out group shrink-0">
+                <Link href="/home" className="flex items-center gap-0 md:group-hover/sidebar:gap-3 transition-all duration-300 ease-in-out group shrink-0">
                     <div className="relative shrink-0">
                         <Logo className="w-8 h-8 transition-all duration-300 ease-in-out" color="#00C49A" />
                     </div>
@@ -107,7 +107,7 @@ export function DashboardSidebar({
 
             <nav className="grid items-start px-4" id="tour-sidebar-nav">
                 {navItems.map((item) => {
-                    const isActive = pathname === item.href || (item.href !== "/dashboard" && pathname.startsWith(item.href));
+                    const isActive = pathname === item.href || (item.href !== "/home" && item.href !== "/dashboard" && pathname.startsWith(item.href));
                     return (
                         <Link
                             key={item.href}
@@ -115,12 +115,12 @@ export function DashboardSidebar({
                             target={item.openInNewTab ? "_blank" : undefined}
                             rel={item.openInNewTab ? "noopener noreferrer" : undefined}
                             onClick={(e) => {
-                                if (item.href === "/dashboard/tournaments" && !isOrganizer) {
+                                if ((item.href === "/my-tournaments" || item.href === "/dashboard/tournaments") && !isOrganizer) {
                                     e.preventDefault();
                                     setShowOrganizerDialog(true);
                                     return;
                                 }
-                                if (item.href === "/dashboard/teams" && !isTeamManager) {
+                                if ((item.href === "/my-teams" || item.href === "/dashboard/teams") && !isTeamManager) {
                                     e.preventDefault();
                                     setShowManagerDialog(true);
                                     return;

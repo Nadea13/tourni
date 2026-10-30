@@ -22,8 +22,7 @@ interface LiveMatchTimerProps {
     className?: string;
 }
 
-export function LiveMatchTimer(props: LiveMatchTimerProps) {
-    const { match: initialMatch, tournamentId, className } = props;
+export function LiveMatchTimer({ match: initialMatch, tournamentId, inHeader = false, className }: LiveMatchTimerProps) {
     const [match, setMatch] = useState<Match>(initialMatch);
 
     useEffect(() => {
@@ -66,7 +65,8 @@ export function LiveMatchTimer(props: LiveMatchTimerProps) {
     return (
         <span
             className={cn(
-                "text-xs font-bold  flex items-center tabular-nums",
+                "text-xs font-bold flex items-center tabular-nums",
+                inHeader ? "text-white" : "text-muted-foreground",
                 className
             )}>
             {formatted}
@@ -174,7 +174,7 @@ function LiveSettingTimer({ match: initialMatch, tournamentId }: { match: Match;
     const formatted = formatTimerSeconds(time);
 
     return (
-        <span className={cn("text-[10px] font-bold tabular-nums flex items-center", props.inHeader ? "text-white" : "text-muted-foreground", className)}>
+        <span className="text-[10px] font-bold tabular-nums flex items-center text-muted-foreground">
             {formatted}
         </span>
     );

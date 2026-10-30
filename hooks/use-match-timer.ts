@@ -58,6 +58,13 @@ export function useMatchTimer(match: Match, tournamentId: string, events: MatchE
                 const finalTime = elapsedBase + diffSeconds;
                 
                 setTime(prev => prev !== finalTime ? finalTime : prev);
+            } else if (match?.updated_at && !isNaN(new Date(match.updated_at).getTime())) {
+                const now = Date.now() - (delaySeconds * 1000);
+                const updatedTime = new Date(match.updated_at).getTime();
+                const diffSeconds = Math.max(0, Math.floor((now - updatedTime) / 1000));
+                const finalTime = elapsedBase + diffSeconds;
+                
+                setTime(prev => prev !== finalTime ? finalTime : prev);
             } else if (localStartRef.current) {
                 // 2. Fallback to local start time (optimistic UI)
                 const now = Date.now();
@@ -74,7 +81,7 @@ export function useMatchTimer(match: Match, tournamentId: string, events: MatchE
         // 100ms interval for high-precision responsiveness, but updateTimer uses Date.now() so it's accurate
         const interval = setInterval(updateTimer, 100);
         return () => clearInterval(interval);
-    }, [isRunning, match.id, match.elapsed_before_pause, match.elapsed_seconds, events, delaySeconds]);
+    }, [isRunning, match.id, match.elapsed_before_pause, match.elapsed_seconds, match.updated_at, events, delaySeconds]);
 
     return {
         time,

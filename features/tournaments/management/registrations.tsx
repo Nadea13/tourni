@@ -4,11 +4,10 @@ import { useState, useEffect, useCallback } from "react";
 import Image from "next/image";
 import { Registration } from "@/types/index";
 import { cn } from "@/lib/utils";
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Button } from "@/components/ui/button";
-import { Loader2, ExternalLink, Phone, Users, Check, X, Inbox } from "lucide-react";
+import { Loader2, Users, Check, X, Inbox, GripVertical } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import { useTranslations, useLocale } from "next-intl";
+import { useLocale } from "next-intl";
 import { approveRegistration, rejectRegistration, withdrawTournamentTeam } from "@/actions/tournaments/registration";
 import { useBracketStore } from "@/lib/stores/bracket-store";
 import { toast } from "sonner";
@@ -16,7 +15,6 @@ import { EmptyState } from "@/components/shared/empty-state";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { TeamRosterDetailsDialog } from "@/features/dialogs";
 import { Input } from "@/components/ui/input";
-import { Header } from "@/components/ui/header";
 import {
     AlertDialog,
     AlertDialogAction,
@@ -29,7 +27,6 @@ import {
 } from "@/components/ui/alert-dialog";
 
 export function Registrations({ tournamentId, categoryId }: { tournamentId: string; categoryId?: string }) {
-    const t = useTranslations("Registrations");
     const locale = useLocale();
     const storeTeams = useBracketStore((state) => state.teams);
     const storeCategoryId = useBracketStore((state) => state.activeCategoryId);
@@ -266,155 +263,158 @@ export function Registrations({ tournamentId, categoryId }: { tournamentId: stri
     }
 
     return (
-        <div className="relative overflow-hidden transition-colors space-y-1 md:space-y-2">
-            <div className="border bg-card rounded-sm overflow-hidden">
-                <div className="w-full overflow-x-auto">
-                    <Table className="min-w-[800px]">
-                        <TableHeader>
-                            <TableRow className="hover:bg-transparent h-10 border-b">
-                                <TableHead className="px-4 text-xs font-bold tracking-widest">{t("team_name")}</TableHead>
-                                <TableHead className="px-4 text-xs font-bold tracking-widest">{t("contact_info")}</TableHead>
-                                <TableHead className="text-center px-4 text-xs font-bold tracking-widest">{t("payment_status")}</TableHead>
-                                <TableHead className="text-center px-4 text-xs font-bold tracking-widest">{t("slip")}</TableHead>
-                                <TableHead className="px-4 text-xs font-bold tracking-widest">{t("date")}</TableHead>
-                                <TableHead className="text-center px-4 text-xs font-bold tracking-widest"></TableHead>
-                            </TableRow>
-                        </TableHeader>
-                        <TableBody className="divide-y">
-                            {registrations.map((reg) => (
-                                <TableRow key={reg.id} className="hover:bg-muted/30 transition-colors group">
-                                    <TableCell className="px-4">
-                                        <button
-                                            type="button"
-                                            onClick={() => setSelectedTeamForDetails(reg)}
-                                            className="flex items-center gap-4 cursor-pointer group/team text-left hover:opacity-80 transition-opacity"
-                                            title={locale === 'th' ? "คลิกเพื่อดูข้อมูลทีมและรายชื่อนักกีฬา" : "Click to view team & roster"}
-                                        >
-                                            {reg.logo_url ? (
-                                                <Image
-                                                    src={reg.logo_url}
-                                                    alt={reg.team_name || "Team logo"}
-                                                    width={24}
-                                                    height={24}
-                                                    className="size-9 rounded-full object-cover"
-                                                />
-                                            ) : (
-                                                <div className="size-9 rounded-full bg-muted-foreground/10 flex items-center justify-center">
-                                                    <Users className="h-4 w-4 text-muted-foreground" />
-                                                </div>
-                                            )}
-                                            <span className="font-bold tracking-tight text-xs text-foreground group-hover/team:text-primary group-hover/team:underline transition-colors truncate max-w-[150px]">
-                                                {reg.team_name}
-                                            </span>
-                                        </button>
-                                    </TableCell>
-                                    <TableCell className="px-4">
-                                        <div className="flex gap-4 items-center">
-                                            <div className="flex justify-center items-center bg-muted-foreground/10 size-9 rounded-sm">
-                                                <Phone className="h-4 w-4 text-muted-foreground" />
-                                            </div>
-                                        <div className="flex-1">
-                                            <Header level={6}>{reg.contact_name}</Header>
-                                            <p className="text-xs text-muted-foreground">{reg.contact_phone}</p>
-                                        </div>
-                                        </div>
-                                    </TableCell>
-                                    <TableCell className="text-center px-4">
+        <div className="relative overflow-hidden transition-colors">
+            <div className="border bg-card rounded-sm divide-y divide-border overflow-hidden">
+                {registrations.map((reg) => {
+                    const isApproved = reg.payment_status === 'PAID';
+                    return (
+                        <div
+                            key={reg.id}
+                            draggable={isApproved}
+                            onDragStart={(e) => {
+                                if (!isApproved) {
+                                    e.preventDefault();
+                                    return;
+                                }
+                                e.dataTransfer.setData("application/reactflow-team", reg.team_name);
+                                e.dataTransfer.setData("application/team-id", reg.id);
+                                e.dataTransfer.setData("application/registration-status", reg.payment_status);
+                                e.dataTransfer.setData("text/plain", reg.team_name);
+                                e.dataTransfer.effectAllowed = "copyMove";
+                            }}
+                            className={cn(
+                                "p-4 hover:bg-muted/40 transition-colors flex items-center justify-between gap-3 group select-none",
+                                isApproved ? "cursor-grab active:cursor-grabbing" : ""
+                            )}
+                        >
+                            {/* Left: Drag Handle + Avatar + Team Info + Sub-details */}
+                            <div className="flex items-center gap-4 min-w-0 flex-1">
+                                {/* Drag Handle Indicator for Match Node DnD */}
+                                {isApproved ? (
+                                    <div
+                                        className="drag-handle text-muted-foreground group-hover:text-muted-foreground transition-colors shrink-0 cursor-grab active:cursor-grabbing p-0.5"
+                                        title={locale === 'th' ? "ลากเพื่อวางลงใน Match Node" : "Drag to drop onto Match Node"}
+                                    >
+                                        <GripVertical className="size-4" />
+                                    </div>
+                                ) : (
+                                    <div
+                                        className="text-muted-foreground/20 shrink-0 cursor-not-allowed p-0.5"
+                                        title={locale === 'th' ? "ต้องได้รับการยืนยันก่อนจึงจะสามารถลากวางได้" : "Registration must be approved before dragging"}
+                                    >
+                                        <GripVertical className="size-4" />
+                                    </div>
+                                )}
+
+                            {/* Logo / Avatar button */}
+                            <button
+                                type="button"
+                                onClick={() => setSelectedTeamForDetails(reg)}
+                                className="size-14 rounded-full bg-muted-foreground/10 flex items-center justify-center shrink-0 overflow-hidden border border-border/60 hover:ring-2 hover:ring-primary/40 transition-all cursor-pointer"
+                                title={locale === 'th' ? "คลิกเพื่อดูข้อมูลทีมและรายชื่อนักกีฬา" : "Click to view team & roster"}
+                            >
+                                {reg.logo_url ? (
+                                    <Image
+                                        src={reg.logo_url}
+                                        alt={reg.team_name || "Team logo"}
+                                        width={40}
+                                        height={40}
+                                        className="size-full object-cover"
+                                    />
+                                ) : (
+                                    <Users className="size-5 text-muted-foreground" />
+                                )}
+                            </button>
+
+                            {/* Text Details - 3 Lines */}
+                            <div className="min-w-0 flex-1 space-y-1">
+                                {/* Line 1: Team Name & Status Badge */}
+                                <div className="flex items-center gap-2 flex-wrap">
+                                    <button
+                                        type="button"
+                                        onClick={() => setSelectedTeamForDetails(reg)}
+                                        className="font-bold text-xs text-foreground hover:text-primary hover:underline transition-colors truncate text-left cursor-pointer"
+                                        title={locale === 'th' ? "คลิกเพื่อดูข้อมูลทีมและรายชื่อนักกีฬา" : "Click to view team & roster"}
+                                    >
+                                        {reg.team_name}
+                                    </button>
+                                    {reg.payment_status !== 'PAID' && (
                                         <Badge
                                             variant="outline"
                                             className={cn(
-                                                "transition-colors",
-                                                reg.payment_status === 'PAID' ? "bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border-emerald-500/30" :
-                                                    reg.payment_status === 'REJECTED' ? "bg-destructive/10 text-destructive border-destructive/30" :
-                                                        "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30"
+                                                "text-[10px] px-2 h-4.5 shrink-0",
+                                                reg.payment_status === 'REJECTED' ? "bg-destructive/10 text-destructive border-destructive/30" :
+                                                    "bg-amber-500/10 text-amber-600 dark:text-amber-400 border-amber-500/30"
                                             )}
                                         >
-                                            {reg.payment_status === 'PAID'
-                                                ? (locale === 'th' ? "อนุมัติแล้ว" : "APPROVED")
-                                                : reg.payment_status === 'REJECTED'
-                                                    ? (locale === 'th' ? "ปฏิเสธ" : "REJECTED")
-                                                    : (locale === 'th' ? "รอตรวจสอบ" : "PENDING")}
+                                            {reg.payment_status === 'REJECTED'
+                                                ? (locale === 'th' ? "ปฏิเสธ" : "REJECTED")
+                                                : (locale === 'th' ? "รอตรวจสอบ" : "PENDING")}
                                         </Badge>
-                                    </TableCell>
-                                    <TableCell className="text-center">
-                                        {reg.slip_url ? (
-                                            <Button
-                                                variant="ghost"
-                                                size="sm"
-                                                onClick={() => window.open(reg.slip_url!, "_blank")}
-                                            >
-                                                <ExternalLink className="h-4 w-4" />
-                                                {t("view_slip")}
-                                            </Button>
-                                        ) : (
-                                            <span className="text-[10px] font-bold text-muted-foreground/20 tracking-tighter">{t("no_slip") || "No Slip"}</span>
+                                    )}
+                                </div>
+
+                                {/* Line 2: Contact Info */}
+                                {(reg.contact_name || reg.contact_phone) && (
+                                    <div className="flex items-center gap-2 text-xs text-muted-foreground truncate">
+                                        <span>{reg.contact_name || reg.contact_phone}</span>
+                                        {reg.contact_name && reg.contact_phone && (
+                                            <span>({reg.contact_phone})</span>
                                         )}
-                                    </TableCell>
-                                    <TableCell className="px-4 text-xs font-bold text-muted-foreground tabular-nums whitespace-nowrap tracking-wide">
-                                        {new Date(reg.created_at).toLocaleString('en-US', {
+                                    </div>
+                                )}
+
+                                {/* Line 3: Timestamp */}
+                                <div className="flex items-center text-xs text-muted-foreground tabular-nums">
+                                    <span>
+                                        {new Date(reg.created_at).toLocaleString(locale === 'th' ? 'th-TH' : 'en-US', {
                                             day: '2-digit',
                                             month: 'short',
+                                            year: 'numeric',
                                             hour: '2-digit',
                                             minute: '2-digit',
                                             hour12: false
                                         }).replace(',', '')}
-                                    </TableCell>
-                                    <TableCell className="text-right">
-                                        {reg.payment_status === 'PENDING' ? (
-                                            <div className="flex items-center justify-end gap-1.5 transition-opacity">
-                                                <Button
-                                                    type="button"
-                                                    size="sm"
-                                                    variant="outline"
-                                                    className="h-8 px-2.5 bg-primary/10 text-primary hover:bg-primary hover:text-primary-foreground border-primary/20 transition-all shadow-sm flex items-center gap-1 text-xs font-semibold cursor-pointer"
-                                                    disabled={isActing !== null}
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        handleApprove(reg.id);
-                                                    }}
-                                                    title={locale === 'th' ? "ยืนยันทีม" : "Approve Team"}
-                                                >
-                                                    {isActing === reg.id ? <Loader2 className="h-4 w-4 animate-spin" /> : <Check className="h-4 w-4" />}
-                                                    <span>{locale === 'th' ? "ยืนยันทีม" : "Approve"}</span>
-                                                </Button>
-                                                <Button
-                                                    type="button"
-                                                    size="icon-sm"
-                                                    variant="outline"
-                                                    className="border-destructive/20 bg-destructive/10 text-destructive hover:bg-destructive hover:text-destructive-foreground transition-all shadow-sm shrink-0 cursor-pointer"
-                                                    disabled={isActing !== null}
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        setRegistrationToReject(reg.id);
-                                                    }}
-                                                    title={locale === 'th' ? "ปฏิเสธ" : "Reject"}
-                                                >
-                                                    <X className="h-4 w-4" />
-                                                </Button>
-                                            </div>
-                                        ) : reg.payment_status === 'PAID' ? (
-                                            <div className="flex items-center justify-end gap-1.5">
-                                                <Button
-                                                    type="button"
-                                                    size="sm"
-                                                    variant="outline"
-                                                    className="border-destructive/40 text-destructive hover:bg-destructive/10 hover:text-destructive text-xs h-8 cursor-pointer"
-                                                    disabled={isActing !== null}
-                                                    onClick={(e) => {
-                                                        e.stopPropagation();
-                                                        setWithdrawingReg({ id: reg.id, name: reg.team_name });
-                                                    }}
-                                                >
-                                                    {locale === 'th' ? "ถอนทีม" : "Withdraw"}
-                                                </Button>
-                                            </div>
-                                        ) : null}
-                                    </TableCell>
-                                </TableRow>
-                            ))}
-                        </TableBody>
-                    </Table>
-                </div>
+                                    </span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Right: Actions */}
+                        {reg.payment_status === 'PENDING' && (
+                            <div className="shrink-0 flex items-center">
+                                <Button
+                                    type="button"
+                                    size="icon-sm"
+                                    variant="ghost"
+                                    className="text-destructive hover:bg-destructive hover:text-white transition-all shadow-xs shrink-0 cursor-pointer"
+                                    disabled={isActing !== null}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        setRegistrationToReject(reg.id);
+                                    }}
+                                    title={locale === 'th' ? "ปฏิเสธ" : "Reject"}
+                                >
+                                    <X className="size-4" />
+                                </Button>
+                                <Button
+                                    type="button"
+                                    size="sm"
+                                    disabled={isActing !== null}
+                                    onClick={(e) => {
+                                        e.stopPropagation();
+                                        handleApprove(reg.id);
+                                    }}
+                                    title={locale === 'th' ? "ยืนยันทีม" : "Approve Team"}
+                                >
+                                    {isActing === reg.id ? <Loader2 className="size-4 animate-spin" /> : <Check className="size-4" />}
+                                    <span>{locale === 'th' ? "ยืนยัน" : "Approve"}</span>
+                                </Button>
+                            </div>
+                        )}
+                    </div>
+                    );
+                })}
             </div>
 
             <AlertDialog open={!!registrationToReject} onOpenChange={(open) => !open && setRegistrationToReject(null)}>
@@ -522,6 +522,10 @@ export function Registrations({ tournamentId, categoryId }: { tournamentId: stri
                 team={selectedTeamForDetails}
                 open={!!selectedTeamForDetails}
                 onOpenChange={(open) => !open && setSelectedTeamForDetails(null)}
+                onWithdraw={(reg) => {
+                    setSelectedTeamForDetails(null);
+                    setWithdrawingReg({ id: reg.id, name: reg.team_name });
+                }}
             />
         </div>
     );

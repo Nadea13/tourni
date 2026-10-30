@@ -1,7 +1,8 @@
 "use client";
 
+import { useMatchWebSocket } from "@/hooks/use-match-websocket";
 import { TournamentTemplateDialog } from "@/features/dialogs";
-import { useCallback, useEffect, useState, useMemo } from "react";
+import { useCallback, useEffect, useState, useMemo, useRef } from "react";
 import {
     Background,
     BackgroundVariant,
@@ -11,20 +12,24 @@ import {
     ReactFlow,
     ReactFlowProvider,
     useReactFlow,
+    useInternalNode,
+    Position,
     Connection,
     Edge,
+    Node,
     BaseEdge,
     EdgeLabelRenderer,
     getBezierPath,
     EdgeProps,
+    ConnectionLineComponentProps,
 } from "@xyflow/react";
 import "@xyflow/react/dist/style.css";
 import {
     Plus, Users, X,
     Settings, ShieldAlert,
     Calendar, ChevronLeft, ChevronRight, ExternalLink, Megaphone,
-    Calendar as CalendarIcon, Lock, Unlock, Share2, Trophy, MoreVertical, ClipboardEdit, Heart,
-    LayoutGrid, ListOrdered, ArrowLeft, Loader2
+    Calendar as CalendarIcon, Lock, Unlock, Share2, Trophy, MoreVertical, Shield, Heart,
+    LayoutGrid, ArrowLeft, Loader2, Dices
 } from "lucide-react";
 import {
     Popover,
@@ -74,9 +79,8 @@ import { Tab, TabOption } from "@/components/ui/tab";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { GroupNode } from "./group-node";
-import { MatchNode } from "./match-node";
-import { StandingNode } from "./standing-node";
-import { TeamListNode } from "./team-list-node";
+import { MatchNode, hasMatchResult } from "./match-node";
+import { DrawNode } from "./draw-node";
 import { NodeSettings } from "./node-settings";
 import { CreateCategoryForm } from "@/features/dialogs";
 import {
@@ -94,41 +98,133 @@ import { Link } from "@/i18n/routing";
 const nodeTypes = {
     matchNode: MatchNode,
     groupNode: GroupNode,
-    standingNode: StandingNode,
-    teamListNode: TeamListNode,
+    standingNode: GroupNode,
+    drawNode: DrawNode,
 };
 
 function DeletableEdge({
     id,
+    source,
+    target,
     sourceX,
     sourceY,
     targetX,
     targetY,
     sourcePosition,
     targetPosition,
+    sourceHandleId,
+    targetHandleId,
     style = {},
     markerEnd,
     selected,
 }: EdgeProps) {
-    const [edgePath, labelX, labelY] = getBezierPath({
-        sourceX,
-        sourceY,
-        sourcePosition,
-        targetX,
-        targetY,
-        targetPosition,
-    });
     const { deleteElements } = useReactFlow();
+    const sourceInternalNode = useInternalNode(source);
+    const targetInternalNode = useInternalNode(target);
+
+    const storeEdge = useBracketStore((s) => s.edges.find((e) => e.id === id));
+    const effectiveSourceHandle = sourceHandleId || storeEdge?.sourceHandle;
+    const effectiveTargetHandle = targetHandleId || storeEdge?.targetHandle;
+    const isWinner = Boolean(effectiveSourceHandle && effectiveSourceHandle.startsWith("winner"));
+    const isRank = Boolean(effectiveSourceHandle && effectiveSourceHandle.startsWith("rank-"));
+    const isGroupMatches = effectiveSourceHandle === "group-matches" || effectiveTargetHandle === "group-in";
+    const isLoser = Boolean(effectiveSourceHandle && effectiveSourceHandle.startsWith("loser"));
+    const isDraw = Boolean(
+        sourceInternalNode?.type === "drawNode" ||
+        targetInternalNode?.type === "drawNode" ||
+        (effectiveSourceHandle && (effectiveSourceHandle === "draw-out" || effectiveSourceHandle.startsWith("pair-out-"))) ||
+        (effectiveTargetHandle && (effectiveTargetHandle === "draw-in" || effectiveTargetHandle.startsWith("draw-in-")))
+    );
+    const isRound = effectiveSourceHandle === "round-out" || effectiveTargetHandle === "round-in";
+    const strokeColor =
+        (style as any)?.stroke && (style as any)?.stroke !== "var(--border)"
+            ? (style as any).stroke
+            : (isWinner || isRank || isGroupMatches || isDraw || isRound)
+            ? "var(--muted-foreground)"
+            : "var(--border)";
+
+    let finalSourceX = sourceX;
+    let finalSourceY = sourceY;
+    let finalTargetX = targetX;
+    let finalTargetY = targetY;
+    let finalSourcePosition = sourcePosition;
+    let finalTargetPosition = targetPosition;
+
+    if (isGroupMatches && sourceInternalNode && targetInternalNode) {
+        const sW = sourceInternalNode.measured?.width ?? 320;
+        const sH = sourceInternalNode.measured?.height ?? 220;
+        const tW = targetInternalNode.measured?.width ?? 320;
+        const tH = targetInternalNode.measured?.height ?? 220;
+
+        const sCx = sourceInternalNode.internals.positionAbsolute.x + sW / 2;
+        const sCy = sourceInternalNode.internals.positionAbsolute.y + sH / 2;
+        const tCx = targetInternalNode.internals.positionAbsolute.x + tW / 2;
+        const tCy = targetInternalNode.internals.positionAbsolute.y + tH / 2;
+
+        const dx = tCx - sCx;
+        const dy = tCy - sCy;
+        const gapX = Math.abs(dx) - (sW + tW) / 2;
+        const gapY = Math.abs(dy) - (sH + tH) / 2;
+
+        if (gapX >= gapY) {
+            if (dx >= 0) {
+                finalSourceX = sCx + sW / 2;
+                finalSourceY = sCy;
+                finalSourcePosition = Position.Right;
+                finalTargetX = tCx - tW / 2;
+                finalTargetY = tCy;
+                finalTargetPosition = Position.Left;
+            } else {
+                finalSourceX = sCx - sW / 2;
+                finalSourceY = sCy;
+                finalSourcePosition = Position.Left;
+                finalTargetX = tCx + tW / 2;
+                finalTargetY = tCy;
+                finalTargetPosition = Position.Right;
+            }
+        } else {
+            if (dy >= 0) {
+                finalSourceX = sCx;
+                finalSourceY = sCy + sH / 2;
+                finalSourcePosition = Position.Bottom;
+                finalTargetX = tCx;
+                finalTargetY = tCy - tH / 2;
+                finalTargetPosition = Position.Top;
+            } else {
+                finalSourceX = sCx;
+                finalSourceY = sCy - sH / 2;
+                finalSourcePosition = Position.Top;
+                finalTargetX = tCx;
+                finalTargetY = tCy + tH / 2;
+                finalTargetPosition = Position.Bottom;
+            }
+        }
+    }
+
+    const [edgePath, labelX, labelY] = getBezierPath({
+        sourceX: finalSourceX,
+        sourceY: finalSourceY,
+        sourcePosition: finalSourcePosition,
+        targetX: finalTargetX,
+        targetY: finalTargetY,
+        targetPosition: finalTargetPosition,
+    });
 
     const edgeStyle: React.CSSProperties = {
-        stroke: "var(--border)",
         strokeWidth: 2,
         ...style,
+        stroke: strokeColor,
+        strokeDasharray: isGroupMatches ? "5,5" : style.strokeDasharray,
     };
 
     return (
         <>
-            <BaseEdge path={edgePath} markerEnd={markerEnd} style={edgeStyle} />
+            <BaseEdge
+                path={edgePath}
+                markerEnd={markerEnd}
+                style={edgeStyle}
+                className={(isWinner || isRank || isDraw || isRound) ? "edge-winner" : isLoser ? "edge-loser" : undefined}
+            />
             {selected && (
                 <EdgeLabelRenderer>
                     <div
@@ -144,7 +240,11 @@ function DeletableEdge({
                             className="w-6 h-6 bg-destructive text-destructive-foreground rounded-full flex items-center justify-center shadow-lg hover:scale-110 active:scale-95 transition-transform cursor-pointer"
                             onClick={(e) => {
                                 e.stopPropagation();
-                                deleteElements({ edges: [{ id }] });
+                                if (isGroupMatches && target) {
+                                    deleteElements({ edges: [{ id }], nodes: [{ id: target }] });
+                                } else {
+                                    deleteElements({ edges: [{ id }] });
+                                }
                             }}
                             title="Delete connection"
                         >
@@ -154,6 +254,56 @@ function DeletableEdge({
                 </EdgeLabelRenderer>
             )}
         </>
+    );
+}
+
+function CustomConnectionLine({
+    fromNode,
+    fromHandle,
+    fromX,
+    fromY,
+    toX,
+    toY,
+    fromPosition,
+    toPosition,
+}: ConnectionLineComponentProps) {
+    const edges = useBracketStore((s) => s.edges);
+    let isWinner = Boolean(fromHandle?.id && fromHandle.id.startsWith("winner"));
+    const isRank = Boolean(fromHandle?.id && fromHandle.id.startsWith("rank-"));
+    const isGroupMatches = fromHandle?.id === "group-matches";
+    const isDraw = Boolean(
+        fromNode?.type === "drawNode" ||
+        (fromHandle?.id && (fromHandle.id === "draw-out" || fromHandle.id.startsWith("pair-out-") || fromHandle.id === "draw-in" || fromHandle.id.startsWith("draw-in-")))
+    );
+    const isRound = fromHandle?.id === "round-out" || fromHandle?.id === "round-in";
+    if (fromNode?.type === "matchNode") {
+        const sMatch = (fromHandle?.id || "").match(/^(?:winner|loser)-(\d+)$/);
+        const sIdx = sMatch ? parseInt(sMatch[1], 10) : 0;
+        const hasWinnerEdge = edges.some(
+            (e) => e.source === fromNode.id && e.sourceHandle === `winner-${sIdx}`
+        );
+        isWinner = !hasWinnerEdge;
+    }
+    const stroke = (isWinner || isRank || isGroupMatches || isDraw || isRound) ? "var(--muted-foreground)" : "var(--border)";
+    const [edgePath] = getBezierPath({
+        sourceX: fromX,
+        sourceY: fromY,
+        sourcePosition: fromPosition,
+        targetX: toX,
+        targetY: toY,
+        targetPosition: toPosition,
+    });
+
+    return (
+        <g>
+            <path
+                d={edgePath}
+                fill="none"
+                stroke={stroke}
+                strokeWidth={2}
+                strokeDasharray={isGroupMatches ? "5,5" : undefined}
+            />
+        </g>
     );
 }
 
@@ -366,7 +516,11 @@ function CanvasInternal({
                 setActiveMatches(mappedMatches);
                 useBracketStore.getState().setMatches(mappedMatches);
             }
-        } catch (error) {
+        } catch (error: any) {
+            if (error?.status === 429 || error?.message?.includes("slow down")) {
+                console.warn("[Canvas Internal] Rate limit reached. Polling will resume shortly.");
+                return;
+            }
             console.error("[Canvas Internal] Failed to fetch matches:", error);
         }
     }, [tournamentId]);
@@ -394,9 +548,9 @@ function CanvasInternal({
         onConnect,
         onReconnect,
         addMatchNode,
+        addRoundNode,
         addGroupNode,
-        addStandingNode,
-        addTeamListNode,
+        addDrawNode,
         hydrate,
         selectNode,
         activeNodeId,
@@ -441,14 +595,37 @@ function CanvasInternal({
 
                 if (dbMatch) {
                     processedMatchIds.add(dbMatch.id);
+                    const isPlayed = hasMatchResult(dbMatch);
+                    const isHomeTBD = !m.placeholderA || m.placeholderA === "TBD" || m.placeholderA.startsWith("Seed #");
+                    const isAwayTBD = !m.placeholderB || m.placeholderB === "TBD" || m.placeholderB.startsWith("Seed #");
+
+                    const homeTeam = teams.find(t => t.name === m.placeholderA);
+                    const awayTeam = teams.find(t => t.name === m.placeholderB);
+
+                    const resolvedHomeTeamId = homeTeam ? (homeTeam.team_id || homeTeam.id) : (isHomeTBD && !isPlayed ? null : dbMatch.home_team_id);
+                    let resolvedAwayTeamId = awayTeam ? (awayTeam.team_id || awayTeam.id) : (isAwayTBD && !isPlayed ? null : dbMatch.away_team_id);
+
+                    let resolvedPlaceholderB = m.placeholderB || null;
+                    if (resolvedHomeTeamId && resolvedAwayTeamId && resolvedHomeTeamId === resolvedAwayTeamId) {
+                        resolvedAwayTeamId = null;
+                        resolvedPlaceholderB = "TBD";
+                    }
+
+                    const resolvedHomeTeam = resolvedHomeTeamId ? (homeTeam ? { id: resolvedHomeTeamId, name: homeTeam.name, logo_url: homeTeam.logo_url } : dbMatch.home_team) : undefined;
+                    const resolvedAwayTeam = resolvedAwayTeamId ? (awayTeam ? { id: resolvedAwayTeamId, name: awayTeam.name, logo_url: awayTeam.logo_url } : dbMatch.away_team) : undefined;
+
                     result.push({
                         ...dbMatch,
                         node_id: node.id,
                         match_index: matchIndex,
-                        placeholder_a: dbMatch.placeholder_a || m.placeholderA || null,
-                        placeholder_b: dbMatch.placeholder_b || m.placeholderB || null,
-                        placeholder_home: dbMatch.placeholder_home || dbMatch.placeholder_a || m.placeholderA || null,
-                        placeholder_away: dbMatch.placeholder_away || dbMatch.placeholder_b || m.placeholderB || null,
+                        home_team_id: resolvedHomeTeamId,
+                        away_team_id: resolvedAwayTeamId,
+                        home_team: resolvedHomeTeam,
+                        away_team: resolvedAwayTeam,
+                        placeholder_a: m.placeholderA || null,
+                        placeholder_b: resolvedPlaceholderB,
+                        placeholder_home: m.placeholderA || null,
+                        placeholder_away: resolvedPlaceholderB,
                         match_date: dbMatch.match_date || m.match_date || null,
                         match_time: dbMatch.match_time || m.match_time || null,
                     });
@@ -461,12 +638,21 @@ function CanvasInternal({
                     const homeTeam = teams.find(t => t.name === m.placeholderA);
                     const awayTeam = teams.find(t => t.name === m.placeholderB);
 
+                    const homeTeamId = homeTeam ? (homeTeam.team_id || homeTeam.id) : null;
+                    let awayTeamId = awayTeam ? (awayTeam.team_id || awayTeam.id) : null;
+                    let placeholderBVal = m.placeholderB || null;
+
+                    if (homeTeamId && awayTeamId && homeTeamId === awayTeamId) {
+                        awayTeamId = null;
+                        placeholderBVal = "TBD";
+                    }
+
                     result.push({
                         id: syntheticId,
                         tournament_id: tournamentId,
                         tournament_category_id: storeCategoryId || null,
-                        home_team_id: homeTeam ? (homeTeam.team_id || homeTeam.id) : null,
-                        away_team_id: awayTeam ? (awayTeam.team_id || awayTeam.id) : null,
+                        home_team_id: homeTeamId,
+                        away_team_id: awayTeamId,
                         home_score: null,
                         away_score: null,
                         round: 1,
@@ -479,12 +665,12 @@ function CanvasInternal({
                         match_index: matchIndex,
                         node_id: node.id,
                         placeholder_a: m.placeholderA || null,
-                        placeholder_b: m.placeholderB || null,
+                        placeholder_b: placeholderBVal,
                         placeholder_home: m.placeholderA || null,
-                        placeholder_away: m.placeholderB || null,
+                        placeholder_away: placeholderBVal,
                         created_at: new Date().toISOString(),
-                        home_team: homeTeam ? { id: homeTeam.team_id || homeTeam.id, name: homeTeam.name, logo_url: homeTeam.logo_url } : undefined,
-                        away_team: awayTeam ? { id: awayTeam.team_id || awayTeam.id, name: awayTeam.name, logo_url: awayTeam.logo_url } : undefined,
+                        home_team: homeTeamId && homeTeam ? { id: homeTeamId, name: homeTeam.name, logo_url: homeTeam.logo_url } : undefined,
+                        away_team: awayTeamId && awayTeam ? { id: awayTeamId, name: awayTeam.name, logo_url: awayTeam.logo_url } : undefined,
                     });
                 }
             });
@@ -609,39 +795,39 @@ function CanvasInternal({
     }, [fetchRegistrationNotifications]);
 
     // Synchronize tab and subtab from URL
-    useEffect(() => {
-        const tab = searchParams.get("tab");
-        const subtab = searchParams.get("subtab");
+    const urlTab = searchParams.get("tab");
+    const urlSubtab = searchParams.get("subtab");
 
-        if (tab === "announcements" || tab === "announcement") {
+    useEffect(() => {
+        if (urlTab === "announcements" || urlTab === "announcement") {
             setActiveSidebar("teams");
             setActiveNodeId("announcement-setting-node");
             selectNode("announcement-setting-node");
-        } else if (tab === "registration") {
+        } else if (urlTab === "registration") {
             setActiveSidebar("teams");
             setActiveNodeId("registration-setting-node");
             selectNode("registration-setting-node");
             fetchRegistrationNotifications();
-        } else if (tab === "sponsors" || tab === "sponsor") {
+        } else if (urlTab === "sponsors" || urlTab === "sponsor") {
             setActiveSidebar("teams");
             setActiveNodeId("sponsor-setting-node");
             selectNode("sponsor-setting-node");
-        } else if (tab === "ranking" || tab === "rankings") {
+        } else if (urlTab === "ranking" || urlTab === "rankings") {
             setActiveSidebar("teams");
             setActiveNodeId("ranking-setting-node");
             selectNode("ranking-setting-node");
-        } else if (tab === "schedule") {
+        } else if (urlTab === "schedule") {
             setActiveNodeId(null);
             selectNode(null);
             setActiveSidebar("schedule");
-        } else if (tab === "settings") {
+        } else if (urlTab === "settings") {
             setActiveNodeId(null);
             selectNode(null);
             setActiveSidebar("settings");
-            if (subtab && ['general', 'categories', 'location', 'bank', 'staff', 'danger'].includes(subtab)) {
-                setActiveSettingsTab(subtab as SettingsTab);
+            if (urlSubtab && ['general', 'categories', 'location', 'bank', 'staff', 'danger'].includes(urlSubtab)) {
+                setActiveSettingsTab(urlSubtab as SettingsTab);
             }
-        } else if (!tab) {
+        } else if (!urlTab) {
             setActiveSidebar(prev => (prev === 'schedule' || prev === 'settings' ? 'teams' : prev));
             const currentActiveId = useBracketStore.getState().activeNodeId;
             if (['announcement-setting-node', 'registration-setting-node', 'sponsor-setting-node', 'ranking-setting-node'].includes(currentActiveId || '')) {
@@ -649,7 +835,23 @@ function CanvasInternal({
                 selectNode(null);
             }
         }
-    }, [searchParams, fetchRegistrationNotifications, setActiveNodeId, selectNode]);
+    }, [urlTab, urlSubtab, setActiveNodeId, selectNode]);
+
+    // Ensure opening any canvas node setting closes toolbar pseudo-node settings & clears ?tab=...
+    useEffect(() => {
+        const pseudoNodeIds = [
+            "announcement-setting-node",
+            "registration-setting-node",
+            "sponsor-setting-node",
+            "ranking-setting-node",
+        ];
+        if (activeNodeId && !pseudoNodeIds.includes(activeNodeId)) {
+            setActiveSidebar("teams");
+            if (searchParams.get("tab") || searchParams.get("subtab")) {
+                updateUrlParams({ tab: null, subtab: null });
+            }
+        }
+    }, [activeNodeId, searchParams, updateUrlParams]);
 
     const [isEditingName, setIsEditingName] = useState(false);
     const [currentName, setCurrentName] = useState(tournamentName);
@@ -930,10 +1132,83 @@ function CanvasInternal({
         }
     }, [initialMatchesData, activeCategoryId]);
 
-    // Periodic refresh for live scores on canvas
+    // 100% Realtime WebSocket Connection for Tournament Matches, Scores & Standings
+    useMatchWebSocket("all", {
+        onScoreUpdate: ({ match_id, home_score, away_score, status }) => {
+            if (!match_id) return;
+            useBracketStore.getState().setMatches((prev: Match[]) => prev.map(m => {
+                if (m.id === match_id) {
+                    return {
+                        ...m,
+                        home_score,
+                        away_score,
+                        status: (status || m.status) as any
+                    };
+                }
+                return m;
+            }));
+            setActiveMatches(prev => prev.map(m => {
+                if (m.id === match_id) {
+                    return {
+                        ...m,
+                        home_score,
+                        away_score,
+                        status: (status || m.status) as any
+                    };
+                }
+                return m;
+            }));
+        },
+        onStatusChange: ({ match_id, status }) => {
+            if (!match_id) return;
+            useBracketStore.getState().setMatches((prev: Match[]) => prev.map(m => {
+                if (m.id === match_id) {
+                    return { ...m, status: status as any };
+                }
+                return m;
+            }));
+            setActiveMatches(prev => prev.map(m => {
+                if (m.id === match_id) {
+                    return { ...m, status: status as any };
+                }
+                return m;
+            }));
+        },
+        onMatchUpdate: ({ match }) => {
+            if (!match?.id) return;
+            useBracketStore.getState().setMatches((prev: Match[]) => {
+                const idx = prev.findIndex(m => m.id === match.id);
+                if (idx >= 0) {
+                    const updated = [...prev];
+                    updated[idx] = { ...updated[idx], ...match };
+                    return updated;
+                }
+                return [...prev, match];
+            });
+            setActiveMatches(prev => {
+                const idx = prev.findIndex(m => m.id === match.id);
+                if (idx >= 0) {
+                    const updated = [...prev];
+                    updated[idx] = { ...updated[idx], ...match };
+                    return updated;
+                }
+                return [...prev, match];
+            });
+        },
+        onStandingsSync: () => {
+            if (activeCategoryId) {
+                fetchMatches(activeCategoryId);
+            }
+        }
+    });
+
+    // Periodic refresh for live scores on canvas (only when tab is visible)
     useEffect(() => {
         if (!activeCategoryId) return;
         const interval = setInterval(() => {
+            if (typeof document !== 'undefined' && document.visibilityState !== 'visible') {
+                return;
+            }
             fetchMatches(activeCategoryId);
         }, 5000);
         return () => clearInterval(interval);
@@ -1265,11 +1540,38 @@ function CanvasInternal({
         };
     }, [readonly, isLocked]);
 
+    const isDraggingNodeRef = useRef(false);
+
     // Event-based state triggers
-    const onNodeDragStart = useCallback(() => {
+    const onNodeDragStart = useCallback((_: React.MouseEvent, _node: Node) => {
+        isDraggingNodeRef.current = true;
         setIsDragging(true);
         useBracketStore.getState().takeSnapshot();
-    }, []);
+        if (!isLocked) {
+            setActiveNodeId(null);
+            selectNode(null);
+            if (searchParams.get("tab") || searchParams.get("subtab")) {
+                updateUrlParams({ tab: null, subtab: null });
+            }
+        }
+    }, [isLocked, setActiveNodeId, selectNode, searchParams, updateUrlParams]);
+
+    const onSelectionDragStart = useCallback(() => {
+        isDraggingNodeRef.current = true;
+        setIsDragging(true);
+        if (!isLocked) {
+            setActiveNodeId(null);
+            selectNode(null);
+        }
+    }, [isLocked, setActiveNodeId, selectNode]);
+
+    const onNodeDrag = useCallback(() => {
+        isDraggingNodeRef.current = true;
+        if (useBracketStore.getState().activeNodeId) {
+            setActiveNodeId(null);
+            selectNode(null);
+        }
+    }, [setActiveNodeId, selectNode]);
 
     const handleClose = useCallback(() => {
         if (isDirty && !readonly) {
@@ -1282,10 +1584,38 @@ function CanvasInternal({
 
     const onDragStop = useCallback(() => {
         setIsDragging(false);
+        setTimeout(() => {
+            isDraggingNodeRef.current = false;
+        }, 100);
     }, []);
 
     const isValidConnection = useCallback((connection: Edge | Connection) => {
-        return connection.source !== connection.target;
+        if (connection.source === connection.target) return false;
+
+        const currentNodes = useBracketStore.getState().nodes;
+        const targetNode = currentNodes.find(n => n.id === connection.target);
+
+        // If target is a matchNode slot, disallow if match already has results
+        if (targetNode?.type === 'matchNode') {
+            const matchIndexMatch = (connection.targetHandle || '').match(/slot-(a|b)-(\d+)/);
+            if (matchIndexMatch) {
+                const [_, _slot, indexStr] = matchIndexMatch;
+                const matchIndex = parseInt(indexStr, 10);
+                const matches = (targetNode.data as any)?.matches || [];
+                const mItem = matches[matchIndex];
+                const storeMatches = useBracketStore.getState().matches;
+                const dbM = storeMatches.find(m =>
+                    (mItem?.dbId && m.id === mItem.dbId) ||
+                    (mItem?.matchId && m.id === mItem.matchId) ||
+                    (m.node_id === targetNode.id && ((m.idx_match ?? m.match_index) === (matchIndex + 1)))
+                );
+                if (hasMatchResult(dbM)) {
+                    return false;
+                }
+            }
+        }
+
+        return true;
     }, []);
 
     const onConnectWithSave = useCallback((params: Connection) => {
@@ -1645,7 +1975,7 @@ function CanvasInternal({
                                         variant={activeNodeId === 'registration-setting-node' ? "default" : "ghost"}
                                         size="icon-sm"
                                         onClick={handleOpenRegistrationSettings}
-                                        title={locale === 'th' ? "การลงทะเบียน" : "Registration"}
+                                        title={locale === 'th' ? "การจัดการทีม" : "Team Management"}
                                         className={cn(
                                             "relative transition-all",
                                             activeNodeId === 'registration-setting-node'
@@ -1653,7 +1983,7 @@ function CanvasInternal({
                                                 : "text-foreground"
                                         )}
                                     >
-                                        <ClipboardEdit className="size-4" />
+                                        <Shield className="size-4" />
                                         {hasPendingRegistration && (
                                             <span className="absolute top-0 right-0 bg-destructive rounded-full h-2 w-2 ring-2 ring-card" />
                                         )}
@@ -1790,8 +2120,8 @@ function CanvasInternal({
                                                     className="cursor-pointer text-xs font-semibold flex items-center justify-between py-2"
                                                 >
                                                     <div className="flex items-center gap-2">
-                                                        <ClipboardEdit className="size-4" />
-                                                        <span>{locale === 'th' ? "การลงทะเบียน" : "Registration"}</span>
+                                                        <Shield className="size-4" />
+                                                        <span>{locale === 'th' ? "การจัดการทีม" : "Team Management"}</span>
                                                     </div>
                                                     {hasPendingRegistration && (
                                                         <span className="bg-destructive text-destructive-foreground text-[9px] px-1.5 py-0.5 rounded-full font-bold">New</span>
@@ -2289,9 +2619,7 @@ function CanvasInternal({
                                     </div>
                                 </div>
                             </div>
-                        ) : null}
-
-                        {activeSidebar === 'settings' && tournament && userInvitationRole !== 'staff' && userInvitationRole !== 'referee' ? (
+                        ) : activeSidebar === 'settings' && tournament && userInvitationRole !== 'staff' && userInvitationRole !== 'referee' ? (
                             <div className="absolute inset-0 z-20 flex flex-col">
                                 <div className="flex flex-col md:flex-row flex-1 overflow-hidden">
                                     {/* Mobile Settings Tabs Bar using Tab component */}
@@ -2375,7 +2703,20 @@ function CanvasInternal({
                                                         </div>
                                                         <div className="flex flex-col">
                                                             <span className="font-bold text-foreground">{locale === 'th' ? "เพิ่มแมตช์" : "Add Match"}</span>
-                                                            <span className="text-[10px] text-muted-foreground">{locale === 'th' ? "รอบน็อคเอาท์" : "Knockout Slot"}</span>
+                                                            <span className="text-[10px] text-muted-foreground">{locale === 'th' ? "รอบน็อคเอาท์ (แยกตามคู่)" : "Knockout Slot (Per Match)"}</span>
+                                                        </div>
+                                                    </ActionMenuItem>
+
+                                                    <ActionMenuItem
+                                                        onClick={() => addRoundNode(getCenterPos())}
+                                                        className="cursor-pointer text-xs font-semibold flex items-center gap-2 py-1.5 hover:bg-node-2/10 focus:bg-node-2/10 group"
+                                                    >
+                                                        <div className="w-6 h-6 bg-node-2/10 rounded flex items-center justify-center shrink-0">
+                                                            <Trophy className="size-3.5 text-node-2" />
+                                                        </div>
+                                                        <div className="flex flex-col">
+                                                            <span className="font-bold text-foreground">{locale === 'th' ? "เพิ่มรอบการแข่งขัน (Round)" : "Add Round"}</span>
+                                                            <span className="text-[10px] text-muted-foreground">{locale === 'th' ? "โหมดรอบ (เส้นเดียว เข้า-ออก)" : "Single-Wire Round"}</span>
                                                         </div>
                                                     </ActionMenuItem>
 
@@ -2387,34 +2728,21 @@ function CanvasInternal({
                                                             <LayoutGrid className="size-4 text-node-5" />
                                                         </div>
                                                         <div className="flex flex-col">
-                                                            <span className="font-bold text-foreground">{locale === 'th' ? "เพิ่มกลุ่ม" : "Add Group"}</span>
-                                                            <span className="text-[10px] text-muted-foreground">{locale === 'th' ? "แบ่งกลุ่ม / สาย" : "Stage / Pool"}</span>
+                                                            <span className="font-bold text-foreground">{locale === 'th' ? "เพิ่มกลุ่ม (ตารางคะแนน)" : "Add Group (Standings)"}</span>
+                                                            <span className="text-[10px] text-muted-foreground">{locale === 'th' ? "แบ่งสายและตารางคะแนน" : "Group Stage & Standings"}</span>
                                                         </div>
                                                     </ActionMenuItem>
 
                                                     <ActionMenuItem
-                                                        onClick={() => addStandingNode(getCenterPos())}
-                                                        className="cursor-pointer text-xs font-semibold flex items-center gap-2 py-1.5 hover:bg-node-1/10 focus:bg-node-1/10 group"
+                                                        onClick={() => addDrawNode(getCenterPos())}
+                                                        className="cursor-pointer text-xs font-semibold flex items-center gap-2 py-1.5 hover:bg-amber-500/10 focus:bg-amber-500/10 group"
                                                     >
-                                                        <div className="w-6 h-6 bg-node-1/10 rounded flex items-center justify-center shrink-0">
-                                                            <ListOrdered className="size-4 text-node-1" />
+                                                        <div className="w-6 h-6 bg-amber-500/10 rounded flex items-center justify-center shrink-0">
+                                                            <Dices className="size-4 text-amber-500" />
                                                         </div>
                                                         <div className="flex flex-col">
-                                                            <span className="font-bold text-foreground">{locale === 'th' ? "เพิ่มตารางคะแนน" : "Add Standing"}</span>
-                                                            <span className="text-[10px] text-muted-foreground">{locale === 'th' ? "อันดับคะแนนในกลุ่ม" : "Group Ranking"}</span>
-                                                        </div>
-                                                    </ActionMenuItem>
-
-                                                    <ActionMenuItem
-                                                        onClick={() => addTeamListNode(teams, getCenterPos())}
-                                                        className="cursor-pointer text-xs font-semibold flex items-center gap-2 py-1.5 hover:bg-node-3/10 focus:bg-node-3/10 group"
-                                                    >
-                                                        <div className="w-6 h-6 bg-node-3/10 rounded flex items-center justify-center shrink-0">
-                                                            <Users className="size-4 text-node-3" />
-                                                        </div>
-                                                        <div className="flex flex-col">
-                                                            <span className="font-bold text-foreground">{locale === 'th' ? "รายชื่อทีม" : "Teams List"}</span>
-                                                            <span className="text-[10px] text-muted-foreground">{locale === 'th' ? "กล่องรายชื่อทีม" : "Team List"}</span>
+                                                            <span className="font-bold text-foreground">{locale === 'th' ? "เพิ่มโหนดสุ่มจับสลาก" : "Add Draw Node"}</span>
+                                                            <span className="text-[10px] text-muted-foreground">{locale === 'th' ? "สุ่มประกบคู่รอบถัดไป" : "Shuffle & Draw Next Round"}</span>
                                                         </div>
                                                     </ActionMenuItem>
                                                 </ActionMenuContent>
@@ -2432,22 +2760,38 @@ function CanvasInternal({
                                             onReconnect={readonly || isLocked ? undefined : onReconnectWithSave}
                                             isValidConnection={isValidConnection}
                                             onNodeDragStart={readonly ? undefined : onNodeDragStart}
+                                            onNodeDrag={readonly ? undefined : onNodeDrag}
                                             onNodeDragStop={readonly ? undefined : onDragStop}
+                                            onSelectionDragStart={readonly ? undefined : onSelectionDragStart}
                                             onSelectionDragStop={readonly ? undefined : onDragStop}
-                                            onNodeClick={(_, node) => {
-                                                if (isLocked) return;
+                                            onNodeClick={(event, node) => {
+                                                if (isLocked || isDraggingNodeRef.current) return;
+                                                const target = (event as any)?.target as HTMLElement | null;
+                                                if (target?.closest('button, input, select, [role="combobox"], [data-slot], .nodrag')) {
+                                                    return;
+                                                }
+                                                setActiveSidebar('teams');
                                                 setActiveNodeId(node.id);
                                                 selectNode(node.id);
+                                                if (searchParams.get("tab") || searchParams.get("subtab")) {
+                                                    updateUrlParams({ tab: null, subtab: null });
+                                                }
                                             }}
                                             onPaneClick={() => {
                                                 if (isLocked) return;
                                                 setActiveNodeId(null);
                                                 selectNode(null);
+                                                if (searchParams.get("tab") || searchParams.get("subtab")) {
+                                                    updateUrlParams({ tab: null, subtab: null });
+                                                }
                                             }}
                                             onEdgeClick={() => {
                                                 if (isLocked) return;
                                                 setActiveNodeId(null);
                                                 selectNode(null);
+                                                if (searchParams.get("tab") || searchParams.get("subtab")) {
+                                                    updateUrlParams({ tab: null, subtab: null });
+                                                }
                                             }}
                                             nodeTypes={nodeTypes}
                                             edgeTypes={edgeTypes}
@@ -2470,7 +2814,7 @@ function CanvasInternal({
                                             colorMode="light"
                                             connectionMode={ConnectionMode.Loose}
                                             connectionRadius={50}
-                                            connectionLineStyle={{ stroke: "var(--border)", strokeWidth: 2 }}
+                                            connectionLineComponent={CustomConnectionLine}
                                             connectionLineType={ConnectionLineType.Bezier}
                                             snapToGrid
                                             snapGrid={[10, 10]}
@@ -2495,6 +2839,13 @@ function CanvasInternal({
                                     <NodeSettings
                                         currentTournamentStatus={currentStatus}
                                         onStatusChange={setCurrentStatus}
+                                        onClose={() => {
+                                            setActiveNodeId(null);
+                                            selectNode(null);
+                                            if (searchParams.get("tab") || searchParams.get("subtab")) {
+                                                updateUrlParams({ tab: null, subtab: null });
+                                            }
+                                        }}
                                     />
                                 )}
                             </>

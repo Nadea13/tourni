@@ -91,15 +91,6 @@ export async function saveBracketCanvasInternal(
         const sourceNode = canvasData.nodes.find(n => n.id === edge.source);
         if (!sourceNode) return null;
 
-        if (sourceNode.type === 'teamListNode') {
-            const teamIdMatch = edge.sourceHandle?.match(/team-(.+)/);
-            if (teamIdMatch) {
-                const teamId = teamIdMatch[1];
-                const team = teams?.find(t => String(t.id) === String(teamId) || String(t.team_id) === String(teamId));
-                return team?.team_id || team?.id || teamId;
-            }
-        }
-
         if (sourceNode.type === 'standingNode' || sourceNode.type === 'groupNode') {
             const rankMatch = edge.sourceHandle?.match(/rank-(\d+)/);
             if (rankMatch) {
@@ -198,16 +189,55 @@ export async function saveBracketCanvasInternal(
                     ? `${match.match_date}T${match.match_time}:00Z` 
                     : (existingDbMatch?.scheduled_at || null);
 
+                const isHomeTBD = !match.placeholderA || match.placeholderA === "TBD" || match.placeholderA.startsWith("Seed #");
+                const isAwayTBD = !match.placeholderB || match.placeholderB === "TBD" || match.placeholderB.startsWith("Seed #");
+
+                const isExistingPlayed = existingDbMatch && (
+                    ['finished', 'completed', 'canceled', 'cancelled', 'live', 'first_half', 'half_time', 'second_half', 'extra_time', 'penalties'].includes(existingDbMatch.status) ||
+                    existingDbMatch.winner_id ||
+                    (existingDbMatch.home_score !== null && Number(existingDbMatch.home_score) > 0) ||
+                    (existingDbMatch.away_score !== null && Number(existingDbMatch.away_score) > 0)
+                );
+
+                let targetHomeTeamId: string | null = null;
+                if (resolvedHomeId) {
+                    targetHomeTeamId = resolvedHomeId;
+                } else if (homeTeam) {
+                    targetHomeTeamId = homeTeam.team_id || homeTeam.id;
+                } else if (isExistingPlayed) {
+                    targetHomeTeamId = existingDbMatch.home_team_id || null;
+                } else if (!isHomeTBD) {
+                    targetHomeTeamId = existingDbMatch?.home_team_id || null;
+                }
+
+                let targetAwayTeamId: string | null = null;
+                if (resolvedAwayId) {
+                    targetAwayTeamId = resolvedAwayId;
+                } else if (awayTeam) {
+                    targetAwayTeamId = awayTeam.team_id || awayTeam.id;
+                } else if (isExistingPlayed) {
+                    targetAwayTeamId = existingDbMatch.away_team_id || null;
+                } else if (!isAwayTBD) {
+                    targetAwayTeamId = existingDbMatch?.away_team_id || null;
+                }
+
+                // Prevent same team for both home and away in the same match
+                let placeholderBVal = match.placeholderB || null;
+                if (targetHomeTeamId && targetAwayTeamId && targetHomeTeamId === targetAwayTeamId) {
+                    targetAwayTeamId = null;
+                    placeholderBVal = "TBD";
+                }
+
                 matchesToSync.push({
                     id: resolvedMatchId || undefined,
                     tournament_category_id: categoryId,
                     node_id: node.id,
                     placeholder_home: match.placeholderA || null,
-                    placeholder_away: match.placeholderB || null,
+                    placeholder_away: placeholderBVal,
                     placeholder_a: match.placeholderA || null,
-                    placeholder_b: match.placeholderB || null,
-                    home_team_id: resolvedHomeId || homeTeam?.team_id || existingDbMatch?.home_team_id || null,
-                    away_team_id: resolvedAwayId || awayTeam?.team_id || existingDbMatch?.away_team_id || null,
+                    placeholder_b: placeholderBVal,
+                    home_team_id: targetHomeTeamId,
+                    away_team_id: targetAwayTeamId,
                     home_score: existingDbMatch?.home_score ?? 0,
                     away_score: existingDbMatch?.away_score ?? 0,
                     score_detail: existingDbMatch?.score_detail ?? undefined,

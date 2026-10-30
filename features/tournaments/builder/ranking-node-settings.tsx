@@ -11,8 +11,9 @@ import {
     CheckCircle2,
 } from "lucide-react";
 import { useBracketStore } from "@/lib/stores/bracket-store";
+import { useMatchWebSocket } from "@/hooks/use-match-websocket";
 import { ApiClient } from "@/lib/api-client";
-import { Match, TournamentTeam, TournamentStatus } from "@/types";
+import { Match, TournamentStatus, Registration } from "@/types";
 import { isMatchEnded } from "./match-node";
 import { updateTournamentStatus } from "@/actions/tournaments/general";
 import { Input } from "@/components/ui/input";
@@ -24,6 +25,10 @@ export interface ResolvedTeam {
     id: string;
     name: string;
     logo_url?: string | null;
+}
+
+export interface TournamentRegistrationItem extends Registration {
+    registration_status: string;
 }
 
 export interface UnifiedRankingItem {
@@ -49,26 +54,93 @@ export function RankingNodeSettings({
     onStatusChange?: (status: TournamentStatus) => void;
 }) {
     const locale = useLocale();
-    const { nodes, edges, teams: storeTeams, matches: storeMatches, setMatches: setStoreMatches, fetchTeams } = useBracketStore();
+    const storeCategoryId = useBracketStore((s) => s.activeCategoryId);
+    const resolvedCategoryId = categoryId || storeCategoryId || undefined;
+
+    const nodes = useBracketStore((s) => s.nodes);
+    const edges = useBracketStore((s) => s.edges);
+    const storeTeams = useBracketStore((s) => s.teams);
+    const storeMatches = useBracketStore((s) => s.matches);
+    const setStoreMatches = useBracketStore((s) => s.setMatches);
+    const fetchTeams = useBracketStore((s) => s.fetchTeams);
+
+    // Team Management (การจัดการทีม) reference state
+    const [teamRegistrations, setTeamRegistrations] = React.useState<TournamentRegistrationItem[]>([]);
     const [localMatches, setLocalMatches] = React.useState<Match[]>([]);
     const [_isLoading, setIsLoading] = React.useState(false);
     const [searchQuery, setSearchQuery] = React.useState("");
+    const [, forceUpdate] = React.useReducer((x) => x + 1, 0);
 
-    // Use storeMatches from useBracketStore (canvas polls every 5s and syncs live scores in real-time)
-    const matches = storeMatches && storeMatches.length > 0 ? storeMatches : localMatches;
+    // Merge storeMatches and localMatches with local priority for instantaneous real-time responsiveness
+    const matches = localMatches.length > 0 ? localMatches : (storeMatches || []);
 
-    // 1. Fetch matches & teams for category via ApiClient
+    const isMatchTarget = (m: Match, id: string) =>
+        m.id === id || (m as any).dbId === id || (m as any).matchId === id || (m as any).match_id === id;
+
+    // 1. Fetch team registrations referencing "การจัดการทีม" (Team Management)
+    const fetchTeamRegistrations = React.useCallback(async () => {
+        if (!tournamentId) return;
+        try {
+            const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1';
+            const url = resolvedCategoryId
+                ? `${apiUrl}/tournaments/${tournamentId}/teams?category_id=${resolvedCategoryId}`
+                : `${apiUrl}/tournaments/${tournamentId}/teams`;
+
+            const res = await fetch(url, { cache: 'no-store' });
+            if (res.ok) {
+                const data = await res.json();
+                const list = Array.isArray(data) ? data : (data?.data || []);
+                const mapped: TournamentRegistrationItem[] = list.map((item: any) => {
+                    const ps = String(item.payment_status || '').toLowerCase();
+                    const rs = String(item.registration_status || '').toLowerCase();
+                    const s = String(item.status || '').toLowerCase();
+
+                    let mappedStatus: 'PENDING' | 'PAID' | 'REJECTED' = 'PENDING';
+                    if (rs === 'rejected' || ps === 'rejected' || s === 'rejected') {
+                        mappedStatus = 'REJECTED';
+                    } else if (rs === 'approved' || rs === 'confirmed' || s === 'approved' || (s === 'registered' && rs !== 'pending' && ps !== 'pending')) {
+                        mappedStatus = 'PAID';
+                    } else {
+                        mappedStatus = 'PENDING';
+                    }
+
+                    return {
+                        id: item.id,
+                        tournament_id: item.tournament_id || tournamentId,
+                        team_name: item.team?.name || item.name || '',
+                        contact_name: item.contact_name || item.team?.contact_name || '',
+                        contact_phone: item.contact_phone || item.team?.contact_phone || '',
+                        logo_url: item.team?.logo_img || item.team?.logo_url || item.logo_img || item.logo_url || null,
+                        existing_team_id: item.team_id || item.team?.id || null,
+                        slip_url: item.slip_img || null,
+                        payment_status: mappedStatus,
+                        trans_ref: item.remark || null,
+                        description: item.team?.description || item.description || null,
+                        tournament_team_id: item.id,
+                        created_at: item.created_at || new Date().toISOString(),
+                        registration_status: rs,
+                    };
+                });
+                setTeamRegistrations(mapped);
+                forceUpdate();
+            }
+        } catch (e) {
+            console.error("Error fetching team registrations for rankings:", e);
+        }
+    }, [tournamentId, resolvedCategoryId]);
+
+    // 2. Fetch matches & teams for category via ApiClient
     const fetchCategoryMatches = React.useCallback(async () => {
         if (!tournamentId) return;
         setIsLoading(true);
         try {
-            if (categoryId) {
-                fetchTeams(categoryId);
+            if (resolvedCategoryId) {
+                fetchTeams(resolvedCategoryId, tournamentId);
             }
-            const url = categoryId
-                ? `/tournaments/${tournamentId}/categories/${categoryId}/matches`
+            const url = resolvedCategoryId
+                ? `/tournaments/${tournamentId}/categories/${resolvedCategoryId}/matches`
                 : `/tournaments/${tournamentId}/matches`;
-            const data = await ApiClient.fetch<any[]>(url);
+            const data = await ApiClient.fetch<any[]>(url, { cache: 'no-store' });
             if (data && Array.isArray(data)) {
                 const mappedMatches = (data as Match[]).map(match => {
                     let match_date = match.match_date;
@@ -101,105 +173,183 @@ export function RankingNodeSettings({
                 });
                 setStoreMatches(mappedMatches);
                 setLocalMatches(mappedMatches);
+                forceUpdate();
             }
         } catch (err) {
             console.error("Failed to fetch matches for rankings:", err);
         } finally {
             setIsLoading(false);
         }
-    }, [tournamentId, categoryId, setStoreMatches, fetchTeams]);
+    }, [tournamentId, resolvedCategoryId, setStoreMatches, fetchTeams]);
+
+    const fetchAllData = React.useCallback(async () => {
+        await Promise.all([fetchCategoryMatches(), fetchTeamRegistrations()]);
+    }, [fetchCategoryMatches, fetchTeamRegistrations]);
+
+    // Real-time synchronization referencing "การจัดการทีม" (Registrations):
+    // 1. Initial fetch on mount / category change
+    // 2. 3-second recurring interval
+    // 3. Window focus event
+    // 4. Trigger on storeTeams update
+    React.useEffect(() => {
+        fetchAllData();
+
+        const interval = setInterval(() => {
+            fetchAllData();
+        }, 3000);
+
+        const handleFocus = () => {
+            fetchAllData();
+        };
+        window.addEventListener('focus', handleFocus);
+
+        return () => {
+            clearInterval(interval);
+            window.removeEventListener('focus', handleFocus);
+        };
+    }, [fetchAllData]);
 
     React.useEffect(() => {
-        if (categoryId) {
-            fetchTeams(categoryId);
+        if (storeTeams.length > 0 || teamRegistrations.length > 0) {
+            fetchAllData();
         }
-        fetchCategoryMatches();
-    }, [categoryId, fetchCategoryMatches, fetchTeams]);
+    }, [storeTeams, fetchAllData]);
+
+    // 100% Realtime WebSocket Listener for Tournament Standings & Rankings
+    useMatchWebSocket("all", {
+        onScoreUpdate: ({ match_id, home_score, away_score, status }) => {
+            if (!match_id) return;
+            const updateList = (prev: Match[]) => prev.map(m => {
+                if (isMatchTarget(m, match_id)) {
+                    return {
+                        ...m,
+                        home_score,
+                        away_score,
+                        status: (status || m.status) as any
+                    };
+                }
+                return m;
+            });
+            setLocalMatches(updateList);
+            setStoreMatches(updateList);
+            forceUpdate();
+            fetchAllData();
+        },
+        onStatusChange: ({ match_id, status }) => {
+            if (!match_id) return;
+            const updateList = (prev: Match[]) => prev.map(m => {
+                if (isMatchTarget(m, match_id)) {
+                    return { ...m, status: status as any };
+                }
+                return m;
+            });
+            setLocalMatches(updateList);
+            setStoreMatches(updateList);
+            forceUpdate();
+            fetchAllData();
+        },
+        onMatchUpdate: ({ match }) => {
+            if (!match?.id) return;
+            const updateList = (prev: Match[]) => {
+                const idx = prev.findIndex(m => isMatchTarget(m, match.id));
+                if (idx >= 0) {
+                    const updated = [...prev];
+                    updated[idx] = { ...updated[idx], ...match };
+                    return updated;
+                }
+                return [...prev, match];
+            };
+            setLocalMatches(updateList);
+            setStoreMatches(updateList);
+            forceUpdate();
+            fetchAllData();
+        },
+        onStandingsSync: () => {
+            fetchAllData();
+            forceUpdate();
+        }
+    });
 
     // 2. Compute rankings from nodes, edges, matches, and teams
     const { items, activeCount } = React.useMemo(() => {
         const teamMap = new Map<string, ResolvedTeam>();
-        const teamListNodes = nodes.filter(n => n.type === 'teamListNode');
 
-        // Extract verified teams that belong to teamListNode
-        const getTeamListNodeTeams = (): TournamentTeam[] => {
-            const listTeams: TournamentTeam[] = [];
-            const seenIds = new Set<string>();
+        // Collect Set of approved teams (STRICTLY registration_status === 'approved')
+        const approvedTeamIdSet = new Set<string>();
+        const approvedTeamNameSet = new Set<string>();
 
-            teamListNodes.forEach(tNode => {
-                const explicitTeams = (tNode.data as { teams?: TournamentTeam[] })?.teams;
-                if (Array.isArray(explicitTeams) && explicitTeams.length > 0) {
-                    explicitTeams.forEach(t => {
-                        const id = String(t.team_id || t.id);
-                        if (!seenIds.has(id)) {
-                            seenIds.add(id);
-                            listTeams.push(t);
-                        }
-                    });
-                }
-            });
+        teamRegistrations.forEach(r => {
+            if (r.registration_status === 'approved') {
+                if (r.id) approvedTeamIdSet.add(String(r.id));
+                if (r.existing_team_id) approvedTeamIdSet.add(String(r.existing_team_id));
+                if (r.tournament_team_id) approvedTeamIdSet.add(String(r.tournament_team_id));
+                if (r.team_name) approvedTeamNameSet.add(r.team_name.trim().toLowerCase());
+            }
+        });
 
-            if (listTeams.length > 0) return listTeams;
+        storeTeams.forEach(t => {
+            if (String(t.registration_status || '').toLowerCase() === 'approved') {
+                if (t.id) approvedTeamIdSet.add(String(t.id));
+                if (t.team_id) approvedTeamIdSet.add(String(t.team_id));
+                if (t.name) approvedTeamNameSet.add(t.name.trim().toLowerCase());
+            }
+        });
 
-            // Follow the exact same filter as TeamListNode component on canvas
-            return storeTeams.filter((team: TournamentTeam & { tournament_category_id?: string | null }) => {
-                if (categoryId && team.tournament_category_id && String(team.tournament_category_id) !== String(categoryId)) {
-                    return false;
-                }
-                if ((team as any).deleted_at) {
-                    return false;
-                }
-                const rs = String(team.registration_status || '').toLowerCase();
-                const ps = String(team.payment_status || '').toLowerCase();
-                if (rs === 'rejected' || ps === 'rejected' || rs === 'pending') {
-                    return false;
-                }
-                return rs === 'approved' || rs === 'confirmed' || ps === 'paid';
-            });
+        const isApprovedTeam = (team?: ResolvedTeam | null): boolean => {
+            if (!team) return false;
+            return approvedTeamIdSet.has(String(team.id)) || approvedTeamNameSet.has(team.name.trim().toLowerCase());
         };
 
-        const teamListNodeTeams = getTeamListNodeTeams();
+        // 0. Primary Reference: Approved Teams from Team Management (STRICTLY registration_status === 'approved')
+        const approvedRegistrations = teamRegistrations.filter(r => r.registration_status === 'approved');
+        approvedRegistrations.forEach(r => {
+            const canonicalId = String(r.existing_team_id || r.id);
+            const resolved: ResolvedTeam = {
+                id: canonicalId,
+                name: r.team_name,
+                logo_url: r.logo_url,
+            };
+            if (r.id) teamMap.set(String(r.id), resolved);
+            if (r.existing_team_id) teamMap.set(String(r.existing_team_id), resolved);
+            if (r.tournament_team_id) teamMap.set(String(r.tournament_team_id), resolved);
+            if (r.team_name) {
+                teamMap.set(r.team_name.trim(), resolved);
+                teamMap.set(r.team_name.trim().toLowerCase(), resolved);
+            }
+        });
 
-        // Register all store teams
+        // Register approved store teams
         storeTeams.forEach(t => {
-            const canonicalId = String(t.team_id || t.id);
-            const resolved: ResolvedTeam = {
-                id: canonicalId,
-                name: t.name,
-                logo_url: t.logo_url,
-            };
-            if (t.id) teamMap.set(String(t.id), resolved);
-            if (t.team_id) teamMap.set(String(t.team_id), resolved);
-            if (t.name) {
-                teamMap.set(t.name.trim(), resolved);
-                teamMap.set(t.name.trim().toLowerCase(), resolved);
+            if (String(t.registration_status || '').toLowerCase() === 'approved') {
+                const canonicalId = String(t.team_id || t.id);
+                const resolved: ResolvedTeam = {
+                    id: canonicalId,
+                    name: t.name,
+                    logo_url: t.logo_url,
+                };
+                if (t.id) teamMap.set(String(t.id), resolved);
+                if (t.team_id) teamMap.set(String(t.team_id), resolved);
+                if (t.name) {
+                    teamMap.set(t.name.trim(), resolved);
+                    teamMap.set(t.name.trim().toLowerCase(), resolved);
+                }
             }
         });
 
-        // Also register verified teams from teamListNode
-        teamListNodeTeams.forEach(t => {
-            const canonicalId = String(t.team_id || t.id);
-            const resolved: ResolvedTeam = {
-                id: canonicalId,
-                name: t.name,
-                logo_url: t.logo_url,
-            };
-            if (t.id) teamMap.set(String(t.id), resolved);
-            if (t.team_id) teamMap.set(String(t.team_id), resolved);
-            if (t.name) {
-                teamMap.set(t.name.trim(), resolved);
-                teamMap.set(t.name.trim().toLowerCase(), resolved);
-            }
-        });
-
-        // Helper to resolve a team by ID or name
+        // Helper to resolve a team by ID or name (Strictly for approved teams)
         const resolveTeam = (idOrName?: string | null): ResolvedTeam | undefined => {
             if (!idOrName) return undefined;
             const trimmed = String(idOrName).trim();
             if (!trimmed) return undefined;
             const lower = trimmed.toLowerCase();
-            if (teamMap.has(trimmed)) return teamMap.get(trimmed);
-            if (teamMap.has(lower)) return teamMap.get(lower);
+            if (teamMap.has(trimmed)) {
+                const candidate = teamMap.get(trimmed)!;
+                if (isApprovedTeam(candidate)) return candidate;
+            }
+            if (teamMap.has(lower)) {
+                const candidate = teamMap.get(lower)!;
+                if (isApprovedTeam(candidate)) return candidate;
+            }
             if (
                 trimmed === "TBD" ||
                 trimmed === "Bye" ||
@@ -212,10 +362,29 @@ export function RankingNodeSettings({
                 return undefined;
             }
 
+            const foundReg = approvedRegistrations.find(
+                r => r.team_name.trim().toLowerCase() === lower ||
+                     String(r.id) === trimmed ||
+                     String(r.existing_team_id) === trimmed ||
+                     String(r.tournament_team_id) === trimmed
+            );
+            if (foundReg) {
+                const resolved: ResolvedTeam = {
+                    id: String(foundReg.existing_team_id || foundReg.id),
+                    name: foundReg.team_name,
+                    logo_url: foundReg.logo_url,
+                };
+                teamMap.set(trimmed, resolved);
+                teamMap.set(lower, resolved);
+                return resolved;
+            }
+
             const foundStore = storeTeams.find(
-                st => st.name.trim().toLowerCase() === lower ||
+                st => String(st.registration_status || '').toLowerCase() === 'approved' && (
+                      st.name.trim().toLowerCase() === lower ||
                       String(st.id) === trimmed ||
                       String(st.team_id) === trimmed
+                )
             );
             if (foundStore) {
                 const resolved: ResolvedTeam = {
@@ -228,16 +397,71 @@ export function RankingNodeSettings({
                 return resolved;
             }
 
-            // Auto-create resolved team if not found
-            const newTeam: ResolvedTeam = { id: trimmed, name: trimmed };
-            teamMap.set(trimmed, newTeam);
-            teamMap.set(lower, newTeam);
-            return newTeam;
+            // Strictly do not auto-create unapproved teams
+            return undefined;
         };
 
         const matchNodes = nodes.filter(n => n.type === 'matchNode');
-        const standingNodes = nodes.filter(n => n.type === 'standingNode');
         const groupNodes = nodes.filter(n => n.type === 'groupNode');
+
+        // Dynamic group node real-time calculations from live matches
+        const dynamicGroupRankingsMap = new Map<string, ResolvedTeam[]>();
+
+        const calculateGroupRankings = (nodeTeams: string[]): ResolvedTeam[] => {
+            if (!nodeTeams || nodeTeams.length === 0) return [];
+            const stats: Record<string, { team: ResolvedTeam; pts: number; gd: number; gf: number }> = {};
+            nodeTeams.forEach(name => {
+                const resolved = resolveTeam(name);
+                if (resolved) {
+                    stats[resolved.id] = { team: resolved, pts: 0, gd: 0, gf: 0 };
+                }
+            });
+
+            matches.forEach(m => {
+                const homeTeam = resolveTeam(m.home_team_id) || resolveTeam((m.home_team as any)?.id) || resolveTeam(m.home_team?.name) || resolveTeam(m.placeholder_home || m.placeholder_a);
+                const awayTeam = resolveTeam(m.away_team_id) || resolveTeam((m.away_team as any)?.id) || resolveTeam(m.away_team?.name) || resolveTeam(m.placeholder_away || m.placeholder_b);
+
+                if (!homeTeam || !awayTeam) return;
+                const hStat = stats[homeTeam.id];
+                const aStat = stats[awayTeam.id];
+                if (!hStat || !aStat) return;
+
+                const isPlayed = m.status === 'finished' || m.status === 'completed' || m.status === 'live' || m.status === 'first_half' || m.status === 'second_half' || (m.home_score !== undefined && m.away_score !== undefined && (Number(m.home_score) > 0 || Number(m.away_score) > 0));
+                if (isPlayed) {
+                    const getScoreVal = (s: unknown) => (typeof s === 'object' && s !== null && 'total' in s ? Number((s as any).total) || 0 : Number(s) || 0);
+                    const hScore = getScoreVal(m.home_score);
+                    const aScore = getScoreVal(m.away_score);
+
+                    hStat.gf += hScore;
+                    hStat.gd += (hScore - aScore);
+                    aStat.gf += aScore;
+                    aStat.gd += (aScore - hScore);
+
+                    if (hScore > aScore) {
+                        hStat.pts += 3;
+                    } else if (aScore > hScore) {
+                        aStat.pts += 3;
+                    } else {
+                        hStat.pts += 1;
+                        aStat.pts += 1;
+                    }
+                }
+            });
+
+            return Object.values(stats).sort((a, b) => {
+                if (b.pts !== a.pts) return b.pts - a.pts;
+                if (b.gd !== a.gd) return b.gd - a.gd;
+                return b.gf - a.gf;
+            }).map(s => s.team);
+        };
+
+        groupNodes.forEach(gNode => {
+            const nodeTeams: string[] = (gNode.data as { teams?: string[] })?.teams || [];
+            const computed = calculateGroupRankings(nodeTeams);
+            if (computed.length > 0) {
+                dynamicGroupRankingsMap.set(gNode.id, computed);
+            }
+        });
 
         // Resolve match results dynamically with upstream winner/loser DAG propagation
         interface MatchOutcome {
@@ -271,7 +495,7 @@ export function RankingNodeSettings({
                 (mItem?.dbId && dbm.id === mItem.dbId) ||
                 (mItem?.matchId && dbm.id === mItem.matchId) ||
                 (mItem?.id && dbm.id === mItem.id) ||
-                (dbm.node_id === targetNodeId && ((dbm.idx_match ?? dbm.match_index ?? (dbm as any).match_number) === matchNumber)) ||
+                (dbm.node_id === targetNodeId && ((dbm.idx_match ?? dbm.match_index ?? (dbm as any).match_number) === matchNumber || dbm.idx_match === matchIdx)) ||
                 (mItem?.placeholderA && mItem?.placeholderB && (
                     (dbm.placeholder_a === mItem.placeholderA && dbm.placeholder_b === mItem.placeholderB) ||
                     (dbm.ph_home === mItem.placeholderA && dbm.ph_away === mItem.placeholderB)
@@ -291,16 +515,14 @@ export function RankingNodeSettings({
             const edge = edges.find(e => e.target === targetNodeId && (e.targetHandle === targetHandle || e.targetHandle === `slot-${slot}`));
             if (edge) {
                 const sourceNode = nodes.find(n => n.id === edge.source);
-                if (sourceNode?.type === 'teamListNode') {
-                    const teamIdMatch = edge.sourceHandle?.match(/team-(.+)/);
-                    if (teamIdMatch) {
-                        const team = resolveTeam(teamIdMatch[1]);
-                        if (team) return team;
-                    }
-                } else if (sourceNode?.type === 'standingNode' || sourceNode?.type === 'groupNode') {
+                if (sourceNode?.type === 'standingNode' || sourceNode?.type === 'groupNode') {
                     const rankMatch = edge.sourceHandle?.match(/rank-(\d+)/);
                     if (rankMatch) {
                         const rankIndex = parseInt(rankMatch[1], 10);
+                        const computedRankings = dynamicGroupRankingsMap.get(sourceNode.id);
+                        if (computedRankings && computedRankings[rankIndex]) {
+                            return computedRankings[rankIndex];
+                        }
                         const rankings = (sourceNode.data as { rankings?: string[] }).rankings || [];
                         if (rankings[rankIndex]) {
                             const team = resolveTeam(rankings[rankIndex]);
@@ -497,11 +719,11 @@ export function RankingNodeSettings({
         grandFinalNodeIds.forEach(finalId => {
             const finalOutcomes = matchOutcomes.filter(mo => mo.nodeId === finalId);
             finalOutcomes.forEach(fo => {
-                if (fo.winner) {
+                if (fo.winner && isApprovedTeam(fo.winner)) {
                     champions.push(fo.winner);
                     markAssigned(fo.winner);
                 }
-                if (fo.loser) {
+                if (fo.loser && isApprovedTeam(fo.loser)) {
                     runnerUps.push(fo.loser);
                     markAssigned(fo.loser);
                 }
@@ -515,11 +737,11 @@ export function RankingNodeSettings({
         thirdPlaceNodeIds.forEach(tpId => {
             const tpOutcomes = matchOutcomes.filter(mo => mo.nodeId === tpId);
             tpOutcomes.forEach(tpo => {
-                if (tpo.winner && !isTeamAssigned(tpo.winner)) {
+                if (tpo.winner && isApprovedTeam(tpo.winner) && !isTeamAssigned(tpo.winner)) {
                     thirdPlaceWinners.push(tpo.winner);
                     markAssigned(tpo.winner);
                 }
-                if (tpo.loser && !isTeamAssigned(tpo.loser)) {
+                if (tpo.loser && isApprovedTeam(tpo.loser) && !isTeamAssigned(tpo.loser)) {
                     fourthPlaceLosers.push(tpo.loser);
                     markAssigned(tpo.loser);
                 }
@@ -566,7 +788,7 @@ export function RankingNodeSettings({
 
                 const outcomes = matchOutcomes.filter(mo => mo.nodeId === nId);
                 outcomes.forEach(o => {
-                    if (o.loser && !isTeamAssigned(o.loser)) {
+                    if (o.loser && isApprovedTeam(o.loser) && !isTeamAssigned(o.loser)) {
                         if (!hasNextLoserMatch) {
                             losersInRound.push(o.loser);
                             markAssigned(o.loser);
@@ -595,7 +817,7 @@ export function RankingNodeSettings({
             }
         });
 
-        // 4. Standings / Group Stage Non-Advancing Teams
+        // 4. Standings / Group Stage Data
         interface GroupStandingsData {
             label: string;
             rankings: ResolvedTeam[];
@@ -604,11 +826,21 @@ export function RankingNodeSettings({
 
         const groupsData: GroupStandingsData[] = [];
 
-        standingNodes.forEach(sNode => {
-            const rawRankings = (sNode.data as { rankings?: string[] })?.rankings || [];
-            const advCount = Number(sNode.data.advancingCount) || 2;
-            const label = (sNode.data.label as string) || "Group";
+        groupNodes.forEach(gNode => {
+            const advCount = Number(gNode.data.advancingCount) || 2;
+            const label = (gNode.data.label as string) || "Group";
 
+            const computedRankings = dynamicGroupRankingsMap.get(gNode.id);
+            if (computedRankings && computedRankings.length > 0) {
+                groupsData.push({
+                    label,
+                    rankings: computedRankings,
+                    advancingCount: advCount,
+                });
+                return;
+            }
+
+            const rawRankings = (gNode.data as { rankings?: string[] })?.rankings || (gNode.data as { teams?: string[] })?.teams || [];
             const resolvedRankings: ResolvedTeam[] = [];
             rawRankings.forEach(name => {
                 const t = resolveTeam(name);
@@ -624,29 +856,50 @@ export function RankingNodeSettings({
             }
         });
 
-        if (groupsData.length === 0) {
-            groupNodes.forEach(gNode => {
-                const rawTeams = (gNode.data as { teams?: string[] })?.teams || [];
-                const advCount = Number(gNode.data.advancingCount) || 2;
-                const label = (gNode.data.label as string) || "Group";
+        const isKnockoutPresent = grandFinalNodeIds.size > 0;
+        const areAllMatchesEnded = matches.length > 0 && matches.every(m => isMatchEnded(m.status) || m.status === 'finished' || m.status === 'completed' || m.status === 'canceled' || m.status === 'cancelled');
 
-                const resolvedTeams: ResolvedTeam[] = [];
-                rawTeams.forEach(name => {
-                    const t = resolveTeam(name);
-                    if (t) resolvedTeams.push(t);
+        if (!isKnockoutPresent && groupsData.length > 0) {
+            // League / Single Table / Round-Robin Tournament (No Knockout Finals)
+            const maxTeamsInGroup = Math.max(...groupsData.map(g => g.rankings.length));
+
+            for (let pos = 0; pos < maxTeamsInGroup; pos++) {
+                const teamsAtPos: ResolvedTeam[] = [];
+
+                groupsData.forEach(g => {
+                    const team = g.rankings[pos];
+                    if (team && !isTeamAssigned(team)) {
+                        teamsAtPos.push(team);
+                        markAssigned(team);
+                    }
                 });
 
-                if (resolvedTeams.length > 0) {
-                    groupsData.push({
-                        label,
-                        rankings: resolvedTeams,
-                        advancingCount: advCount,
-                    });
+                if (teamsAtPos.length > 0) {
+                    if (pos === 0) {
+                        teamsAtPos.forEach(t => champions.push(t));
+                    } else if (pos === 1) {
+                        teamsAtPos.forEach(t => runnerUps.push(t));
+                    } else {
+                        const posNum = pos + 1;
+                        let tierName: 'third' | 'fourth' | 'group' = 'group';
+                        let stageLabel = locale === 'th' ? `อันดับ ${posNum} ของตาราง` : `Place ${posNum}`;
+                        if (pos === 2) {
+                            tierName = 'third';
+                            stageLabel = locale === 'th' ? "อันดับ 3 (3rd Place)" : "3rd Place";
+                        } else if (pos === 3) {
+                            tierName = 'fourth';
+                            stageLabel = locale === 'th' ? "อันดับ 4 (4th Place)" : "4th Place";
+                        }
+                        eliminatedTiers.push({
+                            tierName,
+                            stageLabel,
+                            teams: teamsAtPos,
+                        });
+                    }
                 }
-            });
-        }
-
-        if (groupsData.length > 0) {
+            }
+        } else if (groupsData.length > 0) {
+            // Group + Knockout Tournament: Non-advancing teams get group rankings
             const maxTeamsInGroup = Math.max(...groupsData.map(g => g.rankings.length));
             let maxAdv = Math.max(...groupsData.map(g => g.advancingCount));
             if (maxAdv >= maxTeamsInGroup) maxAdv = 0;
@@ -677,22 +930,45 @@ export function RankingNodeSettings({
         // 5. Find Active Teams (ทีมที่ยังอยู่ในการแข่งขัน)
         const allTeamsMap = new Map<string, ResolvedTeam>();
 
-        if (teamListNodes.length > 0) {
-            // Priority: "ranking ให้แสดงทีมที่อยู่ใน teamlistnode"
-            teamListNodeTeams.forEach(t => {
+        // 1. Primary Reference: Approved teams from Team Management (การจัดการทีม)
+        approvedRegistrations.forEach(r => {
+            const canonicalId = String(r.existing_team_id || r.id);
+            const resolved: ResolvedTeam = {
+                id: canonicalId,
+                name: r.team_name,
+                logo_url: r.logo_url,
+            };
+            allTeamsMap.set(resolved.name.toLowerCase(), resolved);
+        });
+
+        // 2. Teams from storeTeams
+        storeTeams.forEach(t => {
+            if (String(t.registration_status || '').toLowerCase() === 'approved') {
                 const res = resolveTeam(String(t.team_id || t.id)) || resolveTeam(t.name);
-                if (res) allTeamsMap.set(res.name.toLowerCase(), res);
+                if (res && isApprovedTeam(res) && !allTeamsMap.has(res.name.toLowerCase())) {
+                    allTeamsMap.set(res.name.toLowerCase(), res);
+                }
+            }
+        });
+
+        // 4. Teams from match outcomes
+        matchOutcomes.forEach(mo => {
+            if (mo.homeTeam && isApprovedTeam(mo.homeTeam) && !allTeamsMap.has(mo.homeTeam.name.toLowerCase())) {
+                allTeamsMap.set(mo.homeTeam.name.toLowerCase(), mo.homeTeam);
+            }
+            if (mo.awayTeam && isApprovedTeam(mo.awayTeam) && !allTeamsMap.has(mo.awayTeam.name.toLowerCase())) {
+                allTeamsMap.set(mo.awayTeam.name.toLowerCase(), mo.awayTeam);
+            }
+        });
+
+        // 5. Teams from group data
+        groupsData.forEach(g => {
+            g.rankings.forEach(t => {
+                if (isApprovedTeam(t) && !allTeamsMap.has(t.name.toLowerCase())) {
+                    allTeamsMap.set(t.name.toLowerCase(), t);
+                }
             });
-        } else {
-            storeTeams.forEach(t => {
-                const res = resolveTeam(String(t.team_id || t.id)) || resolveTeam(t.name);
-                if (res) allTeamsMap.set(res.name.toLowerCase(), res);
-            });
-            matchOutcomes.forEach(mo => {
-                if (mo.homeTeam) allTeamsMap.set(mo.homeTeam.name.toLowerCase(), mo.homeTeam);
-                if (mo.awayTeam) allTeamsMap.set(mo.awayTeam.name.toLowerCase(), mo.awayTeam);
-            });
-        }
+        });
 
         const activeList: { team: ResolvedTeam; currentStage: string; nextOpponent?: string }[] = [];
 
@@ -713,7 +989,18 @@ export function RankingNodeSettings({
                     const isHome = activeMatch.homeTeam?.id === team.id || activeMatch.homeTeam?.name.toLowerCase() === team.name.toLowerCase();
                     const opp = isHome ? activeMatch.awayTeam?.name : activeMatch.homeTeam?.name;
                     if (opp && opp !== "TBD" && opp !== "Bye") {
-                        nextOpponent = opp;
+                        const m = activeMatch.dbMatch;
+                        const getScoreVal = (s: unknown) => (typeof s === 'object' && s !== null && 'total' in s ? Number((s as any).total) || 0 : Number(s) || 0);
+                        const hScore = m ? getScoreVal(m.home_score) : 0;
+                        const aScore = m ? getScoreVal(m.away_score) : 0;
+                        const hasScore = m && (m.status !== 'scheduled' || hScore > 0 || aScore > 0);
+                        if (hasScore) {
+                            const myScore = isHome ? hScore : aScore;
+                            const oppScore = isHome ? aScore : hScore;
+                            nextOpponent = `${opp} (${myScore} - ${oppScore})`;
+                        } else {
+                            nextOpponent = opp;
+                        }
                     }
                 } else if (groupsData.length > 0) {
                     const inGroup = groupsData.find(g => g.rankings.some(rt => rt.id === team.id || rt.name.toLowerCase() === team.name.toLowerCase()));
@@ -738,13 +1025,16 @@ export function RankingNodeSettings({
         // Champion
         if (champions.length > 0) {
             champions.forEach(team => {
+                const isFinalChampion = isKnockoutPresent || areAllMatchesEnded;
                 unifiedList.push({
                     id: team.id,
                     team,
-                    type: 'champion',
+                    type: isFinalChampion ? 'champion' : 'active',
                     rank: 1,
-                    stageLabel: locale === 'th' ? "ชนะเลิศ (Champion)" : "Champion",
-                    isActive: false,
+                    stageLabel: isFinalChampion
+                        ? (locale === 'th' ? "ชนะเลิศ (Champion)" : "Champion")
+                        : (locale === 'th' ? "จ่าฝูง (อันดับ 1 ชั่วคราว)" : "Current Leader (1st Place)"),
+                    isActive: !isFinalChampion,
                 });
             });
         }
@@ -752,13 +1042,16 @@ export function RankingNodeSettings({
         // Runner-up
         if (runnerUps.length > 0) {
             runnerUps.forEach(team => {
+                const isFinalRunnerUp = isKnockoutPresent || areAllMatchesEnded;
                 unifiedList.push({
                     id: team.id,
                     team,
-                    type: 'runner_up',
+                    type: isFinalRunnerUp ? 'runner_up' : 'active',
                     rank: 2,
-                    stageLabel: locale === 'th' ? "รองชนะเลิศอันดับ 1" : "Runner-up",
-                    isActive: false,
+                    stageLabel: isFinalRunnerUp
+                        ? (locale === 'th' ? "รองชนะเลิศอันดับ 1" : "Runner-up")
+                        : (locale === 'th' ? "อันดับ 2 (กำลังแข่งขัน)" : "Current 2nd Place"),
+                    isActive: !isFinalRunnerUp,
                 });
             });
         }
@@ -800,11 +1093,13 @@ export function RankingNodeSettings({
             currentRank += tierCount;
         });
 
+        const approvedUnifiedList = unifiedList.filter(item => isApprovedTeam(item.team));
+
         return {
-            items: unifiedList,
-            activeCount: activeList.length,
+            items: approvedUnifiedList,
+            activeCount: approvedUnifiedList.filter(i => i.isActive).length,
         };
-    }, [nodes, edges, matches, storeTeams, categoryId, locale]);
+    }, [nodes, edges, matches, storeMatches, localMatches, teamRegistrations, storeTeams, resolvedCategoryId, locale]);
 
     // Filter by search query
     const filteredItems = React.useMemo(() => {

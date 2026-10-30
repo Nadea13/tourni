@@ -128,6 +128,30 @@ export function PublicTournamentShell({
                 }
                 return m;
             }));
+        },
+        onStatusChange: ({ match_id, status }) => {
+            if (!match_id) return;
+            setMatches(prev => prev.map(m => {
+                if (m.id === match_id) {
+                    return { ...m, status: status as any };
+                }
+                return m;
+            }));
+        },
+        onMatchUpdate: ({ match }) => {
+            if (!match?.id) return;
+            setMatches(prev => {
+                const idx = prev.findIndex(m => m.id === match.id);
+                if (idx >= 0) {
+                    const updated = [...prev];
+                    updated[idx] = { ...updated[idx], ...match };
+                    return updated;
+                }
+                return [...prev, match];
+            });
+        },
+        onStandingsSync: () => {
+            router.refresh();
         }
     });
 
@@ -224,15 +248,6 @@ export function PublicTournamentShell({
                     const sNode = nodes.find(n => n.id === edge.source);
                     if (!sNode) return staticTeams[index] || "TBD";
 
-                    if (sNode.type === 'teamListNode') {
-                        const teamIdMatch = edge.sourceHandle?.match(/team-(.+)/);
-                        if (teamIdMatch) {
-                            const teamId = teamIdMatch[1];
-                            const team = initialTeams.find(t => String(t.id) === String(teamId));
-                            return team?.name || "TBD";
-                        }
-                    }
-
                     if (sNode.type === 'standingNode' || sNode.type === 'groupNode') {
                         const rankMatch = edge.sourceHandle?.match(/rank-(\d+)/);
                         if (rankMatch) {
@@ -279,17 +294,31 @@ export function PublicTournamentShell({
             });
 
             // Calculate stats from matches
+            const findStats = (rawName?: string | null) => {
+                if (!rawName) return undefined;
+                const trimmed = rawName.trim();
+                if (statsMap[trimmed]) return statsMap[trimmed];
+                const lower = trimmed.toLowerCase();
+                for (const key of Object.keys(statsMap)) {
+                    if (key.trim().toLowerCase() === lower) {
+                        return statsMap[key];
+                    }
+                }
+                return undefined;
+            };
+
             matches.forEach(m => {
                 const matchObj = m as unknown as Record<string, unknown>;
-                const homeName = m.home_team_id ? teamIdToName.get(m.home_team_id) : (matchObj.placeholder_home as string) || m.placeholder_a;
-                const awayName = m.away_team_id ? teamIdToName.get(m.away_team_id) : (matchObj.placeholder_away as string) || m.placeholder_b;
+                const homeName = m.home_team?.name || (m.home_team_id ? teamIdToName.get(m.home_team_id) : null) || (matchObj.placeholder_home as string) || m.placeholder_a;
+                const awayName = m.away_team?.name || (m.away_team_id ? teamIdToName.get(m.away_team_id) : null) || (matchObj.placeholder_away as string) || m.placeholder_b;
 
                 if (!homeName || !awayName) return;
 
-                const h = statsMap[homeName];
-                const a = statsMap[awayName];
+                const h = findStats(homeName);
+                const a = findStats(awayName);
 
-                if (m.status === 'finished' || m.status === 'live') {
+                const isPlayed = m.status === 'finished' || m.status === 'completed' || m.status === 'live' || m.status === 'first_half' || m.status === 'second_half' || m.status === 'half_time' || m.status === 'extra_time' || m.status === 'penalties';
+                if (isPlayed) {
                     if (h && a) {
                         const hScore = typeof m.home_score === 'object' && m.home_score !== null && 'total' in m.home_score ? Number((m.home_score as { total?: number }).total) || 0 : Number(m.home_score) || 0;
                         const aScore = typeof m.away_score === 'object' && m.away_score !== null && 'total' in m.away_score ? Number((m.away_score as { total?: number }).total) || 0 : Number(m.away_score) || 0;

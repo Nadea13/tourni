@@ -1,24 +1,27 @@
 "use client";
 
 import * as React from "react";
+import * as SelectPrimitive from "@radix-ui/react-select";
+import Image from "next/image";
 import { useLocale } from "next-intl";
 import { useRouter } from "next/navigation";
-import { X, Plus, Loader2 } from "lucide-react";
+import { X, Plus, Loader2, Shield, ArrowLeftRight, Lock } from "lucide-react";
 import { useBracketStore } from "@/lib/stores/bracket-store";
 import { saveBracketCanvas } from "@/actions/tournaments/bracket";
 import { useToast } from "@/hooks/use-toast";
-import { isMatchEnded } from "./match-node";
-import { Match } from "@/types";
+import { isMatchEnded, hasMatchResult, isSameTeamIdentifier } from "./match-node";
+import { Match, Registration } from "@/types";
+import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import {
     Select,
     SelectContent,
     SelectItem,
-    SelectTrigger,
-    SelectValue,
 } from "@/components/ui/dropdown";
 import { DateTimePicker } from "@/components/ui/date-time-picker";
+import { MatchSettingTimerPill } from "./live-match-timer";
+import { TeamRosterDetailsDialog } from "@/features/dialogs";
 
 export type MatchItem = {
     id: string;
@@ -48,37 +51,44 @@ export function MatchNodeSettings({
     const locale = useLocale();
     const router = useRouter();
     const { toast } = useToast();
-    const { nodes, edges, teams, updateNodeData, getCanvasData } = useBracketStore();
+    const { nodes, edges, teams, sport: storeSport, matches: storeMatches, updateNodeData, getCanvasData, setMatches: setStoreMatches, onEdgesChange } = useBracketStore();
     const [isCreatingConsoleId, setIsCreatingConsoleId] = React.useState<string | null>(null);
+    const [selectedTeamForDetails, setSelectedTeamForDetails] = React.useState<Registration | null>(null);
+    const activeDbMatches = storeMatches.length > 0 ? storeMatches : dbMatches;
 
     // Resolve live teams from edges or database assignments
     const getResolvedTeam = React.useCallback(
-        (targetId: string, handleId: string, dbMatch: Match | undefined, slot: 'a' | 'b') => {
-            // 1. If we have a database match with a team ID assigned, use it
-            if (dbMatch) {
+        (targetId: string, handleId: string, dbMatch: Match | undefined, slot: 'a' | 'b', placeholder?: string) => {
+            const trimmedPlaceholder = (placeholder || "").trim();
+            const isSlotTBD = !trimmedPlaceholder || trimmedPlaceholder === "TBD" || trimmedPlaceholder.startsWith("Seed #");
+            const hasResult = hasMatchResult(dbMatch);
+            const edge = edges.find(e => e.target === targetId && e.targetHandle === handleId);
+
+            // When match has no results and no incoming edge, use the node's placeholder directly so edits/swaps reflect in real time
+            if (!hasResult && !edge) {
+                if (isSlotTBD) return null;
+                return trimmedPlaceholder;
+            }
+
+            // 1. If we have a database match with a team ID assigned, use it UNLESS explicitly cleared to TBD without results
+            if (dbMatch && (hasResult || !edge)) {
+                if (!hasResult && isSlotTBD) {
+                    return null;
+                }
                 const teamId = slot === 'a' ? dbMatch.home_team_id : dbMatch.away_team_id;
                 if (teamId) {
                     const team = teams.find(t => String(t.team_id || t.id) === String(teamId));
                     if (team) return team.name;
                 }
+                if (slot === 'a' && dbMatch.home_team?.name) return dbMatch.home_team.name;
+                if (slot === 'b' && dbMatch.away_team?.name) return dbMatch.away_team.name;
             }
 
             // 2. Fall back to resolved placeholder/ranking/label from edge connections
-            const edge = edges.find(e => e.target === targetId && e.targetHandle === handleId);
             if (!edge) return null;
 
             const sourceNode = nodes.find(n => n.id === edge.source);
             if (!sourceNode) return null;
-
-            // Handle TeamListNode propagation
-            if (sourceNode.type === 'teamListNode') {
-                const teamIdMatch = edge.sourceHandle?.match(/team-(.+)/);
-                if (teamIdMatch) {
-                    const teamId = teamIdMatch[1];
-                    const team = teams.find(t => String(t.id) === String(teamId) || String(t.team_id) === String(teamId));
-                    return team?.name || null;
-                }
-            }
 
             // Handle StandingNode/GroupNode propagation
             if (sourceNode.type === 'standingNode' || sourceNode.type === 'groupNode') {
@@ -104,7 +114,7 @@ export function MatchNodeSettings({
                     const sourceMatches = Array.isArray(sourceNode.data.matches) ? (sourceNode.data.matches as any[]) : [];
                     const sourceMatchItem = sourceMatches[matchIdx];
 
-                    const sourceDbMatch = (dbMatches || []).find(m =>
+                    const sourceDbMatch = (activeDbMatches || []).find(m =>
                         (sourceMatchItem?.dbId && m.id === sourceMatchItem.dbId) ||
                         (sourceMatchItem?.matchId && m.id === sourceMatchItem.matchId) ||
                         (m.node_id === sourceNode.id && ((m.idx_match ?? m.match_index) === (matchIdx + 1))) ||
@@ -174,45 +184,256 @@ export function MatchNodeSettings({
 
             return null;
         },
-        [dbMatches, edges, nodes, teams]
+        [activeDbMatches, edges, nodes, teams]
     );
 
     const groupEdge = edges.find(e => e.target === id && e.targetHandle === 'group-in');
     const connectedGroupNode = groupEdge ? nodes.find(n => n.id === groupEdge.source) : null;
 
-    const getSelectOptions = (currentVal: string) => {
+    const getInitials = (name: string) => {
+        const parts = name.trim().split(/\s+/);
+        if (parts.length > 1) {
+            return (parts[0][0] + parts[1][0]).toUpperCase();
+        }
+        return name.slice(0, 2).toUpperCase();
+    };
+
+    const isPlaceholderLabel = (label?: string | null) => {
+        const trimmed = (label || "").trim();
+        return (
+            !trimmed ||
+            trimmed === "TBD" ||
+            trimmed === "Bye" ||
+            trimmed.startsWith("Seed #") ||
+            trimmed.startsWith("Winner (") ||
+            trimmed.startsWith("Winner of") ||
+            trimmed.startsWith("Loser (") ||
+            trimmed.startsWith("Loser of") ||
+            /^\d+(st|nd|rd|th) Place \(/.test(trimmed)
+        );
+    };
+
+    const findTeamByNameOrId = (teamLabel?: string | null, teamId?: string | null) => {
+        const trimmed = (teamLabel || "").trim();
+        if (trimmed && !isPlaceholderLabel(trimmed)) {
+            const byName = teams.find((t) => t.name.trim().toLowerCase() === trimmed.toLowerCase());
+            if (byName) return byName;
+        }
+        if (teamId) {
+            return teams.find((t) => String(t.id) === String(teamId) || String(t.team_id) === String(teamId));
+        }
+        return undefined;
+    };
+
+    const handleOpenTeamDetails = async (teamLabel: string, teamId?: string | null, fallbackLogo?: string | null) => {
+        const trimmed = (teamLabel || "").trim();
+        if (isPlaceholderLabel(trimmed)) {
+            return;
+        }
+
+        const buildRegistration = (item: any): Registration => {
+            const ps = String(item?.payment_status || "").toLowerCase();
+            const rs = String(item?.registration_status || "").toLowerCase();
+            const s = String(item?.status || "").toLowerCase();
+
+            let mappedStatus: "PENDING" | "PAID" | "REJECTED" = "PAID";
+            if (rs === "rejected" || ps === "rejected" || s === "rejected") {
+                mappedStatus = "REJECTED";
+            } else if (rs === "pending" || ps === "pending" || s === "pending") {
+                mappedStatus = "PENDING";
+            }
+
+            return {
+                id: String(item?.id || teamId || trimmed),
+                tournament_id: item?.tournament_id || tournamentId,
+                team_name: item?.team?.name || item?.name || trimmed,
+                contact_name: item?.contact_name || item?.team?.contact_name || "",
+                contact_phone: item?.contact_phone || item?.team?.contact_phone || "",
+                logo_url: fallbackLogo || item?.team?.logo_img || item?.team?.logo_url || item?.logo_img || item?.logo_url || null,
+                existing_team_id: item?.team_id || item?.team?.id || null,
+                slip_url: item?.slip_img || item?.slip_url || null,
+                payment_status: mappedStatus,
+                trans_ref: item?.remark || null,
+                description: item?.team?.description || item?.description || null,
+                tournament_team_id: String(item?.tournament_team_id || item?.id || teamId || ""),
+                created_at: item?.created_at || new Date().toISOString(),
+            };
+        };
+
+        const matchTeam = (list: any[]) =>
+            list.find(
+                (t) =>
+                    (teamId && (String(t.id) === String(teamId) || String(t.team_id) === String(teamId))) ||
+                    String(t.team?.name || t.name || "").trim().toLowerCase() === trimmed.toLowerCase()
+            );
+
+        const foundInStore = matchTeam(teams);
+        if (foundInStore) {
+            setSelectedTeamForDetails(buildRegistration(foundInStore));
+            return;
+        }
+
+        // Open immediately with fallback info and enrich from API if available
+        setSelectedTeamForDetails(buildRegistration({ id: teamId, name: trimmed, logo_url: fallbackLogo }));
+
+        if (tournamentId) {
+            try {
+                const apiUrl = process.env.NEXT_PUBLIC_API_URL || "http://localhost:8080/api/v1";
+                const url = activeCategoryId
+                    ? `${apiUrl}/tournaments/${tournamentId}/teams?category_id=${activeCategoryId}`
+                    : `${apiUrl}/tournaments/${tournamentId}/teams`;
+                const res = await fetch(url, { cache: "no-store" });
+                if (res.ok) {
+                    const raw = await res.json();
+                    const list = Array.isArray(raw) ? raw : raw?.data || [];
+                    const found = matchTeam(list);
+                    if (found) {
+                        setSelectedTeamForDetails(buildRegistration(found));
+                    }
+                }
+            } catch {
+                // keep fallback details
+            }
+        }
+    };
+
+    const renderTeamAvatar = (
+        teamLabel: string,
+        options?: {
+            teamId?: string | null;
+            fallbackLogo?: string | null;
+            fallbackBadge?: string;
+            size?: "sm" | "md";
+        }
+    ) => {
+        const size = options?.size || "sm";
+        const foundTeam = findTeamByNameOrId(teamLabel, options?.teamId);
+        const logoUrl = foundTeam?.logo_url || options?.fallbackLogo;
+        const isReal = Boolean(foundTeam || options?.teamId || !isPlaceholderLabel(teamLabel));
+        const dimClass = size === "md" ? "size-8" : "size-5";
+        const pxSize = size === "md" ? 32 : 20;
+
+        if (logoUrl) {
+            return (
+                <span
+                    className={cn(
+                        "rounded-full border bg-muted/50 flex items-center justify-center overflow-hidden shrink-0",
+                        dimClass
+                    )}
+                >
+                    <Image
+                        src={logoUrl}
+                        alt={teamLabel}
+                        width={pxSize}
+                        height={pxSize}
+                        className="w-full h-full object-cover"
+                    />
+                </span>
+            );
+        }
+
+        if (isReal) {
+            return (
+                <span
+                    className={cn(
+                        "rounded-full border border-node-2/30 bg-node-2/10 text-node-2 flex items-center justify-center font-black shrink-0",
+                        dimClass,
+                        size === "md" ? "text-[10px]" : "text-[8px]"
+                    )}
+                >
+                    {getInitials(foundTeam?.name || teamLabel)}
+                </span>
+            );
+        }
+
+        return (
+            <span
+                className={cn(
+                    "rounded-full border bg-muted/50 text-muted-foreground flex items-center justify-center font-black shrink-0",
+                    dimClass,
+                    size === "md" ? "text-[10px]" : "text-[8px]"
+                )}
+            >
+                {options?.fallbackBadge ? (
+                    options.fallbackBadge
+                ) : (
+                    <Shield className={size === "md" ? "size-4" : "size-3"} />
+                )}
+            </span>
+        );
+    };
+
+    const isTeamApproved = React.useCallback((item: any) => {
+        const ps = String(item?.payment_status || "").toLowerCase();
+        const rs = String(item?.registration_status || "").toLowerCase();
+        const s = String(item?.status || "").toLowerCase();
+        if (rs === "rejected" || ps === "rejected" || s === "rejected") return false;
+        return (
+            rs === "approved" ||
+            rs === "confirmed" ||
+            s === "approved" ||
+            (s === "registered" && rs !== "pending" && ps !== "pending")
+        );
+    }, []);
+
+    const approvedTeams = React.useMemo(
+        () => teams.filter((t) => isTeamApproved(t)),
+        [teams, isTeamApproved]
+    );
+
+    const getSelectOptions = () => {
         const options = new Set<string>();
         if (connectedGroupNode) {
             const groupTeamCount = (connectedGroupNode.data as { teamCount?: number }).teamCount || 0;
             const groupTeams = (connectedGroupNode.data as { teams?: string[] }).teams || [];
             for (let i = 0; i < groupTeamCount; i++) {
                 const name = groupTeams[i];
-                options.add((!name || name === "TBD") ? `Team ${i + 1}` : name);
+                if (name && name !== "TBD" && approvedTeams.some(t => t.name.trim().toLowerCase() === name.trim().toLowerCase())) {
+                    options.add(name);
+                }
             }
-        }
-        if (currentVal && currentVal !== "TBD" && !teams.some(t => t.name === currentVal)) {
-            options.add(currentVal);
         }
         return Array.from(options);
     };
 
-    const getSelectItems = (optionsList: string[], liveTeam: string | null) => {
+    const getSelectItems = (optionsList: string[], opponentTeam: string | null) => {
         const rendered = new Set<string>();
         rendered.add("TBD");
-        if (liveTeam) {
-            rendered.add(liveTeam);
-        }
         const items: React.ReactNode[] = [];
+
         optionsList.forEach(opt => {
             if (!rendered.has(opt)) {
                 rendered.add(opt);
-                items.push(<SelectItem key={opt} value={opt}>{opt}</SelectItem>);
+                const isOpponent = Boolean(opponentTeam && isSameTeamIdentifier(opt, opponentTeam));
+                items.push(
+                    <SelectItem key={opt} value={opt} disabled={isOpponent}>
+                        <span className="flex items-center gap-2 min-w-0">
+                            {renderTeamAvatar(opt, { size: "sm" })}
+                            <span className="truncate">
+                                {opt}
+                                {isOpponent ? (locale === "th" ? " (คู่แข่ง)" : " (Opponent)") : ""}
+                            </span>
+                        </span>
+                    </SelectItem>
+                );
             }
         });
-        teams.forEach(t => {
+
+        approvedTeams.forEach(t => {
             if (!rendered.has(t.name)) {
                 rendered.add(t.name);
-                items.push(<SelectItem key={t.id} value={t.name}>{t.name}</SelectItem>);
+                const isOpponent = Boolean(opponentTeam && isSameTeamIdentifier(t.name, opponentTeam));
+                items.push(
+                    <SelectItem key={t.id} value={t.name} disabled={isOpponent}>
+                        <span className="flex items-center gap-2 min-w-0">
+                            {renderTeamAvatar(t.name, { teamId: t.team_id || t.id, fallbackLogo: t.logo_url, size: "sm" })}
+                            <span className="truncate">
+                                {t.name}
+                                {isOpponent ? (locale === "th" ? " (คู่แข่ง)" : " (Opponent)") : ""}
+                            </span>
+                        </span>
+                    </SelectItem>
+                );
             }
         });
         return items;
@@ -230,9 +451,14 @@ export function MatchNodeSettings({
         });
 
     return (
-        <div className="space-y-4" id="node-settings-match-schedule">
-            <Label>{locale === "th" ? "รายการแมตช์ในโหนด" : "Matches in Node"}</Label>
-            <div className="space-y-4">
+        <div className="space-y-3" id="node-settings-match-schedule">
+            <div className="flex items-center justify-between">
+                <Label>{locale === "th" ? "รายการแมตช์ในโหนด" : "Matches in Node"}</Label>
+                <span className="text-[10px] font-bold text-muted-foreground bg-muted/50 px-2 py-0.5 rounded-full">
+                    {sortedMatches.length} {locale === "th" ? "แมตช์" : "Matches"}
+                </span>
+            </div>
+            <div className="space-y-3">
                 {sortedMatches.map((match, idx) => {
                     const updateMatch = (updates: Partial<MatchItem>) => {
                         const originalMatches = [...((data.matches as MatchItem[]) || [])];
@@ -243,143 +469,402 @@ export function MatchNodeSettings({
                         }
                     };
 
-                    const dbMatch = dbMatches.find(m =>
+                    const dbMatch = activeDbMatches.find(m =>
                         (match.dbId && m.id === match.dbId) ||
                         (match.matchId && m.id === match.matchId) ||
                         (m.node_id === id && m.match_index === (idx + 1)) ||
                         (m.placeholder_a === match.placeholderA && m.placeholder_b === match.placeholderB)
                     );
-                    const liveTeamA = getResolvedTeam(id, `slot-a-${idx}`, dbMatch, 'a');
-                    const liveTeamB = getResolvedTeam(id, `slot-b-${idx}`, dbMatch, 'b');
+                    const hasResult = hasMatchResult(dbMatch);
+                    const liveTeamA = getResolvedTeam(id, `slot-a-${idx}`, dbMatch, 'a', match.placeholderA);
+                    const liveTeamB = getResolvedTeam(id, `slot-b-${idx}`, dbMatch, 'b', match.placeholderB);
 
-                    const homeOptions = getSelectOptions(match.placeholderA);
-                    const awayOptions = getSelectOptions(match.placeholderB);
+                    const displayHomeName = liveTeamA || match.placeholderA || "TBD";
+                    const displayAwayName = liveTeamB || match.placeholderB || "TBD";
 
-                    const homeSelectItems = getSelectItems(homeOptions, liveTeamA);
-                    const awaySelectItems = getSelectItems(awayOptions, liveTeamB);
+                    const homeOptions = getSelectOptions();
+                    const awayOptions = getSelectOptions();
+
+                    const homeSelectItems = getSelectItems(homeOptions, displayAwayName);
+                    const awaySelectItems = getSelectItems(awayOptions, displayHomeName);
 
                     const matchConsoleId = match.dbId || match.matchId || dbMatch?.id || (!!data.matchId && idx === 0 ? (data.matchId as string) : undefined);
 
+                    const getScoreDisplay = (s: unknown) => {
+                        if (s === null || s === undefined) return null;
+                        if (typeof s === "object" && "total" in (s as Record<string, unknown>)) {
+                            return String((s as Record<string, unknown>).total ?? 0);
+                        }
+                        return String(s);
+                    };
+                    const showScore = dbMatch && dbMatch.status && dbMatch.status !== "scheduled" && (dbMatch.home_score !== null || dbMatch.away_score !== null);
+
+                    const handleSwapTeams = () => {
+                        if (hasResult) return;
+                        const nextHome = displayAwayName;
+                        const nextAway = displayHomeName;
+
+                        const nextHomeTeam = findTeamByNameOrId(nextHome);
+                        const nextAwayTeam = findTeamByNameOrId(nextAway);
+                        const nextHomeTid = isPlaceholderLabel(nextHome) ? null : (nextHomeTeam ? (nextHomeTeam.team_id || nextHomeTeam.id) : null);
+                        const nextAwayTid = isPlaceholderLabel(nextAway) ? null : (nextAwayTeam ? (nextAwayTeam.team_id || nextAwayTeam.id) : null);
+
+                        if (dbMatch) {
+                            setStoreMatches((prev: Match[]) =>
+                                prev.map((m) => {
+                                    if (m.id === dbMatch.id || (m.node_id === id && (m.idx_match ?? m.match_index) === idx + 1)) {
+                                        return {
+                                            ...m,
+                                            home_team_id: nextHomeTid,
+                                            home_team: nextHomeTid && nextHomeTeam ? { id: nextHomeTid, name: nextHomeTeam.name, logo_url: nextHomeTeam.logo_url } : undefined,
+                                            placeholder_a: nextHome,
+                                            placeholder_home: nextHome,
+                                            away_team_id: nextAwayTid,
+                                            away_team: nextAwayTid && nextAwayTeam ? { id: nextAwayTid, name: nextAwayTeam.name, logo_url: nextAwayTeam.logo_url } : undefined,
+                                            placeholder_b: nextAway,
+                                            placeholder_away: nextAway,
+                                        };
+                                    }
+                                    return m;
+                                })
+                            );
+                        }
+
+                        updateMatch({ placeholderA: nextHome, placeholderB: nextAway });
+                        useBracketStore.setState({ isDirty: true });
+                    };
+
                     return (
-                        <div key={match.id || idx} className="p-2 bg-card border rounded-sm space-y-4 relative group">
-                            <div className="flex justify-between items-center">
-                                <span className="text-xs font-black">
-                                    {locale === "th" ? `แมตช์ที่ #${idx + 1}` : `Match #${idx + 1}`}
-                                </span>
-                                <button
-                                    onClick={() => {
-                                        const originalMatches = [...((data.matches as MatchItem[]) || [])];
-                                        const filtered = originalMatches.filter(m => m.id !== match.id);
-                                        updateNodeData(id, { matches: filtered });
-                                    }}
-                                    className="text-muted-foreground hover:text-destructive transition-colors p-1"
-                                    title={locale === "th" ? "ลบแมตช์นี้" : "Delete match"}
-                                >
-                                    <X className="size-4" />
-                                </button>
-                            </div>
-                            <div className="grid grid-cols-2 gap-2">
-                                <div className="space-y-1">
-                                    <Label className="text-[10px]">{locale === "th" ? "ทีมเหย้า" : "Home Team"}</Label>
-                                    <Select
-                                        value={liveTeamA || match.placeholderA}
-                                        onValueChange={(val) => updateMatch({ placeholderA: val })}
-                                    >
-                                        <SelectTrigger size="sm" className={`bg-card w-full ${liveTeamA ? "text-violet-600 font-black" : ""}`}>
-                                            <SelectValue placeholder={locale === "th" ? "เลือกทีม" : "Select Team"} />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="TBD">TBD</SelectItem>
-                                            {liveTeamA && (
-                                                <SelectItem value={liveTeamA} disabled>
-                                                    {liveTeamA} (Live)
-                                                </SelectItem>
-                                            )}
-                                            {homeSelectItems}
-                                        </SelectContent>
-                                    </Select>
+                        <div key={match.id || idx} className="bg-card border rounded-sm overflow-hidden shadow-xs relative group">
+                            {/* Card Header */}
+                            <div className="px-4 py-2 border-b flex justify-between items-center gap-2">
+                                <div className="flex items-center gap-2 min-w-0 flex-1">
+                                    <span className="text-node-2 text-sm font-black flex items-center justify-center shrink-0">
+                                        VS
+                                    </span>
+                                    <span className="text-sm font-bold tracking-tight shrink-0">
+                                        {locale === "th" ? `แมตช์ที่ ${idx + 1}` : `Match #${idx + 1}`}
+                                    </span>
+                                    <DateTimePicker
+                                        date={match.match_date}
+                                        time={match.match_time}
+                                        onChange={(date, time) => {
+                                            updateMatch({ match_date: date, match_time: time });
+                                        }}
+                                        placeholder={locale === "th" ? "เลือกวันและเวลาแข่ง" : "Select date & time"}
+                                        size="sm"
+                                        className="h-7 px-2 text-xs min-w-0"
+                                    />
                                 </div>
-                                <div className="space-y-1">
-                                    <Label className="text-[10px]">{locale === "th" ? "ทีมเยือน" : "Away Team"}</Label>
-                                    <Select
-                                        value={liveTeamB || match.placeholderB}
-                                        onValueChange={(val) => updateMatch({ placeholderB: val })}
-                                    >
-                                        <SelectTrigger size="sm" className={`bg-card w-full ${liveTeamB ? "text-violet-600 font-black" : ""}`}>
-                                            <SelectValue placeholder={locale === "th" ? "เลือกทีม" : "Select Team"} />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="TBD">TBD</SelectItem>
-                                            {liveTeamB && (
-                                                <SelectItem value={liveTeamB} disabled>
-                                                    {liveTeamB} (Live)
-                                                </SelectItem>
-                                            )}
-                                            {awaySelectItems}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                            </div>
-                            <div className="space-y-1">
-                                <Label className="text-[10px]">{locale === "th" ? "วันและเวลาแข่ง" : "Date & Time"}</Label>
-                                <DateTimePicker
-                                    date={match.match_date}
-                                    time={match.match_time}
-                                    onChange={(date, time) => {
-                                        updateMatch({ match_date: date, match_time: time });
-                                    }}
-                                    placeholder={locale === "th" ? "เลือกวันและเวลาแข่ง" : "Select date & time"}
-                                    size="sm"
-                                />
-                            </div>
-
-                            <Button
-                                variant={dbMatch?.status === 'finished' ? "outline" : "default"}
-                                size="sm"
-                                className="w-full"
-                                disabled={isCreatingConsoleId === `${id}-${idx}`}
-                                onClick={async () => {
-                                    let targetId = matchConsoleId;
-                                    setIsCreatingConsoleId(`${id}-${idx}`);
-                                    try {
-                                        const canvasData = getCanvasData();
-                                        const res = await saveBracketCanvas(tournamentId, canvasData, activeCategoryId || undefined);
-                                        if (res.success && res.data) {
-                                            const savedNode = res.data.nodes?.find(n => n.id === id);
-                                            const savedMatches = (savedNode?.data as { matches?: MatchItem[] })?.matches || [];
-                                            const savedMatch = savedMatches[idx];
-                                            if (savedMatch?.dbId || savedMatch?.matchId) {
-                                                targetId = savedMatch.dbId || savedMatch.matchId;
-                                            }
-                                        }
-                                    } catch (err) {
-                                        console.error("Error creating/syncing match console:", err);
-                                    } finally {
-                                        setIsCreatingConsoleId(null);
-                                    }
-
-                                    if (targetId) {
-                                        router.push(`/my-tournaments/${tournamentId}/matches/${targetId}`);
-                                    } else {
-                                        toast({
-                                            title: locale === "th" ? "เกิดข้อผิดพลาด" : "Error",
-                                            description: locale === "th" ? "ไม่สามารถสร้างห้องแข่งขันได้ กรุณาลองใหม่อีกครั้ง" : "Failed to open match console",
-                                            variant: "destructive"
-                                        });
-                                    }
-                                }}
-                            >
-                                {isCreatingConsoleId === `${id}-${idx}` ? (
-                                    <>
-                                        <Loader2 className="size-4 animate-spin" />
-                                        {locale === "th" ? "กำลังเปิดห้องแข่งขัน..." : "Opening Console..."}
-                                    </>
-                                ) : dbMatch?.status === 'finished' ? (
-                                    locale === "th" ? "ดูผลการแข่งขัน" : "VIEW MATCH"
-                                ) : (
-                                    locale === "th" ? "จัดการการแข่งขัน" : "MATCH CONSOLE"
+                                {hasResult && (
+                                    <Lock className="size-4 text-warning" />
                                 )}
-                            </Button>
+                                {!hasResult && (
+                                    <div className="flex items-center gap-1 shrink-0">
+                                        <button
+                                            type="button"
+                                            onClick={handleSwapTeams}
+                                            className="text-muted-foreground hover:text-foreground hover:bg-muted/60 rounded p-1 transition-colors cursor-pointer"
+                                            title={locale === "th" ? "สลับทีมเหย้า ↔ ทีมเยือน" : "Swap Home ↔ Away"}
+                                        >
+                                            <ArrowLeftRight className="size-4" />
+                                        </button>
+                                        <button
+                                            type="button"
+                                            onClick={() => {
+                                                const originalMatches = [...((data.matches as MatchItem[]) || [])];
+                                                const filtered = originalMatches.filter(m => m.id !== match.id);
+                                                updateNodeData(id, { matches: filtered });
+                                                useBracketStore.setState({ isDirty: true });
+                                            }}
+                                            className="text-muted-foreground hover:text-destructive hover:bg-destructive/10 rounded p-1 transition-colors cursor-pointer"
+                                            title={locale === "th" ? "ลบแมตช์นี้" : "Delete match"}
+                                        >
+                                            <X className="size-4" />
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+
+                            <div className="p-4 space-y-4">
+                                {/* Clickable Matchup Banner with Team Icons + Direct Dropdown */}
+                                <div className="flex justify-center items-center gap-4">
+                                    {/* Home Team Trigger & Dropdown */}
+                                    <div className="flex flex-1 items-center justify-end gap-2 min-w-0">
+                                        <Select
+                                            value={displayHomeName}
+                                            disabled={hasResult}
+                                            onValueChange={(val) => {
+                                                if (hasResult) return;
+                                                const opp = displayAwayName;
+                                                if (val !== "TBD" && isSameTeamIdentifier(val, opp)) {
+                                                    toast({
+                                                        title: locale === 'th' ? "ไม่สามารถเลือกทีมเดียวกันได้" : "Duplicate Team",
+                                                        description: locale === 'th' ? "ทีมเดียวกันไม่สามารถอยู่ในแมตช์เดียวกันได้" : "Cannot assign the same team to both slots in the same match",
+                                                        variant: "destructive"
+                                                    });
+                                                    return;
+                                                }
+
+                                                // Clear incoming edge to slot-a
+                                                const connectedEdge = edges.find(e => e.target === id && e.targetHandle === `slot-a-${idx}`);
+                                                if (connectedEdge) {
+                                                    onEdgesChange([{ id: connectedEdge.id, type: 'remove' }]);
+                                                }
+
+                                                const assignedTeam = teams.find(t => t.name.trim().toLowerCase() === val.trim().toLowerCase());
+                                                const tid = assignedTeam ? (assignedTeam.team_id || assignedTeam.id) : null;
+
+                                                if (dbMatch) {
+                                                    setStoreMatches((prev: Match[]) => prev.map(m => {
+                                                        if (m.id === dbMatch.id || (m.node_id === id && (m.idx_match ?? m.match_index) === (idx + 1))) {
+                                                            return {
+                                                                ...m,
+                                                                home_team_id: val === "TBD" ? null : tid,
+                                                                home_team: val === "TBD" ? undefined : (assignedTeam ? { id: tid!, name: assignedTeam.name, logo_url: assignedTeam.logo_url } : undefined),
+                                                                placeholder_a: val,
+                                                                placeholder_home: val,
+                                                            };
+                                                        }
+                                                        return m;
+                                                    }));
+                                                }
+
+                                                updateMatch({ placeholderA: val });
+                                                useBracketStore.setState({ isDirty: true });
+                                            }}
+                                        >
+                                            <SelectPrimitive.Trigger asChild>
+                                                <button
+                                                    type="button"
+                                                    disabled={hasResult}
+                                                    className="flex flex-1 items-center justify-end min-w-0 p-1.5 rounded-sm hover:bg-muted/50 transition-colors cursor-pointer disabled:cursor-not-allowed group/home outline-none"
+                                                >
+                                                    <div className="flex flex-col min-w-0 gap-1 items-end">
+                                                        <span
+                                                            className={cn(
+                                                                "text-xs font-bold truncate max-w-full group-hover/home:text-primary transition-colors",
+                                                                displayHomeName === "TBD" ? "text-muted-foreground" : "text-foreground"
+                                                            )}
+                                                            title={displayHomeName}
+                                                        >
+                                                            {displayHomeName}
+                                                        </span>
+                                                        <span className="flex justify-end text-[10px] text-muted-foreground">
+                                                            {locale === "th" ? "ทีมเหย้า" : "Home"}
+                                                        </span>
+                                                    </div>
+                                                </button>
+                                            </SelectPrimitive.Trigger>
+                                            <SelectContent position="popper" align="start">
+                                                <SelectItem value="TBD">
+                                                    <span className="flex items-center gap-2">
+                                                        {renderTeamAvatar("TBD", { fallbackBadge: "H", size: "sm" })}
+                                                        <span className="text-muted-foreground">TBD</span>
+                                                    </span>
+                                                </SelectItem>
+                                                {homeSelectItems}
+                                            </SelectContent>
+                                        </Select>
+
+                                        {/* Home Team Icon (Clickable to open Team Info Dialog) */}
+                                        <button
+                                            type="button"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                e.preventDefault();
+                                                handleOpenTeamDetails(displayHomeName, dbMatch?.home_team_id, dbMatch?.home_team?.logo_url);
+                                            }}
+                                            disabled={isPlaceholderLabel(displayHomeName)}
+                                            className={cn(
+                                                "rounded-full transition-all shrink-0 outline-none",
+                                                !isPlaceholderLabel(displayHomeName)
+                                                    ? "cursor-pointer hover:scale-110 hover:ring-2 hover:ring-primary/50 active:scale-95"
+                                                    : "cursor-default"
+                                            )}
+                                            title={!isPlaceholderLabel(displayHomeName) ? (locale === "th" ? "ดูข้อมูลทีมเหย้า" : "View Home Team Details") : undefined}
+                                        >
+                                            {renderTeamAvatar(displayHomeName, {
+                                                teamId: dbMatch?.home_team_id,
+                                                fallbackLogo: dbMatch?.home_team?.logo_url,
+                                                fallbackBadge: "H",
+                                                size: "md",
+                                            })}
+                                        </button>
+                                    </div>
+
+                                    {/* VS / Score Pill */}
+                                    <div className="flex flex-col items-center justify-center shrink-0">
+                                        <MatchSettingTimerPill
+                                            dbMatch={dbMatch}
+                                            match={match}
+                                            tournamentId={tournamentId}
+                                            sport={storeSport || 'football'}
+                                        />
+                                        {showScore ? (
+                                            <span className="font-black tracking-tight text-foreground">
+                                                {getScoreDisplay(dbMatch?.home_score)} - {getScoreDisplay(dbMatch?.away_score)}
+                                            </span>
+                                        ) : (
+                                            <span className="font-black text-muted-foreground">
+                                                VS
+                                            </span>
+                                        )}
+                                    </div>
+
+                                    {/* Away Team Trigger & Dropdown */}
+                                    <div className="flex flex-1 items-center justify-start gap-2 min-w-0">
+                                        {/* Away Team Icon (Clickable to open Team Info Dialog) */}
+                                        <button
+                                            type="button"
+                                            onClick={(e) => {
+                                                e.stopPropagation();
+                                                e.preventDefault();
+                                                handleOpenTeamDetails(displayAwayName, dbMatch?.away_team_id, dbMatch?.away_team?.logo_url);
+                                            }}
+                                            disabled={isPlaceholderLabel(displayAwayName)}
+                                            className={cn(
+                                                "rounded-full transition-all shrink-0 outline-none",
+                                                !isPlaceholderLabel(displayAwayName)
+                                                    ? "cursor-pointer hover:scale-110 hover:ring-2 hover:ring-primary/50 active:scale-95"
+                                                    : "cursor-default"
+                                            )}
+                                            title={!isPlaceholderLabel(displayAwayName) ? (locale === "th" ? "ดูข้อมูลทีมเยือน" : "View Away Team Details") : undefined}
+                                        >
+                                            {renderTeamAvatar(displayAwayName, {
+                                                teamId: dbMatch?.away_team_id,
+                                                fallbackLogo: dbMatch?.away_team?.logo_url,
+                                                fallbackBadge: "A",
+                                                size: "md",
+                                            })}
+                                        </button>
+
+                                        <Select
+                                            value={displayAwayName}
+                                            disabled={hasResult}
+                                            onValueChange={(val) => {
+                                                if (hasResult) return;
+                                                const opp = displayHomeName;
+                                                if (val !== "TBD" && isSameTeamIdentifier(val, opp)) {
+                                                    toast({
+                                                        title: locale === 'th' ? "ไม่สามารถเลือกทีมเดียวกันได้" : "Duplicate Team",
+                                                        description: locale === 'th' ? "ทีมเดียวกันไม่สามารถอยู่ในแมตช์เดียวกันได้" : "Cannot assign the same team to both slots in the same match",
+                                                        variant: "destructive"
+                                                    });
+                                                    return;
+                                                }
+
+                                                // Clear incoming edge to slot-b
+                                                const connectedEdge = edges.find(e => e.target === id && e.targetHandle === `slot-b-${idx}`);
+                                                if (connectedEdge) {
+                                                    onEdgesChange([{ id: connectedEdge.id, type: 'remove' }]);
+                                                }
+
+                                                const assignedTeam = teams.find(t => t.name.trim().toLowerCase() === val.trim().toLowerCase());
+                                                const tid = assignedTeam ? (assignedTeam.team_id || assignedTeam.id) : null;
+
+                                                if (dbMatch) {
+                                                    setStoreMatches((prev: Match[]) => prev.map(m => {
+                                                        if (m.id === dbMatch.id || (m.node_id === id && (m.idx_match ?? m.match_index) === (idx + 1))) {
+                                                            return {
+                                                                ...m,
+                                                                away_team_id: val === "TBD" ? null : tid,
+                                                                away_team: val === "TBD" ? undefined : (assignedTeam ? { id: tid!, name: assignedTeam.name, logo_url: assignedTeam.logo_url } : undefined),
+                                                                placeholder_b: val,
+                                                                placeholder_away: val,
+                                                            };
+                                                        }
+                                                        return m;
+                                                    }));
+                                                }
+
+                                                updateMatch({ placeholderB: val });
+                                                useBracketStore.setState({ isDirty: true });
+                                            }}
+                                        >
+                                            <SelectPrimitive.Trigger asChild>
+                                                <button
+                                                    type="button"
+                                                    disabled={hasResult}
+                                                    className="flex flex-1 items-center justify-start min-w-0 p-1.5 rounded-sm hover:bg-muted/50 transition-colors cursor-pointer disabled:cursor-not-allowed group/away outline-none"
+                                                >
+                                                    <div className="flex flex-col min-w-0 gap-1 items-start text-left">
+                                                        <span
+                                                            className={cn(
+                                                                "text-xs font-bold truncate max-w-full group-hover/away:text-primary transition-colors",
+                                                                displayAwayName === "TBD" ? "text-muted-foreground" : "text-foreground"
+                                                            )}
+                                                            title={displayAwayName}
+                                                        >
+                                                            {displayAwayName}
+                                                        </span>
+                                                        <span className="text-[10px] text-muted-foreground">
+                                                            {locale === "th" ? "ทีมเยือน" : "Away"}
+                                                        </span>
+                                                    </div>
+                                                </button>
+                                            </SelectPrimitive.Trigger>
+                                            <SelectContent position="popper" align="end">
+                                                <SelectItem value="TBD">
+                                                    <span className="flex items-center gap-2">
+                                                        {renderTeamAvatar("TBD", { fallbackBadge: "A", size: "sm" })}
+                                                        <span className="text-muted-foreground">TBD</span>
+                                                    </span>
+                                                </SelectItem>
+                                                {awaySelectItems}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                </div>
+
+                                <Button
+                                    variant={dbMatch?.status === 'finished' ? "outline" : "default"}
+                                    size="sm"
+                                    className="w-full"
+                                    disabled={isCreatingConsoleId === `${id}-${idx}`}
+                                    onClick={async () => {
+                                        let targetId = matchConsoleId;
+                                        setIsCreatingConsoleId(`${id}-${idx}`);
+                                        try {
+                                            const canvasData = getCanvasData();
+                                            const res = await saveBracketCanvas(tournamentId, canvasData, activeCategoryId || undefined);
+                                            if (res.success && res.data) {
+                                                const savedNode = res.data.nodes?.find(n => n.id === id);
+                                                const savedMatches = (savedNode?.data as { matches?: MatchItem[] })?.matches || [];
+                                                const savedMatch = savedMatches[idx];
+                                                if (savedMatch?.dbId || savedMatch?.matchId) {
+                                                    targetId = savedMatch.dbId || savedMatch.matchId;
+                                                }
+                                            }
+                                        } catch (err) {
+                                            console.error("Error creating/syncing match console:", err);
+                                        } finally {
+                                            setIsCreatingConsoleId(null);
+                                        }
+
+                                        if (targetId) {
+                                            router.push(`/my-tournaments/${tournamentId}/matches/${targetId}`);
+                                        } else {
+                                            toast({
+                                                title: locale === "th" ? "เกิดข้อผิดพลาด" : "Error",
+                                                description: locale === "th" ? "ไม่สามารถสร้างห้องแข่งขันได้ กรุณาลองใหม่อีกครั้ง" : "Failed to open match console",
+                                                variant: "destructive"
+                                            });
+                                        }
+                                    }}
+                                >
+                                    {isCreatingConsoleId === `${id}-${idx}` ? (
+                                        <>
+                                            <Loader2 className="size-4 animate-spin" />
+                                            {locale === "th" ? "กำลังเปิดห้องแข่งขัน..." : "Opening Console..."}
+                                        </>
+                                    ) : dbMatch?.status === 'finished' ? (
+                                        locale === "th" ? "ดูผลการแข่งขัน" : "VIEW MATCH"
+                                    ) : (
+                                        locale === "th" ? "จัดการการแข่งขัน" : "MATCH CONSOLE"
+                                    )}
+                                </Button>
+                            </div>
                         </div>
                     );
                 })}
@@ -397,6 +882,13 @@ export function MatchNodeSettings({
                     {locale === "th" ? "เพิ่มแมตช์ใหม่ในโหนด" : "Add Match to Node"}
                 </Button>
             </div>
+
+            {/* Team Roster Details Dialog */}
+            <TeamRosterDetailsDialog
+                team={selectedTeamForDetails}
+                open={!!selectedTeamForDetails}
+                onOpenChange={(open) => !open && setSelectedTeamForDetails(null)}
+            />
         </div>
     );
 }

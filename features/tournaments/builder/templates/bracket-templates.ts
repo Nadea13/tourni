@@ -37,6 +37,10 @@ function createEdge(
     targetHandle?: string,
     isDashed = false
 ): Edge {
+    const isWinner = Boolean(sourceHandle && sourceHandle.startsWith("winner"));
+    const isRank = Boolean(sourceHandle && sourceHandle.startsWith("rank-"));
+    const isGroupMatches = isDashed || sourceHandle === "group-matches" || targetHandle === "group-in";
+    const isLoser = Boolean(sourceHandle && sourceHandle.startsWith("loser"));
     return {
         id: `edge-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
         source,
@@ -45,10 +49,11 @@ function createEdge(
         targetHandle: targetHandle || undefined,
         type: "bezier",
         animated: false,
+        className: (isWinner || isRank) ? "edge-winner" : isLoser ? "edge-loser" : undefined,
         style: {
-            stroke: "var(--border)",
+            stroke: (isWinner || isRank || isGroupMatches) ? "var(--muted-foreground)" : "var(--border)",
             strokeWidth: 2,
-            strokeDasharray: isDashed ? "5,5" : "none",
+            strokeDasharray: isGroupMatches ? "5,5" : "none",
             opacity: 1,
         },
     };
@@ -445,12 +450,10 @@ export function generateRoundRobin(
     const offsetY = options?.centerPosition?.y ?? 0;
 
     const groupNodeId = uid("group");
-    const standingNodeId = uid("standing");
-
     const count = Math.max(3, teamCount);
     const teams = Array.from({ length: count }, (_, i) => `Team ${i + 1}`);
 
-    // Group Node
+    // Unified Group Node (with Standings)
     nodes.push({
         id: groupNodeId,
         type: "groupNode",
@@ -460,19 +463,6 @@ export function generateRoundRobin(
             teamCount: count,
             advancingCount: Math.min(count, 2),
             teams,
-        },
-    });
-
-    // Standing Node
-    nodes.push({
-        id: standingNodeId,
-        type: "standingNode",
-        position: { x: offsetX + 340, y: offsetY },
-        data: {
-            label: "League Table",
-            teamCount: count,
-            sourceGroupId: groupNodeId,
-            teams,
             showPlayed: true,
             showWin: true,
             showDraw: true,
@@ -481,9 +471,6 @@ export function generateRoundRobin(
             showPts: true,
         },
     });
-
-    // Connect Group -> Standing
-    edges.push(createEdge(groupNodeId, standingNodeId, "standing", "in"));
 
     // Generate Round Robin Match fixtures
     const matchNodeId = uid("match");
@@ -509,15 +496,15 @@ export function generateRoundRobin(
     nodes.push({
         id: matchNodeId,
         type: "matchNode",
-        position: { x: offsetX + 720, y: offsetY },
+        position: { x: offsetX + 400, y: offsetY },
         data: {
             label: `Fixtures (${pairings.length} Matches)`,
             matches: pairings,
         },
     });
 
-    // Connect Standing bottom -> Match group-in (dashed)
-    edges.push(createEdge(standingNodeId, matchNodeId, "group-matches", "group-in", true));
+    // Connect Group bottom -> Match group-in (dashed)
+    edges.push(createEdge(groupNodeId, matchNodeId, "group-matches", "group-in", true));
 
     return { nodes, edges };
 }
@@ -555,13 +542,12 @@ export function generateGroupStageWithKnockout(
     for (let g = 0; g < effectiveGroupCount; g++) {
         const groupLabel = getGroupLabel(g);
         const gNodeId = uid(`group-${groupLabel.toLowerCase()}`);
-        const sNodeId = uid(`standing-${groupLabel.toLowerCase()}`);
         const mNodeId = uid(`match-group-${groupLabel.toLowerCase()}`);
-        standingNodeIds.push(sNodeId);
+        standingNodeIds.push(gNodeId);
 
         const groupTeams = Array.from({ length: teamsPerGroup }, (_, i) => `Team ${groupLabel}${i + 1}`);
 
-        // Group Node
+        // Unified Group Node (with Standings)
         nodes.push({
             id: gNodeId,
             type: "groupNode",
@@ -571,20 +557,6 @@ export function generateGroupStageWithKnockout(
                 teamCount: teamsPerGroup,
                 advancingCount: 2,
                 teams: groupTeams,
-            },
-        });
-
-        // Standing Node
-        nodes.push({
-            id: sNodeId,
-            type: "standingNode",
-            position: { x: offsetX + 340, y: offsetY + g * groupSpacingY },
-            data: {
-                label: `Standings Group ${groupLabel}`,
-                teamCount: teamsPerGroup,
-                advancingCount: 2,
-                sourceGroupId: gNodeId,
-                teams: groupTeams,
                 showPlayed: true,
                 showWin: true,
                 showDraw: true,
@@ -593,9 +565,6 @@ export function generateGroupStageWithKnockout(
                 showPts: true,
             },
         });
-
-        // Connect Group -> Standing
-        edges.push(createEdge(gNodeId, sNodeId, "standing", "in"));
 
         // Generate Group Stage Match fixtures (Round-robin)
         const count = teamsPerGroup;
@@ -618,25 +587,25 @@ export function generateGroupStageWithKnockout(
             indices.splice(1, 0, indices.pop()!);
         }
 
-        // Match Node placed below Standing Node
+        // Match Node placed next to Group Node
         nodes.push({
             id: mNodeId,
             type: "matchNode",
-            position: { x: offsetX + 340, y: offsetY + g * groupSpacingY + 280 },
+            position: { x: offsetX + 400, y: offsetY + g * groupSpacingY },
             data: {
                 label: `Group ${groupLabel} (${pairings.length} Matches)`,
                 matches: pairings,
             },
         });
 
-        // Connect Standing bottom -> Match top (dashed)
-        edges.push(createEdge(sNodeId, mNodeId, "group-matches", "group-in", true));
+        // Connect Group bottom -> Match top (dashed)
+        edges.push(createEdge(gNodeId, mNodeId, "group-matches", "group-in", true));
     }
 
     // 2. Build Knockout Bracket
     // Each group advances 2 teams -> total knockout teams = effectiveGroupCount * 2
     // Number of matches in Round 1 = effectiveGroupCount
-    const knockoutOffsetX = offsetX + 720;
+    const knockoutOffsetX = offsetX + 780;
 
     const getRoundName = (matchesInRound: number): string => {
         if (matchesInRound === 1) return "Grand Final";

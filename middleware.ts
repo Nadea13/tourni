@@ -66,6 +66,26 @@ export default async function middleware(request: NextRequest) {
         return NextResponse.redirect(inboxesUrl);
     }
 
+
+    // If user accesses /dashboard/tournament-teams or /dashboard/tournament-teams/*, redirect to /inboxes/teams/*
+    if (path.startsWith(`/${locale}/dashboard/tournament-teams`) || path.startsWith('/dashboard/tournament-teams')) {
+        const targetPath = path
+            .replace(new RegExp(`^\\/${locale}\\/dashboard\\/tournament-teams`), `/${locale}/inboxes/teams`)
+            .replace(/^\/dashboard\/tournament-teams/, `/${locale}/inboxes/teams`);
+        const targetUrl = new URL(`${targetPath}${request.nextUrl.search}`, request.url);
+        return NextResponse.redirect(targetUrl);
+    }
+
+
+    // If user accesses /dashboard/registrations or /dashboard/registrations/*, redirect to /home/registrations/*
+    if (path.startsWith(`/${locale}/dashboard/registrations`) || path.startsWith('/dashboard/registrations')) {
+        const targetPath = path
+            .replace(new RegExp(`^\\/${locale}\\/dashboard\\/registrations`), `/${locale}/home/registrations`)
+            .replace(/^\/dashboard\/registrations/, `/${locale}/home/registrations`);
+        const registrationsUrl = new URL(`${targetPath}${request.nextUrl.search}`, request.url);
+        return NextResponse.redirect(registrationsUrl);
+    }
+
     // If user accesses /dashboard/settings, redirect to /settings
     if (path.startsWith(`/${locale}/dashboard/settings`) || path.startsWith('/dashboard/settings')) {
         const targetPath = path
@@ -73,6 +93,13 @@ export default async function middleware(request: NextRequest) {
             .replace(/^\/dashboard\/settings/, `/${locale}/settings`);
         const settingsUrl = new URL(`${targetPath}${request.nextUrl.search}`, request.url);
         return NextResponse.redirect(settingsUrl);
+    }
+
+
+    // Catch-all fallback for any other /dashboard route -> redirect to /home
+    if (path.startsWith(`/${locale}/dashboard`) || path.startsWith('/dashboard')) {
+        const homeUrl = new URL(`/${locale}/home${request.nextUrl.search}`, request.url);
+        return NextResponse.redirect(homeUrl);
     }
 
     if (token && isAuthPage) {

@@ -5,10 +5,14 @@ import { getServerSession } from "@/lib/auth-server";
 
 export default async function TournamentTeamDetailPage({
     params,
+    searchParams,
 }: {
     params: Promise<{ id: string; locale: string }>;
+    searchParams?: Promise<{ [key: string]: string | string[] | undefined }>;
 }) {
     const { id, locale } = await params;
+    const sp = (await searchParams) || {};
+    const isTeamRequest = sp.from === 'team_request';
     const session = await getServerSession();
 
     if (!session?.user) {
@@ -22,10 +26,12 @@ export default async function TournamentTeamDetailPage({
     }
 
     if (!team) {
-        redirect(`/${locale}/my-teams`);
+        redirect(`/${locale}/inboxes`);
     }
 
-    const playersResult = await getPlayers(id);
+    team.isParticipation = true;
+
+    const playersResult = await getPlayers(team.id, true);
     const initialPlayers = playersResult.success ? (playersResult.data || []) : [];
 
     return (
@@ -34,6 +40,7 @@ export default async function TournamentTeamDetailPage({
                 team={team}
                 initialPlayers={initialPlayers}
                 backHref={`/${locale}/inboxes`}
+                isTeamRequest={isTeamRequest}
             />
         </div>
     );

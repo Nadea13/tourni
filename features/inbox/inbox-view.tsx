@@ -32,7 +32,8 @@ import {
     rejectInvite,
     getTournamentTeamRoster,
     approveTeamManagementRequest,
-    rejectTeamManagementRequest
+    rejectTeamManagementRequest,
+    cancelTeamManagementRequest
 } from "@/actions/tournaments/staff";
 import {
     approveRegistration,
@@ -53,6 +54,16 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/avatar";
 import { TabOption } from "@/components/ui/tab";
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import {
+    AlertDialog,
+    AlertDialogAction,
+    AlertDialogCancel,
+    AlertDialogContent,
+    AlertDialogDescription,
+    AlertDialogFooter,
+    AlertDialogHeader,
+    AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { useRouter, useSearchParams } from "next/navigation";
@@ -90,7 +101,7 @@ type NotificationItem =
         team_id?: string;
         team_name: string;
         team_logo?: string | null;
-        status: 'pending' | 'approved' | 'rejected';
+        status: 'pending' | 'approved' | 'rejected' | 'cancelled';
         created_at: string;
     }
     | {
@@ -104,7 +115,7 @@ type NotificationItem =
         requester_avatar?: string | null;
         contact_phone: string;
         message: string | null;
-        status: 'pending' | 'approved' | 'rejected';
+        status: 'pending' | 'approved' | 'rejected' | 'cancelled';
         created_at: string;
     }
     | {
@@ -201,7 +212,7 @@ export function InboxesView() {
     const [notifications, setNotifications] = useState<NotificationItem[]>([]);
     const [isLoading, setIsLoading] = useState(true);
     const [isPending, startTransition] = useTransition();
-    const [actionState, setActionState] = useState<Record<string, 'accepted' | 'approved' | 'rejected' | 'error' | null>>({});
+    const [actionState, setActionState] = useState<Record<string, 'accepted' | 'approved' | 'rejected' | 'cancelled' | 'error' | null>>({});
     
     const tabParam = searchParams.get('tab') as TabValue | null;
     const [activeTab, setActiveTab] = useState<TabValue>(tabParam || 'all');
@@ -457,6 +468,42 @@ export function InboxesView() {
                     description: res.error || "Failed to approve the request.",
                     variant: "destructive",
                 });
+            }
+        });
+    };
+
+    const [teamReqToCancel, setTeamReqToCancel] = useState<{ id: string; team_id?: string } | null>(null);
+
+    const handleConfirmCancelTeamRequest = () => {
+        if (!teamReqToCancel) return;
+        const targetId = teamReqToCancel.id;
+        setActionState(prev => ({ ...prev, [targetId]: 'cancelled' }));
+        startTransition(async () => {
+            try {
+                const res = await cancelTeamManagementRequest(targetId);
+                if (res.success) {
+                    toast({
+                        title: isTh ? "สำเร็จ" : "Success",
+                        description: isTh ? "ยกเลิกคำขอจัดการทีมเรียบร้อยแล้ว" : "Team request cancelled successfully."
+                    });
+                    setNotifications(prev => prev.map(n => (n.id === targetId && n.type === 'team_request') ? { ...n, status: 'cancelled' } : n));
+                } else {
+                    setActionState(prev => ({ ...prev, [targetId]: null }));
+                    toast({
+                        title: "Error",
+                        description: res.error || "Failed to cancel request",
+                        variant: "destructive"
+                    });
+                }
+            } catch {
+                setActionState(prev => ({ ...prev, [targetId]: null }));
+                toast({
+                    title: "Error",
+                    description: "Failed to cancel request",
+                    variant: "destructive"
+                });
+            } finally {
+                setTeamReqToCancel(null);
             }
         });
     };
@@ -768,6 +815,7 @@ export function InboxesView() {
     const getStatusText = (status: string) => {
         if (status === 'approved' || status === 'accepted') return tCommon("approved") || "Approved";
         if (status === 'rejected') return tCommon("rejected") || "Rejected";
+        if (status === 'cancelled') return isTh ? "ยกเลิกแล้ว" : "Cancelled";
         return tCommon("pending") || "Pending";
     };
 
@@ -1008,8 +1056,8 @@ export function InboxesView() {
                                                             {isTh ? "ขอปลดล็อครายชื่อ" : "Unlock Request"}
                                                         </Badge>
                                                     )}
-                                                    <span className="text-[10px] text-muted-foreground/30 font-bold">•</span>
-                                                    <span className="text-[10px] text-muted-foreground/60 font-medium">
+                                                    <span className="text-xs text-muted-foreground font-bold">•</span>
+                                                    <span className="text-xs text-muted-foreground font-medium">
                                                         {formatDate(item.created_at, "MMM d, yyyy · HH:mm", locale)}
                                                     </span>
                                                 </div>
@@ -1022,11 +1070,11 @@ export function InboxesView() {
                                                 item.action_type === 'tournament_registration' && hasRosterSubmissions && !isRosterActionApproved ? (
                                                     <div className="flex items-center gap-1.5 md:gap-2">
                                                         <Button
-                                                            variant="outline"
+                                                            variant="ghost"
                                                             size="sm"
                                                             onClick={() => handleRejectTournamentRoster(item.id, item.tournament_id)}
                                                             disabled={isPending}
-                                                            className="text-destructive hover:bg-destructive/10 hover:text-destructive text-xs"
+                                                            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
                                                         >
                                                             {isPending && <Loader2 className="size-4 animate-spin" />}
                                                             {isTh ? "ปฏิเสธ" : "Reject"}
@@ -1035,7 +1083,6 @@ export function InboxesView() {
                                                             size="sm"
                                                             onClick={() => handleApproveTournamentRoster(item.id, item.tournament_id)}
                                                             disabled={isPending}
-                                                            className="font-bold text-xs"
                                                         >
                                                             {isPending && <Loader2 className="size-4 animate-spin" />}
                                                             {isTh ? "ยอมรับเอกสาร" : "Accept Roster"}
@@ -1071,15 +1118,15 @@ export function InboxesView() {
                                                     </Badge>
                                                 )
                                             ) : (
-                                                <div className="flex items-center gap-1.5 md:gap-2">
+                                                <div className="flex items-center">
                                                     {item.action_type === 'tournament_registration' ? (
                                                         <>
                                                             <Button
-                                                                variant="outline"
+                                                                variant="ghost"
                                                                 size="sm"
                                                                 onClick={() => handleRejectTournamentReg(item.id, item.tournament_id)}
                                                                 disabled={isPending}
-                                                                className="text-destructive hover:bg-destructive/10 hover:text-destructive text-xs"
+                                                                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
                                                             >
                                                                 {isPending && <Loader2 className="size-4 animate-spin" />}
                                                                 {isTh ? "ปฏิเสธ" : "Reject"}
@@ -1088,7 +1135,6 @@ export function InboxesView() {
                                                                 size="sm"
                                                                 onClick={() => handleApproveTournamentReg(item.id, item.tournament_id)}
                                                                 disabled={isPending}
-                                                                className="font-bold text-xs"
                                                             >
                                                                 {isPending && <Loader2 className="size-4 animate-spin" />}
                                                                 {isTh ? "ยืนยันทีม" : "Approve Team"}
@@ -1098,11 +1144,11 @@ export function InboxesView() {
                                                         hasRosterSubmissions ? (
                                                             <>
                                                                 <Button
-                                                                    variant="outline"
+                                                                    variant="ghost"
                                                                     size="sm"
                                                                     onClick={() => handleRejectTournamentRoster(item.id, item.tournament_id)}
                                                                     disabled={isPending}
-                                                                    className="text-destructive hover:bg-destructive/10 hover:text-destructive text-xs"
+                                                                    className="text-destructive hover:bg-destructive/10 hover:text-destructive"
                                                                 >
                                                                     {isPending && <Loader2 className="size-4 animate-spin" />}
                                                                     {isTh ? "ปฏิเสธ" : "Reject"}
@@ -1112,7 +1158,7 @@ export function InboxesView() {
                                                                     onClick={() => handleApproveTournamentRoster(item.id, item.tournament_id)}
                                                                     disabled={!isTeamApproved || isPending}
                                                                     title={!isTeamApproved ? (isTh ? "กรุณายืนยันทีมก่อนยอมรับเอกสาร" : "Please approve team first") : undefined}
-                                                                    className="font-bold text-xs disabled:opacity-50"
+                                                                    className="disabled:opacity-50"
                                                                 >
                                                                     {isPending && <Loader2 className="size-4 animate-spin" />}
                                                                     {isTh ? "ยอมรับเอกสาร" : "Accept Roster"}
@@ -1126,11 +1172,11 @@ export function InboxesView() {
                                                     ) : (
                                                         <>
                                                             <Button
-                                                                variant="outline"
+                                                                variant="ghost"
                                                                 size="sm"
                                                                 onClick={() => handleRejectTournamentUnlock(item.id, item.tournament_id)}
                                                                 disabled={isPending}
-                                                                className="text-destructive hover:bg-destructive/10 hover:text-destructive text-xs"
+                                                                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
                                                             >
                                                                 {isPending && <Loader2 className="size-4 animate-spin" />}
                                                                 {isTh ? "ปฏิเสธ" : "Reject"}
@@ -1139,7 +1185,6 @@ export function InboxesView() {
                                                                 size="sm"
                                                                 onClick={() => handleApproveTournamentUnlock(item.id, item.tournament_id)}
                                                                 disabled={isPending}
-                                                                className="font-bold text-xs"
                                                             >
                                                                 {isPending && <Loader2 className="size-4 animate-spin" />}
                                                                 {isTh ? "ปลดล็อค" : "Unlock"}
@@ -1164,7 +1209,10 @@ export function InboxesView() {
 
                                     {/* Inline Expandable Registration Details Dropdown Section */}
                                     {isDetailsExpanded && item.action_type === 'tournament_registration' && (
-                                        <div className="pl-0 sm:pl-[52px] animate-in fade-in-50 slide-in-from-top-1 duration-200">
+                                        <div
+                                            onClick={(e) => e.stopPropagation()}
+                                            className="pl-0 sm:pl-[54px] md:pl-[58px] animate-in fade-in-50 slide-in-from-top-1 duration-200"
+                                        >
                                             <div className="rounded-sm border border-border bg-card overflow-hidden">
                                                 {/* Header */}
                                                 <div className="p-4 flex items-center justify-between border-b border-border">
@@ -1303,7 +1351,10 @@ export function InboxesView() {
 
                                     {/* Inline Expandable Roster Inspection Section */}
                                     {isRosterExpanded && (
-                                        <div className="mt-2 space-y-3.5 animate-in fade-in-50 slide-in-from-top-1 duration-200">
+                                        <div
+                                            onClick={(e) => e.stopPropagation()}
+                                            className="pl-0 sm:pl-[54px] md:pl-[58px] mt-2 space-y-3.5 animate-in fade-in-50 slide-in-from-top-1 duration-200"
+                                        >
                                             {/* Alert banner if team registration has not been approved */}
                                             {!isTeamApproved && (
                                                 <div className="p-3 rounded-sm bg-transparent border border-amber-500/30 text-amber-700 dark:text-amber-400 text-xs flex items-center gap-2">
@@ -1405,7 +1456,6 @@ export function InboxesView() {
                                                                     onClick={toggleSelectAll}
                                                                     disabled={!isTeamApproved}
                                                                     title={!isTeamApproved ? (isTh ? "กรุณายืนยันทีมก่อน" : "Please approve team first") : undefined}
-                                                                    className="h-8 text-xs shrink-0 self-start sm:self-auto"
                                                                 >
                                                                     {allPendingSelected
                                                                         ? (isTh ? "ยกเลิกเลือกทั้งหมด" : "Deselect All")
@@ -1428,7 +1478,8 @@ export function InboxesView() {
                                                                     return (
                                                                         <div
                                                                             key={player.id || idx}
-                                                                            onClick={() => {
+                                                                            onClick={(e) => {
+                                                                                e.stopPropagation();
                                                                                 if (isPendingStatus && isTeamApproved) {
                                                                                     toggleSelectPlayer(player.id);
                                                                                 }
@@ -1445,6 +1496,12 @@ export function InboxesView() {
                                                                                     <div
                                                                                         role="checkbox"
                                                                                         aria-checked={isSelected}
+                                                                                        onClick={(e) => {
+                                                                                            e.stopPropagation();
+                                                                                            if (isTeamApproved) {
+                                                                                                toggleSelectPlayer(player.id);
+                                                                                            }
+                                                                                        }}
                                                                                         className={cn(
                                                                                             "shrink-0 p-0.5 text-muted-foreground rounded-sm transition-colors",
                                                                                             isTeamApproved ? "hover:text-foreground cursor-pointer" : "opacity-40 cursor-not-allowed"
@@ -1564,7 +1621,6 @@ export function InboxesView() {
                                                                     size="sm"
                                                                     onClick={() => handleRejectTournamentRoster(expandedRosterItem.id, expandedRosterItem.tournament_id)}
                                                                     disabled={isPending || isBatchApproving}
-                                                                    className="h-8 text-xs"
                                                                 >
                                                                     {isPending && <Loader2 className="size-4 animate-spin" />}
                                                                     {isTh ? "ปฏิเสธทั้งหมด" : "Reject All"}
@@ -1578,7 +1634,6 @@ export function InboxesView() {
                                                                             onClick={handleApproveSelectedPlayers}
                                                                             disabled={!isTeamApproved || isPending || isBatchApproving}
                                                                             title={!isTeamApproved ? (isTh ? "กรุณายืนยันทีมก่อนอนุมัติ" : "Please approve team first") : undefined}
-                                                                            className="h-8 text-xs"
                                                                         >
                                                                             {isBatchApproving && <Loader2 className="size-4 animate-spin" />}
                                                                             {isTh
@@ -1592,7 +1647,6 @@ export function InboxesView() {
                                                                         onClick={() => handleApproveTournamentRoster(expandedRosterItem.id, expandedRosterItem.tournament_id)}
                                                                         disabled={!isTeamApproved || isPending || isBatchApproving}
                                                                         title={!isTeamApproved ? (isTh ? "กรุณายืนยันทีมก่อนอนุมัติ" : "Please approve team first") : undefined}
-                                                                        className="h-8 text-xs"
                                                                     >
                                                                         {isPending && <Loader2 className="size-4 animate-spin" />}
                                                                         {isTh ? "ยอมรับทั้งหมดและล็อครายชื่อ" : "Accept All and Lock"}
@@ -1608,7 +1662,10 @@ export function InboxesView() {
 
                                     {/* Expand / Collapse Roster Button: Compact Badge Style (like add-player-form) */}
                                     {(item.action_type === 'tournament_registration' || item.action_type === 'tournament_roster_submission') && hasRosterSubmissions && (
-                                        <div className="flex items-center justify-center pt-1">
+                                        <div
+                                            onClick={(e) => e.stopPropagation()}
+                                            className="pl-0 sm:pl-[54px] md:pl-[58px] flex items-center justify-center pt-1"
+                                        >
                                             <button
                                                 type="button"
                                                 onClick={() => toggleExpandRoster({
@@ -1645,12 +1702,19 @@ export function InboxesView() {
                             const currentStatus = actionState[item.id] || item.status;
                             const tournamentInitials = getInitials(item.tournament_name);
                             const roleLabel = getRoleLabel(item.role, isTh);
+                            const isApproved = currentStatus === 'accepted' || currentStatus === 'approved';
 
                             return (
                                 <div
                                     key={`invite-${item.id}`}
                                     className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-muted/30 transition-colors cursor-pointer group"
-                                    onClick={() => router.push(`/${locale}/my-tournaments/${item.tournament_id}`)}
+                                    onClick={() => {
+                                        if (isApproved) {
+                                            router.push(`/${locale}/my-tournaments/${item.tournament_id}`);
+                                        } else {
+                                            router.push(`/${locale}/tournaments/${item.tournament_id}`);
+                                        }
+                                    }}
                                 >
                                     <div className="flex items-start gap-3 md:gap-4 min-w-0 flex-1">
                                         <Avatar className="h-10 w-10 rounded-full shrink-0 bg-muted/40 overflow-hidden">
@@ -1698,8 +1762,8 @@ export function InboxesView() {
                                                     </Badge>
                                                 )}
 
-                                                <span className="text-[10px] text-muted-foreground/30 font-bold">•</span>
-                                                <span className="text-[10px] text-muted-foreground/60 font-medium">
+                                                <span className="text-xs text-muted-foreground font-bold">•</span>
+                                                <span className="text-xs text-muted-foreground font-medium">
                                                     {formatDate(item.created_at, "MMM d, yyyy · HH:mm", locale)}
                                                 </span>
                                             </div>
@@ -1714,16 +1778,16 @@ export function InboxesView() {
                                                 </Badge>
                                             </div>
                                         ) : (
-                                            <div className="flex items-center gap-1.5 md:gap-2">
+                                            <div className="flex items-center">
                                                 <Button
-                                                    variant="outline"
+                                                    variant="ghost"
                                                     size="sm"
                                                     onClick={(e) => {
                                                         e.stopPropagation();
                                                         handleRejectInvite(item.tournament_id, item.id);
                                                     }}
                                                     disabled={isPending}
-                                                    className="text-destructive hover:bg-destructive/10 hover:text-destructive text-xs"
+                                                    className="text-destructive hover:bg-destructive/10 hover:text-destructive"
                                                 >
                                                     {isPending && <Loader2 className="size-4 animate-spin" />}
                                                     {isTh ? "ปฏิเสธ" : "Decline"}
@@ -1735,7 +1799,6 @@ export function InboxesView() {
                                                         handleAcceptInvite(item.tournament_id, item.id);
                                                     }}
                                                     disabled={isPending}
-                                                    className="font-bold text-xs"
                                                 >
                                                     {isPending && <Loader2 className="size-4 animate-spin" />}
                                                     {isTh ? "ตอบรับ" : "Accept"}
@@ -1759,7 +1822,7 @@ export function InboxesView() {
                                 <div
                                     key={`reg-${item.id}`}
                                     className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-muted/30 transition-colors cursor-pointer group"
-                                    onClick={() => router.push(`/${locale}/dashboard/tournament-teams/${item.id}${squadViewQuery}`)}
+                                    onClick={() => router.push(`/${locale}/inboxes/teams/${item.id}${squadViewQuery}`)}
                                 >
                                     <div className="flex items-start gap-3 md:gap-4">
                                         <Avatar className="h-10 w-10 rounded-full shrink-0 bg-muted/40 overflow-hidden">
@@ -1777,11 +1840,11 @@ export function InboxesView() {
                                         <div className="space-y-1.5 min-w-0 flex-1">
                                             {isTh ? (
                                                 <p className="text-sm font-normal leading-relaxed text-foreground">
-                                                    การสมัครของทีม <span className="font-semibold text-foreground">{item.team_name}</span> ในรายการ <span className="font-semibold text-foreground">{item.tournament_name}</span> ได้รับการ <span className="font-semibold text-foreground">{getStatusText(regStatus)}</span>
+                                                    การสมัครของทีม <span className="font-semibold text-foreground">{item.team_name}</span> ในรายการ <span className="font-semibold text-foreground">{item.tournament_name}</span>
                                                 </p>
                                             ) : (
                                                 <p className="text-sm font-normal leading-relaxed text-foreground">
-                                                    Registration for team <span className="font-semibold text-foreground">{item.team_name}</span> in <span className="font-semibold text-foreground">{item.tournament_name}</span> is <span className="font-semibold text-foreground">{getStatusText(regStatus)}</span>
+                                                    Registration for team <span className="font-semibold text-foreground">{item.team_name}</span> in <span className="font-semibold text-foreground">{item.tournament_name}</span>
                                                 </p>
                                             )}
                                             <div className="flex items-center gap-2 flex-wrap">
@@ -1794,12 +1857,12 @@ export function InboxesView() {
                                                         {getStatusText(regStatus)}
                                                     </Badge>
                                                 ) : (
-                                                    <Badge variant="outline" className="border-amber-500/50 text-amber-600 bg-amber-500/10">
+                                                    <Badge variant="outline" className="border-warning/50 text-warning bg-warning/10">
                                                         {getStatusText(regStatus)}
                                                     </Badge>
                                                 )}
-                                                <span className="text-[10px] text-muted-foreground/30 font-bold">•</span>
-                                                <span className="text-[10px] text-muted-foreground/60 font-medium">
+                                                <span className="text-xs text-muted-foreground font-bold">•</span>
+                                                <span className="text-xs text-muted-foreground font-medium">
                                                     {formatDate(item.created_at, "MMM d, yyyy · HH:mm", locale)}
                                                 </span>
                                             </div>
@@ -1826,7 +1889,7 @@ export function InboxesView() {
                                 <div
                                     key={`team-req-${item.id}`}
                                     className="p-4 flex flex-col sm:flex-row sm:items-center justify-between gap-4 hover:bg-muted/30 transition-colors cursor-pointer group"
-                                    onClick={() => router.push(item.team_id ? `/${locale}/my-teams/${item.team_id}${squadViewQuery}` : `/${locale}/my-teams`)}
+                                    onClick={() => router.push(item.team_id ? `/${locale}/inboxes/teams/${item.team_id}${squadViewQuery}&from=team_request` : `/${locale}/inboxes`)}
                                 >
                                     <div className="flex items-start gap-3 md:gap-4 min-w-0 flex-1">
                                         <Avatar className="h-10 w-10 rounded-full shrink-0 bg-muted/40 overflow-hidden">
@@ -1844,7 +1907,7 @@ export function InboxesView() {
                                         <div className="space-y-1.5 min-w-0 flex-1">
                                             {isTh ? (
                                                 <p className="text-sm font-normal leading-relaxed text-foreground">
-                                                    คำขอสิทธิ์การจัดการทีม <span className="font-semibold text-foreground">{item.team_name}</span> {reqStatus === 'approved' ? 'ได้รับการอนุมัติแล้ว' : reqStatus === 'rejected' ? 'ถูกปฏิเสธ' : 'กำลังรอการอนุมัติ'}
+                                                    คำขอสิทธิ์การจัดการทีม <span className="font-semibold text-foreground">{item.team_name}</span> {reqStatus === 'approved' ? 'ได้รับการอนุมัติแล้ว' : reqStatus === 'rejected' ? 'ถูกปฏิเสธ' : reqStatus === 'cancelled' ? 'ถูกยกเลิกแล้ว' : 'กำลังรอการอนุมัติ'}
                                                 </p>
                                             ) : (
                                                 <p className="text-sm font-normal leading-relaxed text-foreground">
@@ -1860,13 +1923,17 @@ export function InboxesView() {
                                                     <Badge variant="outline" className="border-destructive/50 text-destructive bg-destructive/10">
                                                         {getStatusText(reqStatus)}
                                                     </Badge>
+                                                ) : reqStatus === 'cancelled' ? (
+                                                    <Badge variant="outline" className="border-muted-foreground/50 text-muted-foreground bg-muted-foreground/10">
+                                                        {getStatusText(reqStatus)}
+                                                    </Badge>
                                                 ) : (
                                                     <Badge variant="outline" className="border-amber-500/50 text-amber-600 bg-amber-500/10">
                                                         {getStatusText(reqStatus)}
                                                     </Badge>
                                                 )}
-                                                <span className="text-[10px] text-muted-foreground/30 font-bold">•</span>
-                                                <span className="text-[10px] text-muted-foreground/60 font-medium">
+                                                <span className="text-xs text-muted-foreground font-bold">•</span>
+                                                <span className="text-xs text-muted-foreground font-medium">
                                                     {formatDate(item.created_at, "MMM d, yyyy · HH:mm", locale)}
                                                 </span>
                                             </div>
@@ -1874,6 +1941,20 @@ export function InboxesView() {
                                     </div>
 
                                     <div className="flex items-center gap-1.5 md:gap-2 shrink-0 self-end sm:self-center">
+                                        {reqStatus === 'pending' && (
+                                            <Button
+                                                variant="ghost"
+                                                size="sm"
+                                                onClick={(e) => {
+                                                    e.stopPropagation();
+                                                    setTeamReqToCancel({ id: item.id, team_id: item.team_id });
+                                                }}
+                                                disabled={isPending}
+                                                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                            >
+                                                {isTh ? "ยกเลิกคำขอ" : "Cancel"}
+                                            </Button>
+                                        )}
                                         <Badge variant="outline" className="text-amber-600 border-amber-500/50 bg-amber-500/10">
                                             {isTh ? 'คำขอจัดการทีมที่ส่ง' : 'Team Request (Sent)'}
                                         </Badge>
@@ -1950,8 +2031,8 @@ export function InboxesView() {
                                                             {isTh ? 'คำขอจัดการทีมที่ได้รับ' : 'Team Request (Incoming)'}
                                                         </Badge>
                                                     )}
-                                                    <span className="text-[10px] text-muted-foreground/30 font-bold">•</span>
-                                                    <span className="text-[10px] text-muted-foreground/60 font-medium">
+                                                    <span className="text-xs text-muted-foreground font-bold">•</span>
+                                                    <span className="text-xs text-muted-foreground font-medium">
                                                         {formatDate(item.created_at, "MMM d, yyyy · HH:mm", locale)}
                                                     </span>
                                                 </div>
@@ -1966,14 +2047,14 @@ export function InboxesView() {
                                             ) : (
                                                 <div className="flex items-center gap-1.5 md:gap-2">
                                                     <Button
-                                                        variant="outline"
+                                                        variant="ghost"
                                                         size="sm"
                                                         onClick={(e) => {
                                                             e.stopPropagation();
                                                             handleRejectTeamRequest(item.id);
                                                         }}
                                                         disabled={isPending}
-                                                        className="text-destructive hover:bg-destructive/10 hover:text-destructive text-xs"
+                                                        className="text-destructive hover:bg-destructive/10 hover:text-destructive"
                                                     >
                                                         {isPending && <Loader2 className="size-4 animate-spin" />}
                                                         {isTh ? "ปฏิเสธ" : "Reject"}
@@ -1985,7 +2066,6 @@ export function InboxesView() {
                                                             handleApproveTeamRequest(item.id);
                                                         }}
                                                         disabled={isPending}
-                                                        className="font-bold text-xs"
                                                     >
                                                         {isPending && <Loader2 className="size-4 animate-spin" />}
                                                         {isTh ? "อนุมัติและโอนสิทธิ์" : "Approve"}
@@ -2002,7 +2082,10 @@ export function InboxesView() {
 
                                     {/* Inline Expandable Team Management Request Details Dropdown Section */}
                                     {isDetailsExpanded && (
-                                        <div className="pl-0 sm:pl-[52px] animate-in fade-in-50 slide-in-from-top-1 duration-200">
+                                        <div
+                                            onClick={(e) => e.stopPropagation()}
+                                            className="pl-0 sm:pl-[54px] md:pl-[58px] animate-in fade-in-50 slide-in-from-top-1 duration-200"
+                                        >
                                             <div className="rounded-sm border border-border bg-card overflow-hidden">
                                                 {/* Header */}
                                                 <div className="p-4 flex items-center justify-between border-b border-border">
@@ -2016,7 +2099,7 @@ export function InboxesView() {
                                                                 className="text-primary border-primary/50 bg-primary/10 cursor-pointer hover:bg-primary/20 transition-colors"
                                                                 onClick={(e) => {
                                                                     e.stopPropagation();
-                                                                    router.push(`/${locale}/my-teams/${item.team_id}${squadViewQuery}`);
+                                                                    router.push(`/${locale}/inboxes/teams/${item.team_id}${squadViewQuery}&from=team_request`);
                                                                 }}
                                                             >
                                                                 {item.team_name}
@@ -2162,8 +2245,8 @@ export function InboxesView() {
                                                     ? (isTh ? "ปฏิเสธคำขอ" : "Rejected")
                                                     : (isTh ? "รอดำเนินการ" : "Pending")}
                                             </Badge>
-                                            <span className="text-[10px] text-muted-foreground/30 font-bold">•</span>
-                                            <span className="text-[10px] text-muted-foreground/60 font-medium">
+                                            <span className="text-xs text-muted-foreground font-bold">•</span>
+                                            <span className="text-xs text-muted-foreground font-medium">
                                                 {formatDate(item.created_at, "MMM d, yyyy · HH:mm", locale)}
                                             </span>
                                         </div>
@@ -2189,6 +2272,37 @@ export function InboxesView() {
 
                 </div>
             </div>
+
+            <AlertDialog open={!!teamReqToCancel} onOpenChange={(open) => !open && setTeamReqToCancel(null)}>
+                <AlertDialogContent className="bg-card border rounded-sm shadow-2xl max-w-md p-0">
+                    <AlertDialogHeader>
+                        <AlertDialogTitle className="p-2 md:p-4 border-b">
+                            {isTh ? "ยืนยันการยกเลิกคำขอ" : "Confirm Cancellation"}
+                        </AlertDialogTitle>
+                        <AlertDialogDescription className="p-2 md:p-4 text-sm font-medium text-muted-foreground/80">
+                            {isTh
+                                ? "คุณแน่ใจหรือไม่ว่าต้องการยกเลิกคำขอจัดการทีมนี้? การดำเนินการนี้ไม่สามารถย้อนกลับได้"
+                                : "Are you sure you want to cancel this team management request? This action cannot be undone."}
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter className="p-2 md:p-4 border-t grid grid-cols-2 gap-1 md:gap-2">
+                        <AlertDialogCancel className="mt-0" disabled={isPending}>
+                            {tCommon("cancel")}
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={(e) => {
+                                e.preventDefault();
+                                handleConfirmCancelTeamRequest();
+                            }}
+                            disabled={isPending}
+                            className="bg-destructive hover:bg-destructive/90 transition-all flex items-center justify-center gap-1.5"
+                        >
+                            {isPending && <Loader2 className="h-4 w-4 animate-spin" />}
+                            {isTh ? "ยืนยันการยกเลิก" : "Confirm Cancel"}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
 
             {/* Payment Slip Preview Dialog */}
             <Dialog open={!!viewingSlipUrl} onOpenChange={(open) => !open && setViewingSlipUrl(null)}>

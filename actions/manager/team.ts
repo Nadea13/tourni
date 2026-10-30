@@ -395,7 +395,7 @@ export async function getTournamentTeam(id: string) {
                 return {
                     id: data.id,
                     team_id: data.team_id,
-                    user_id: teamData.user_id || session.user.id || null,
+                    user_id: teamData.user_id || data.user_id || null,
                     tournament_id: tournamentId,
                     tournament_category_id: categoryId,
                     tournament: tournament,
@@ -507,6 +507,7 @@ export async function updateTeamGlobal(teamId: string, formData: FormData, _tour
         revalidatePath(`/my-teams/${teamId}`);
         revalidatePath(`/dashboard/teams/${teamId}`);
         revalidatePath(`/dashboard/tournament-teams/${teamId}`);
+        revalidatePath(`/inboxes/teams/${teamId}`);
         return { success: true };
     } catch (err) {
         console.error("Error in updateTeamGlobal:", err);
@@ -624,25 +625,27 @@ export async function getImportableTeams(currentTeamId: string): Promise<ActionR
 /**
  * Get players for a specific team (global or tournament).
  */
-export async function getPlayers(teamId: string): Promise<ActionResponse<Player[]>> {
+export async function getPlayers(teamId: string, isTournament = false): Promise<ActionResponse<Player[]>> {
     try {
         const session = await getServerSession();
         let players: any[] = [];
         const headers: Record<string, string> = session?.token ? { Authorization: `Bearer ${session.token}` } : {};
 
-        try {
-            const res = await fetch(`${API_BASE_URL}/teams/${teamId}/players`, {
-                headers,
-                cache: 'no-store',
-            });
-            if (res.ok) {
-                players = await res.json();
+        if (!isTournament) {
+            try {
+                const res = await fetch(`${API_BASE_URL}/teams/${teamId}/players`, {
+                    headers,
+                    cache: 'no-store',
+                });
+                if (res.ok) {
+                    players = await res.json();
+                }
+            } catch {
+                // ignore
             }
-        } catch {
-            // ignore
         }
 
-        if (!players || players.length === 0) {
+        if (isTournament || !players || players.length === 0) {
             try {
                 const ttRes = await fetch(`${API_BASE_URL}/tournament-teams/${teamId}/players`, {
                     headers,
@@ -656,14 +659,33 @@ export async function getPlayers(teamId: string): Promise<ActionResponse<Player[
             }
         }
 
-        if (!players || players.length === 0) {
+        if (isTournament || !players || players.length === 0) {
             try {
                 const rRes = await fetch(`${API_BASE_URL}/tournament-teams/${teamId}/roster`, {
                     headers,
                     cache: 'no-store',
                 });
                 if (rRes.ok) {
-                    players = await rRes.json();
+                    const rData = await rRes.json();
+                    if (Array.isArray(rData)) {
+                        const existingIds = new Set((players || []).map((p) => p.master_player_id || p.id));
+                        for (const s of rData) {
+                            if (!existingIds.has(s.master_player_id || s.id)) {
+                                players.push({
+                                    id: s.id,
+                                    name: s.name,
+                                    first_name: s.name,
+                                    last_name: '',
+                                    jersey_number: s.shirt_number ? parseInt(s.shirt_number) : null,
+                                    shirt_number: s.shirt_number,
+                                    position: s.position,
+                                    photo_url: s.photo_url,
+                                    status: s.status,
+                                    rejection_reason: s.rejection_reason
+                                });
+                            }
+                        }
+                    }
                 }
             } catch {
                 // ignore
@@ -672,7 +694,8 @@ export async function getPlayers(teamId: string): Promise<ActionResponse<Player[
 
         const activeRawPlayers = (players || []).filter((p: any) => !p.deleted_at);
         const mappedPlayers: Player[] = activeRawPlayers.map((p: any) => {
-            const rawName = p.name || `${p.first_name || ''} ${p.last_name && p.last_name !== '-' ? p.last_name : ''}`.trim() || 'Unnamed Player';
+            const mp = p.master_player || {};
+            const rawName = p.name || mp.name || `${p.first_name || mp.first_name_intl || mp.first_name_local || ''} ${p.last_name || (mp.last_name_intl && mp.last_name_intl !== '-' ? mp.last_name_intl : '') || (mp.last_name_local && mp.last_name_local !== '-' ? mp.last_name_local : '')}`.trim() || 'Unnamed Player';
             const cleanName = rawName.replace(/\s*-\s*$/, '').trim();
             const shirtNum = p.jersey_number !== undefined && p.jersey_number !== null
                 ? (typeof p.jersey_number === 'number' ? p.jersey_number : parseInt(p.jersey_number))
@@ -870,12 +893,32 @@ export async function addPlayersBatch(
         const session = await getServerSession();
         if (!session?.user) return { success: false, error: "Authentication required" };
 
+        const targetRes = await getPlayers(teamId);
+        const existingPlayers = targetRes.success && targetRes.data ? targetRes.data : [];
+        const existingMasterIds = new Set(
+            existingPlayers.map(p => p.global_player_id).filter(Boolean)
+        );
+        const existingNames = new Set(
+            existingPlayers.map(p => {
+                const raw = p.name || `${p.first_name || ''} ${p.last_name || ''}`;
+                return raw.trim().toLowerCase();
+            })
+        );
+
         for (const playerInfo of playersList) {
             if (!playerInfo.name || !playerInfo.name.trim()) continue;
 
             const nameParts = playerInfo.name.trim().split(" ");
             const firstName = nameParts[0];
             const lastName = nameParts.length > 1 ? nameParts.slice(1).join(" ") : "-";
+            const fullName = `${firstName} ${lastName}`.trim().toLowerCase();
+
+            // Skip duplicate within batch or already on team
+            if (playerInfo.master_player_id && existingMasterIds.has(playerInfo.master_player_id)) continue;
+            if (existingNames.has(fullName)) continue;
+
+            if (playerInfo.master_player_id) existingMasterIds.add(playerInfo.master_player_id);
+            existingNames.add(fullName);
 
             await fetch(`${API_BASE_URL}/teams/${teamId}/players`, {
                 method: 'POST',
@@ -1051,6 +1094,7 @@ export async function updatePlayer(
         revalidatePath(`/my-teams/${teamId}`);
         revalidatePath(`/dashboard/teams/${teamId}`);
         revalidatePath(`/dashboard/tournament-teams/${teamId}`);
+        revalidatePath(`/inboxes/teams/${teamId}`);
         revalidatePath(`/manager/my-teams/${teamId}`);
         return { success: true };
     } catch (err) {
@@ -1084,6 +1128,7 @@ export async function deletePlayer(playerId: string, teamId: string): Promise<Ac
         revalidatePath(`/my-teams/${teamId}`);
         revalidatePath(`/dashboard/teams/${teamId}`);
         revalidatePath(`/dashboard/tournament-teams/${teamId}`);
+        revalidatePath(`/inboxes/teams/${teamId}`);
         revalidatePath(`/manager/my-teams/${teamId}`);
         return { success: true };
     } catch (err) {
@@ -1126,10 +1171,30 @@ export async function importRoster(
 
     const isTournamentTeam = tourRes.ok;
 
+    const targetRes = await getPlayers(targetTeamId, isTournamentTeam);
+    const existingPlayers = targetRes.success && targetRes.data ? targetRes.data : [];
+    const existingMasterIds = new Set(
+        existingPlayers.map(p => p.global_player_id).filter(Boolean)
+    );
+    const existingNames = new Set(
+        existingPlayers.map(p => {
+            const raw = p.name || `${p.first_name || ''} ${p.last_name || ''}`;
+            return raw.trim().toLowerCase();
+        })
+    );
+
     for (const p of sourcePlayers) {
         const nameParts = (p.name || '').trim().split(' ');
         const firstName = p.first_name || nameParts[0] || '';
         const lastName = p.last_name || (nameParts.length > 1 ? nameParts.slice(1).join(' ') : '-');
+        const fullName = `${firstName} ${lastName}`.trim().toLowerCase();
+
+        // Skip duplicates already in target team
+        if (p.global_player_id && existingMasterIds.has(p.global_player_id)) continue;
+        if (existingNames.has(fullName)) continue;
+
+        if (p.global_player_id) existingMasterIds.add(p.global_player_id);
+        existingNames.add(fullName);
 
         if (isTournamentTeam) {
             await fetch(`${API_BASE_URL}/tournament-teams/${targetTeamId}/players`, {
@@ -1166,6 +1231,7 @@ export async function importRoster(
 
     revalidatePath(`/manager/my-teams/${targetTeamId}`);
     revalidatePath(`/dashboard/tournament-teams/${targetTeamId}`);
+        revalidatePath(`/inboxes/teams/${targetTeamId}`);
     return { success: true, message: `Successfully imported ${sourcePlayers.length} players.` };
 }
 
@@ -1193,6 +1259,7 @@ export async function resetRoster(teamId: string): Promise<ActionResponse> {
 
         revalidatePath(`/manager/my-teams/${teamId}`);
         revalidatePath(`/dashboard/tournament-teams/${teamId}`);
+        revalidatePath(`/inboxes/teams/${teamId}`);
         await logActivity('RESET_ROSTER', 'team', teamId, { reset_by: session.user.id });
         return { success: true };
     } catch (err) {
@@ -1224,6 +1291,7 @@ export async function restoreRoster(teamId: string): Promise<ActionResponse> {
 
         revalidatePath(`/manager/my-teams/${teamId}`);
         revalidatePath(`/dashboard/tournament-teams/${teamId}`);
+        revalidatePath(`/inboxes/teams/${teamId}`);
         await logActivity('RESTORE_ROSTER', 'team', teamId, { restored_by: session.user.id });
         return { success: true };
     } catch (err) {

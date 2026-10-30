@@ -251,6 +251,7 @@ export async function updateTournamentPlayer(
         revalidatePath(`/my-tournaments`);
         revalidatePath(`/dashboard/tournaments`);
         revalidatePath(`/dashboard/tournament-teams/${tournamentTeamId}`);
+        revalidatePath(`/inboxes/teams/${tournamentTeamId}`);
         return { success: true };
     } catch (err) {
         console.error("Error in updateTournamentPlayer:", err);

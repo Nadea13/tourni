@@ -214,6 +214,7 @@ export async function submitRosterWithSender(
         }
 
         revalidatePath(`/dashboard/tournament-teams/${tournamentTeamId}`);
+        revalidatePath(`/inboxes/teams/${tournamentTeamId}`);
         revalidatePath(`/inboxes`);
         revalidatePath(`/dashboard/inboxes`);
         return { success: true, message: "Roster submitted successfully!" };
@@ -486,6 +487,7 @@ export async function submitTournamentRoster(
         revalidatePath(`/inboxes`);
         revalidatePath(`/dashboard/inboxes`);
         revalidatePath(`/dashboard/tournament-teams/${tournamentTeamId}`);
+        revalidatePath(`/inboxes/teams/${tournamentTeamId}`);
         return { success: true, message: "Roster submitted to inbox successfully!" };
     } catch (e) {
         console.error("Error in submitTournamentRoster:", e);
@@ -665,6 +667,7 @@ export async function withdrawTournamentTeam(
         revalidatePath(`/my-teams`);
         revalidatePath(`/dashboard/teams`);
         revalidatePath(`/dashboard/tournament-teams/${registrationId}`);
+        revalidatePath(`/inboxes/teams/${registrationId}`);
         revalidatePath(`/inboxes`);
         revalidatePath(`/dashboard/inboxes`);
         revalidatePath(`/tournaments`);

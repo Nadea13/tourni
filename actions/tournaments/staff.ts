@@ -608,6 +608,45 @@ export async function rejectTeamManagementRequest(
 }
 
 /**
+ * Cancel a team management request.
+ */
+export async function cancelTeamManagementRequest(
+    id: string
+): Promise<ActionResponse> {
+    try {
+        const session = await getServerSession();
+        if (!session?.user || !session?.token) {
+            return { success: false, error: "Authentication required" };
+        }
+
+        const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1';
+        const res = await fetch(`${apiUrl}/team-management-requests/${id}/cancel`, {
+            method: 'POST',
+            headers: {
+                Authorization: `Bearer ${session.token}`,
+            },
+        });
+
+        if (!res.ok) {
+            const err = await res.json().catch(() => ({}));
+            return { success: false, error: err.error || "Failed to cancel request" };
+        }
+
+        revalidatePath(`/inboxes`);
+        revalidatePath(`/dashboard/inboxes`);
+        revalidatePath(`/my-teams`);
+        revalidatePath(`/dashboard/teams`);
+        revalidatePath(`/dashboard`);
+        revalidatePath(`/inboxes/teams/${id}`);
+
+        return { success: true };
+    } catch (error: any) {
+        console.error("Unexpected error in cancelTeamManagementRequest:", error);
+        return { success: false, error: error?.message || "An unexpected error occurred" };
+    }
+}
+
+/**
  * Get system notifications for current user.
  */
 export async function getUserSystemNotifications(): Promise<ActionResponse<Array<{

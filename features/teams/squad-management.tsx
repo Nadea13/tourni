@@ -3,7 +3,7 @@
 import React, { useState, useCallback, useEffect, useMemo } from "react";
 import { Player, Team, Registration, Tournament } from "@/types/index";
 import { cn } from "@/lib/utils";
-import { getPlayers, deletePlayer, importRoster, toggleRosterLock } from "@/actions/manager/team";
+import { deletePlayer, toggleRosterLock } from "@/actions/manager/team";
 import { Button } from "@/components/ui/button";
 import { Loader2, Users, AlertCircle, Lock, Unlock, LayoutGrid, ArrowLeft, HelpCircle, Trophy, ExternalLink } from "lucide-react";
 import { Tab } from "@/components/ui/tab";
@@ -12,9 +12,9 @@ import { useToast } from "@/hooks/use-toast";
 import { Badge } from "@/components/ui/badge";
 import Link from "next/link";
 import { Header } from "@/components/ui/header";
-import { useRouter } from "next/navigation";
+import { useRouter, useSearchParams } from "next/navigation";
 import { AddPlayerForm } from "@/features/teams/add-player-form";
-import { AddPlayersDialog } from "@/features/dialogs";
+import { ManageAndSubmitRosterDialog } from "@/features/dialogs";
 import { EditTeamForm } from "@/features/teams/edit-team-form";
 import { TeamInfoCard } from "@/features/teams/team-info-card";
 import { SquadList } from "@/features/teams/squad-list";
@@ -49,15 +49,18 @@ interface SquadManagementProps {
     };
     initialPlayers: Player[];
     backHref?: string;
+    isTeamRequest?: boolean;
 }
 
-export function SquadManagement({ team, initialPlayers, backHref }: SquadManagementProps) {
+export function SquadManagement({ team, initialPlayers, backHref, isTeamRequest: propIsTeamRequest }: SquadManagementProps) {
     const t = useTranslations("Roster");
     const tCommon = useTranslations("Common");
     const tSports = useTranslations("Sports");
     const locale = useLocale();
     const { toast } = useToast();
     const router = useRouter();
+    const searchParams = useSearchParams();
+    const isTeamRequest = Boolean(propIsTeamRequest || searchParams?.get("from") === "team_request");
     const rosterStatus = team.roster_status;
     const [unlockRequested, setUnlockRequested] = useState(team.unlock_requested || false);
     const [isRequestingUnlock, setIsRequestingUnlock] = useState(false);
@@ -181,15 +184,14 @@ export function SquadManagement({ team, initialPlayers, backHref }: SquadManagem
 
     const refreshPlayers = useCallback(async () => {
         const { getPlayers } = await import("@/actions/manager/team");
-        const res = await getPlayers(team.id);
+        const res = await getPlayers(team.id, Boolean(team.isParticipation || team.tournament_id));
         if (res.success && res.data) setPlayers(res.data);
-    }, [team.id]);
+    }, [team.id, team.isParticipation, team.tournament_id]);
 
     // Team Edit State
     const [teamName, setTeamName] = useState(team.name);
 
     // Import Roster State
-    const [isImporting, setIsImporting] = useState(false);
     const [mobileTab, setMobileTab] = useState<'roster' | 'team'>('roster');
 
     // Synergy State
@@ -206,37 +208,15 @@ export function SquadManagement({ team, initialPlayers, backHref }: SquadManagem
 
     const isDeadlinePassed = documentDeadlineDate ? new Date() > documentDeadlineDate : false;
     const effectivelyLocked = isLocked || isDeadlinePassed;
+    const canSubmitRoster = !isTeamRequest && (!team.isParticipation || !team.tournament_id || team.registration_status === 'approved');
 
     // Delete confirmation state
     const [playerToDelete, setPlayerToDelete] = useState<string | null>(null);
 
 
 
-    const handleImportRoster = useCallback(async (sourceId: string) => {
-        setIsImporting(true);
-        const result = await importRoster(team.id, sourceId);
-        setIsImporting(false);
 
-        if (result.success) {
-            toast({
-                title: tCommon("success"),
-                description: "Roster automatically imported from My Team"
-            });
-            // Refresh players list
-            const res = await getPlayers(team.id);
-            if (res.success && res.data) setPlayers(res.data);
-        }
-    }, [team.id, toast, tCommon]);
 
-    const hasAttemptedImportRef = React.useRef(false);
-
-    // Auto-import roster if participation is empty and has linked team
-    useEffect(() => {
-        if (team.isParticipation && players.length === 0 && team.team_id && !isImporting && !hasAttemptedImportRef.current) {
-            hasAttemptedImportRef.current = true;
-            handleImportRoster(team.team_id);
-        }
-    }, [team.isParticipation, team.team_id, players.length, isImporting, handleImportRoster]);
 
     const handleToggleLock = async () => {
         setIsLocking(true);
@@ -270,6 +250,32 @@ export function SquadManagement({ team, initialPlayers, backHref }: SquadManagem
             setPlayers(players.filter(p => p.id !== playerId));
         } else {
             toast({ title: tCommon("error"), description: result.error, variant: "destructive" });
+        }
+    };
+
+    const [isCancellingRequest, setIsCancellingRequest] = useState(false);
+    const [showCancelRequestDialog, setShowCancelRequestDialog] = useState(false);
+
+    const handleCancelRequest = async () => {
+        setIsCancellingRequest(true);
+        try {
+            const { cancelTeamManagementRequest } = await import("@/actions/tournaments/staff");
+            const result = await cancelTeamManagementRequest(team.team_id || team.id);
+            if (result.success) {
+                toast({
+                    title: tCommon("success"),
+                    description: locale === 'th' ? "ยกเลิกคำขอจัดการทีมเรียบร้อยแล้ว" : "Team management request cancelled successfully"
+                });
+                setShowCancelRequestDialog(false);
+                router.push(backHref || `/${locale}/inboxes`);
+                router.refresh();
+            } else {
+                toast({ title: tCommon("error"), description: result.error, variant: "destructive" });
+            }
+        } catch (err: any) {
+            toast({ title: tCommon("error"), description: err?.message || "Failed to cancel request", variant: "destructive" });
+        } finally {
+            setIsCancellingRequest(false);
         }
     };
 
@@ -344,7 +350,15 @@ export function SquadManagement({ team, initialPlayers, backHref }: SquadManagem
                             <Badge variant="warning" size="default">
                                 <span>รออนุมัติปลดล็อก</span>
                             </Badge>
-                        ) : (!isDeadlinePassed && rosterStatus === 'pending') ? (
+                        ) : isTeamRequest ? (
+                            <Badge variant="warning" size="default" title="รอการอนุมัติการโอนสิทธิ์การจัดการทีม">
+                                <span>รออนุมัติการโอนสิทธิ์</span>
+                            </Badge>
+                        ) : (team.isParticipation && team.registration_status === 'pending') ? (
+                            <Badge variant="warning" size="default" title="รอการอนุมัติการสมัครจากผู้จัด">
+                                <span>รออนุมัติการสมัคร</span>
+                            </Badge>
+                        ) : (!isDeadlinePassed && rosterStatus === 'pending' && players.length > 0) ? (
                             <Badge variant="warning" size="default" title="ส่งรายชื่อนักกีฬาแล้วและกำลังรอการตรวจสอบ/อนุมัติจาก Organizer">
                                 <span>รอ Organizer ตรวจสอบรายชื่อ</span>
                             </Badge>
@@ -356,7 +370,18 @@ export function SquadManagement({ team, initialPlayers, backHref }: SquadManagem
                     </div>
                 </div>
                 <div className="flex items-start gap-2" id="tour-lock-roster-btn">
-                    {team.tournament_id && (
+                    {isTeamRequest && (
+                        <Button
+                            variant="destructive"
+                            size="sm"
+                            onClick={() => setShowCancelRequestDialog(true)}
+                            disabled={isCancellingRequest}
+                        >
+                            {isCancellingRequest && <Loader2 className="h-4 w-4 animate-spin mr-1.5" />}
+                            {locale === 'th' ? "ยกเลิกคำขอ" : "Cancel Request"}
+                        </Button>
+                    )}
+                    {!isTeamRequest && team.tournament_id && (
                         <Button
                             variant="outline"
                             size="sm"
@@ -370,7 +395,7 @@ export function SquadManagement({ team, initialPlayers, backHref }: SquadManagem
                             </Link>
                         </Button>
                     )}
-                    {team.isParticipation && team.registration_status !== 'rejected' && (
+                    {!isTeamRequest && team.isParticipation && Boolean(team.tournament_id) && team.registration_status !== 'rejected' && (
                         <Button
                             variant="destructive"
                             size="sm"
@@ -381,13 +406,16 @@ export function SquadManagement({ team, initialPlayers, backHref }: SquadManagem
                             ถอนทีม
                         </Button>
                     )}
-                    <AddPlayersDialog 
-                        teamId={team.id} 
-                        onSuccess={refreshPlayers} 
-                        effectivelyLocked={unlockRequested ? false : effectivelyLocked} 
-                        sport={team.sport || team.sport_name || undefined}
-                        existingPlayers={players}
-                    />
+                    {canSubmitRoster && (
+                        <ManageAndSubmitRosterDialog 
+                            teamId={team.id} 
+                            sourceTeamId={team.isParticipation ? team.team_id || undefined : undefined}
+                            onSuccess={refreshPlayers} 
+                            effectivelyLocked={unlockRequested ? false : effectivelyLocked} 
+                            sport={team.sport || team.sport_name || undefined}
+                            existingPlayers={players}
+                        />
+                    )}
                     {!team.isParticipation && (!effectivelyLocked || unlockRequested || !isDeadlinePassed) && (
                         <Button
                             variant={(effectivelyLocked && !unlockRequested) ? "outline" : "warning"}
@@ -411,6 +439,19 @@ export function SquadManagement({ team, initialPlayers, backHref }: SquadManagem
                 </div>
             </div>
 
+            {!isTeamRequest && team.isParticipation && Boolean(team.tournament_id) && team.registration_status !== 'approved' && (
+                <div className="bg-amber-500/10 border border-amber-500/30 p-3.5 flex items-center justify-between gap-3 text-amber-700 dark:text-amber-400 rounded-sm animate-in fade-in">
+                    <div className="flex items-center gap-2.5">
+                        <AlertCircle className="h-4 w-4 shrink-0" />
+                        <p className="text-xs font-medium">
+                            {team.registration_status === 'rejected'
+                                ? (locale === 'th' ? "การสมัครเข้าร่วมการแข่งขันของทีมนี้ไม่ได้รับการอนุมัติ" : "Team registration was rejected.")
+                                : (locale === 'th' ? "ทีมของคุณอยู่ระหว่างรอการอนุมัติการสมัครเข้าร่วมการแข่งขันจากผู้จัด (จะสามารถส่งรายชื่อนักกีฬาได้เมื่อได้รับการอนุมัติแล้ว)" : "Waiting for organizer approval before roster submission is available.")}
+                        </p>
+                    </div>
+                </div>
+            )}
+
             {isDeadlinePassed && (
                 <Badge variant="outline" className="bg-destructive/10 border-destructive/50 flex items-center text-destructive animate-in fade-in slide-in-from-top-2">
                     <div className="space-y-1">
@@ -422,7 +463,7 @@ export function SquadManagement({ team, initialPlayers, backHref }: SquadManagem
                 </Badge>
             )}
 
-            {rosterStatus === 'approved' && (
+            {rosterStatus === 'approved' && players.length > 0 && (
                 <div className="bg-emerald-500/10 border border-emerald-500/30 p-4 flex items-center justify-between gap-3 text-emerald-600 rounded-sm animate-in fade-in">
                     <div className="flex items-center gap-2">
                         <AlertCircle className="h-4 w-4 shrink-0" />
@@ -509,7 +550,7 @@ export function SquadManagement({ team, initialPlayers, backHref }: SquadManagem
                 )}>
                     {team.isParticipation ? (
                         <div id="tour-team-info-card">
-                            <TeamInfoCard team={team} />
+                            <TeamInfoCard team={team} isTeamRequest={isTeamRequest} />
                         </div>
                     ) : (
                         <div id="tour-edit-team-form">
@@ -545,6 +586,37 @@ export function SquadManagement({ team, initialPlayers, backHref }: SquadManagem
                             className="bg-destructive hover:bg-destructive/90 transition-all flex items-center justify-center"
                         >
                             {tCommon("delete")}
+                        </AlertDialogAction>
+                    </AlertDialogFooter>
+                </AlertDialogContent>
+            </AlertDialog>
+
+            <AlertDialog open={showCancelRequestDialog} onOpenChange={setShowCancelRequestDialog}>
+                <AlertDialogContent className="bg-card border rounded-sm shadow-2xl max-w-md p-0">
+                    <AlertDialogHeader>
+                        <AlertDialogTitle className="p-2 md:p-4 border-b">
+                            {locale === 'th' ? "ยืนยันการยกเลิกคำขอ" : "Confirm Cancellation"}
+                        </AlertDialogTitle>
+                        <AlertDialogDescription className="p-2 md:p-4 text-sm font-medium text-muted-foreground/80">
+                            {locale === 'th'
+                                ? "คุณแน่ใจหรือไม่ว่าต้องการยกเลิกคำขอจัดการทีมนี้? การดำเนินการนี้ไม่สามารถย้อนกลับได้"
+                                : "Are you sure you want to cancel this team management request? This action cannot be undone."}
+                        </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter className="p-2 md:p-4 border-t grid grid-cols-2 gap-1 md:gap-2">
+                        <AlertDialogCancel className="mt-0" disabled={isCancellingRequest}>
+                            {tCommon("cancel")}
+                        </AlertDialogCancel>
+                        <AlertDialogAction
+                            onClick={(e) => {
+                                e.preventDefault();
+                                handleCancelRequest();
+                            }}
+                            disabled={isCancellingRequest}
+                            className="bg-destructive hover:bg-destructive/90 transition-all flex items-center justify-center gap-1.5"
+                        >
+                            {isCancellingRequest && <Loader2 className="h-4 w-4 animate-spin" />}
+                            {locale === 'th' ? "ยืนยันการยกเลิก" : "Confirm Cancel"}
                         </AlertDialogAction>
                     </AlertDialogFooter>
                 </AlertDialogContent>

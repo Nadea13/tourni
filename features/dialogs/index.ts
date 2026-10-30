@@ -32,6 +32,7 @@ export * from "./teams/verify-team-dialog";
 export * from "./teams/delete-team-dialog";
 
 // Player & Roster Management
+export * from "./teams/manage-and-submit-roster-dialog";
 export * from "./teams/add-players-dialog";
 export * from "./teams/verify-player-dialog";
 export * from "./teams/player-details-dialog";

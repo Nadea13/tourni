@@ -70,10 +70,12 @@ export function formatDate(
  */
 export function isPastDocumentDeadline(deadlineStr?: string | null): boolean {
     if (!deadlineStr) return false;
-    const deadlineDate = new Date(deadlineStr);
-    if (isNaN(deadlineDate.getTime())) return false;
+    let deadlineDate: Date;
     if (deadlineStr.length <= 10) {
-        deadlineDate.setHours(23, 59, 59, 999);
+        deadlineDate = new Date(deadlineStr + "T23:59:59.999");
+    } else {
+        deadlineDate = new Date(deadlineStr);
     }
+    if (isNaN(deadlineDate.getTime())) return false;
     return new Date() > deadlineDate;
 }

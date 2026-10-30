@@ -370,5 +370,18 @@
 
 /* React Flow Default Edge Path */
 .react-flow__edge-path {
+  stroke: var(--border);
+}
+
+.react-flow__edge.edge-winner .react-flow__edge-path,
+.react-flow__edge-path.edge-winner,
+.react-flow__edge.edge-winner:hover .react-flow__edge-path,
+.react-flow__edge.edge-winner.selected .react-flow__edge-path,
+.react-flow__edge-path.edge-winner:hover {
+  stroke: var(--muted-foreground) !important;
+}
+
+.react-flow__edge.edge-loser .react-flow__edge-path,
+.react-flow__edge-path.edge-loser {
   stroke: var(--border) !important;
 }

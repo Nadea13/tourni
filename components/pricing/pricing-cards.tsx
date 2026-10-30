@@ -6,6 +6,7 @@ import { Plan } from "@/types";
 import { cn } from "@/lib/utils";
 import { useTranslations } from "next-intl";
 import { Badge } from "@/components/ui/badge";
+import { Link } from "@/i18n/routing";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/dropdown";
 import { ManagerPlan, OrganizerPlan, Product } from "@/types";
 
@@ -284,7 +285,7 @@ export function PricingCards({
                                     {landingPageMode ? (
                                         <Button variant="outline" className="w-full" asChild>
                                             {/* Link needs to be handled by parent or just redirect */}
-                                            <div onClick={() => window.location.href = '/dashboard'}>{t('get_started')}</div>
+                                            <Link href="/dashboard">{t('get_started')}</Link>
                                         </Button>
                                     ) : (
                                         <div className="space-y-4">

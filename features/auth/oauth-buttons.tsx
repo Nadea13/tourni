@@ -13,6 +13,7 @@ export function OAuthButtons() {
         setIsLoading(provider);
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1';
         // Redirect directly to Go Backend OAuth initiate endpoint
+        // eslint-disable-next-line @next/next/no-location-assign-relative-destination
         window.location.href = `${apiUrl}/auth/${provider}`;
     };
 

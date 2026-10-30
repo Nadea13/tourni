@@ -1,6 +1,5 @@
 "use client";
 
-import { Link } from "@/i18n/routing";
 import { LanguageToggle } from "@/components/layout/language-toggle";
 import { ThemeToggle } from "@/components/layout/theme-toggle";
 import { BrandLogo } from "@/components/shared/logo";

@@ -5,7 +5,6 @@ import { useRouter } from "next/navigation";
 import { Loader2 } from "lucide-react";
 import { useTranslations, useLocale } from "next-intl";
 import { Card, CardContent } from "@/components/ui/card";
-import { Link } from "@/i18n/routing";
 import { BrandLogo } from "@/components/shared/logo";
 import { HeroDotBackground } from "@/components/landing/hero-dot-background";
 
@@ -22,6 +21,7 @@ export default function AuthConfirmPage() {
             try {
                 const token = typeof window !== "undefined" ? (localStorage.getItem("token") || localStorage.getItem("access_token")) : null;
                 if (token) {
+                    // eslint-disable-next-line @next/next/no-location-assign-relative-destination
                     window.location.href = `/${locale}/dashboard`;
                     return;
                 }

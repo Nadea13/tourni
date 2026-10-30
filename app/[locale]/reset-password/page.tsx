@@ -1,6 +1,5 @@
 import { ResetPasswordForm } from "@/features/auth/reset-password-form";
 import { useTranslations } from "next-intl";
-import { Link } from "@/i18n/routing";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { PublicNavbar } from "@/components/layout/public-navbar";
 import { BrandLogo } from "@/components/shared/logo";

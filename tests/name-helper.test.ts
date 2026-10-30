@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseFullName, isEnglishOrLatin, formatPlayerDisplayName } from '@/lib/name-helper';
+import { parseFullName } from '@/lib/name-helper';
 
 describe('name-helper: parseFullName', () => {
     it('handles empty input', () => {

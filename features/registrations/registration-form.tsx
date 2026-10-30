@@ -234,7 +234,7 @@ export function RegistrationForm({
                                 <Button variant="outline" size="sm" onClick={() => window.location.reload()}>
                                     {t("register_another")}
                                 </Button>
-                                <Button size="sm" onClick={() => window.location.href = `/dashboard`}>
+                                <Button size="sm" onClick={() => router.push('/dashboard')}>
                                     {t("go_to_dashboard")}
                                 </Button>
                             </div>

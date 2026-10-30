@@ -190,6 +190,7 @@ export class ApiClient {
     let res: Response;
     try {
       res = await fetch(url, {
+        cache: options.cache ?? 'no-store',
         ...options,
         headers,
       });

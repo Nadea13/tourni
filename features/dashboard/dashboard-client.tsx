@@ -92,7 +92,6 @@ export function DashboardClient({ initialTournaments, initialMasterPlayer }: Das
     const locale = useLocale();
     const isThai = locale === 'th';
     const t = useTranslations("Dashboard");
-    const tCommon = useTranslations("Common");
 
     const getTournamentSportName = (tour: Tournament) => {
         const rawSportId = (tour as any).sport_id || (tour as any).settings?.sport_id;

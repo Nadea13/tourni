@@ -171,6 +171,7 @@ export function UserDropdown({
                 <ActionMenuItem 
                     onClick={() => {
                         ApiClient.setToken(null);
+                        // eslint-disable-next-line @next/next/no-location-assign-relative-destination
                         window.location.href = `/${locale}/sign-in`;
                     }} 
                     className="text-destructive focus:text-red-400 focus:bg-red-500/10 py-2 rounded-sm cursor-pointer"

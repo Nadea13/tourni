@@ -99,10 +99,11 @@ export function DateTimePicker({
     const formattedDisplay = useMemo(() => {
         if (!selectedDate) return null;
 
-        const dateFormatted = format(selectedDate, "dd MMM yyyy", { locale: dateFnsLocale });
+        const yearFormatted = isThai ? selectedDate.getFullYear() + 543 : selectedDate.getFullYear();
+        const dateFormatted = `${format(selectedDate, "dd MMM", { locale: dateFnsLocale })} ${yearFormatted}`;
         const timeFormatted = `${String(selectedHour).padStart(2, "0")}:${String(selectedMinute).padStart(2, "0")}`;
         return `${dateFormatted} | ${timeFormatted}`;
-    }, [selectedDate, selectedHour, selectedMinute, dateFnsLocale]);
+    }, [selectedDate, selectedHour, selectedMinute, dateFnsLocale, isThai]);
 
     // Emit change
     const emitChange = (newDate: Date | null, newHour: number, newMinute: number) => {
@@ -219,7 +220,7 @@ export function DateTimePicker({
                         {/* Month & Year Navigation Header */}
                         <div className="flex items-center justify-between mb-2">
                             <span className="text-xs font-black tracking-tight text-foreground capitalize">
-                                {format(viewDate, "MMMM yyyy", { locale: dateFnsLocale })}
+                                {format(viewDate, "MMMM", { locale: dateFnsLocale })} {isThai ? viewDate.getFullYear() + 543 : viewDate.getFullYear()}
                             </span>
                             <div className="flex items-center gap-1">
                                 <Button

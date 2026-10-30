@@ -51,3 +51,6 @@ scratch/
 .agents
 .impeccable
 .qodo
+
+backend/tmp/
+

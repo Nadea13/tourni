@@ -96,14 +96,16 @@ func (h *Hub) Run() {
 						}
 					}
 				}
-				// Also broadcast to global "all" room
-				if room, ok := h.rooms["all"]; ok {
-					for client := range room {
-						select {
-						case client.Send <- msgBytes:
-						default:
-							close(client.Send)
-							delete(room, client)
+				// Also broadcast to global "all" room (if MatchID is not already "all")
+				if message.MatchID != "all" {
+					if room, ok := h.rooms["all"]; ok {
+						for client := range room {
+							select {
+							case client.Send <- msgBytes:
+							default:
+								close(client.Send)
+								delete(room, client)
+							}
 						}
 					}
 				}
@@ -130,6 +132,7 @@ func (c *Client) ReadPump() {
 	for {
 		_, _, err := c.Conn.ReadMessage()
 		if err != nil {
+			log.Printf("🔌 ReadPump closed for [%s]: %v", c.MatchID, err)
 			break
 		}
 	}

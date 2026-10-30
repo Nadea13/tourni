@@ -81,10 +81,12 @@ func (r *RegistrationRepository) GetTournamentTeam(ctx context.Context, id uuid.
 		       tt.payment_status, tt.registration_status, tt.roster_status, tt.is_roster_locked,
 		       tt.unlock_requested, tt.slip_img, tt.contact_name, tt.contact_phone, tt.contact_email,
 		       tt.remark, tt.seed_number, tt.group_name, tt.created_at, tt.updated_at,
-		       t.id, t.name, t.short_name, t.logo_url, t.logo_img
+		       t.id, t.name, t.short_name, t.logo_url, t.logo_img, t.user_id
 		FROM tournament_teams tt
 		JOIN teams t ON tt.team_id = t.id
-		WHERE tt.id = $1 AND tt.deleted_at IS NULL
+		WHERE (tt.id = $1 OR tt.team_id = $1) AND tt.deleted_at IS NULL
+		ORDER BY tt.created_at DESC
+		LIMIT 1
 	`
 	var tt model.TournamentTeam
 	var t model.Team
@@ -93,7 +95,7 @@ func (r *RegistrationRepository) GetTournamentTeam(ctx context.Context, id uuid.
 		&tt.PaymentStatus, &tt.RegistrationStatus, &tt.RosterStatus, &tt.IsRosterLocked,
 		&tt.UnlockRequested, &tt.SlipImg, &tt.ContactName, &tt.ContactPhone, &tt.ContactEmail,
 		&tt.Remark, &tt.SeedNumber, &tt.GroupName, &tt.CreatedAt, &tt.UpdatedAt,
-		&t.ID, &t.Name, &t.ShortName, &t.LogoURL, &t.LogoImg,
+		&t.ID, &t.Name, &t.ShortName, &t.LogoURL, &t.LogoImg, &t.UserID,
 	)
 	if err != nil {
 		if err == pgx.ErrNoRows {
@@ -200,26 +202,20 @@ func (r *RegistrationRepository) syncTeamPlayersToTournament(ctx context.Context
 func (r *RegistrationRepository) UpdateTournamentTeamStatus(ctx context.Context, id uuid.UUID, paymentStatus, registrationStatus, rosterStatus string) error {
 	query := `
 		UPDATE tournament_teams
-		SET payment_status = COALESCE(NULLIF($1, '')::payment_status_enum, payment_status),
-		    registration_status = COALESCE(NULLIF($2, '')::registration_status_enum, registration_status),
-		    roster_status = COALESCE(NULLIF($3, '')::registration_status_enum, roster_status),
+		SET payment_status = COALESCE(NULLIF($1, ''), payment_status),
+		    registration_status = COALESCE(NULLIF($2, ''), registration_status),
+		    roster_status = COALESCE(NULLIF($3, ''), roster_status),
 		    updated_at = NOW()
 		WHERE id = $4
-		RETURNING team_id
 	`
-	var teamID uuid.UUID
-	err := r.db.QueryRow(ctx, query, paymentStatus, registrationStatus, rosterStatus, id).Scan(&teamID)
-	if err == nil && teamID != uuid.Nil {
-		// Ensure roster submissions are staged in tournament_roster_submissions
-		_ = r.syncTeamPlayersToTournament(ctx, id, teamID)
-	}
+	_, err := r.db.Exec(ctx, query, paymentStatus, registrationStatus, rosterStatus, id)
 	return err
 }
 
 func (r *RegistrationRepository) WithdrawTournamentTeam(ctx context.Context, id uuid.UUID) error {
 	query := `
 		UPDATE tournament_teams
-		SET registration_status = 'rejected'::registration_status_enum,
+		SET registration_status = 'rejected',
 		    updated_at = NOW()
 		WHERE id = $1 OR team_id = $1
 	`
@@ -416,9 +412,51 @@ func (r *RegistrationRepository) GetPlayersByTournament(ctx context.Context, tou
 }
 
 func (r *RegistrationRepository) AddTournamentPlayer(ctx context.Context, tp *model.TournamentPlayer) error {
+	// 1. Check if tournament player already exists for this team (active)
+	var existingID uuid.UUID
+	checkQuery := `
+		SELECT id, created_at, updated_at
+		FROM tournament_players
+		WHERE tournament_team_id = $1 AND master_player_id = $2 AND deleted_at IS NULL
+		LIMIT 1
+	`
+	err := r.db.QueryRow(ctx, checkQuery, tp.TournamentTeamID, tp.MasterPlayerID).Scan(&existingID, &tp.CreatedAt, &tp.UpdatedAt)
+	if err == nil {
+		tp.ID = existingID
+		return r.UpdateTournamentPlayer(ctx, existingID, tp.ShirtNumber, tp.Position)
+	}
+
+	// 2. Check if a soft-deleted record exists, if so restore it
+	var deletedID uuid.UUID
+	checkDeletedQuery := `
+		SELECT id
+		FROM tournament_players
+		WHERE tournament_team_id = $1 AND master_player_id = $2 AND deleted_at IS NOT NULL
+		LIMIT 1
+	`
+	errDeleted := r.db.QueryRow(ctx, checkDeletedQuery, tp.TournamentTeamID, tp.MasterPlayerID).Scan(&deletedID)
+	if errDeleted == nil {
+		tp.ID = deletedID
+		restoreQuery := `
+			UPDATE tournament_players
+			SET deleted_at = NULL,
+			    shirt_number = COALESCE($1, shirt_number),
+			    position = COALESCE($2, position),
+			    updated_at = NOW()
+			WHERE id = $3
+			RETURNING created_at, updated_at
+		`
+		return r.db.QueryRow(ctx, restoreQuery, tp.ShirtNumber, tp.Position, deletedID).Scan(&tp.CreatedAt, &tp.UpdatedAt)
+	}
+
 	query := `
 		INSERT INTO tournament_players (tournament_team_id, master_player_id, shirt_number, position)
 		VALUES ($1, $2, $3, $4)
+		ON CONFLICT (tournament_team_id, master_player_id) WHERE deleted_at IS NULL
+		DO UPDATE SET
+			shirt_number = COALESCE(EXCLUDED.shirt_number, tournament_players.shirt_number),
+			position = COALESCE(EXCLUDED.position, tournament_players.position),
+			updated_at = NOW()
 		RETURNING id, created_at, updated_at
 	`
 	return r.db.QueryRow(ctx, query,
@@ -670,14 +708,18 @@ func (r *RegistrationRepository) ApproveRoster(ctx context.Context, tournamentTe
 			tpQuery := `
 				INSERT INTO tournament_players (tournament_team_id, master_player_id, shirt_number, position, created_at, updated_at)
 				VALUES ($1, $2, $3, $4, NOW(), NOW())
-				ON CONFLICT DO NOTHING
+				ON CONFLICT (tournament_team_id, master_player_id) WHERE deleted_at IS NULL
+				DO UPDATE SET
+					shirt_number = COALESCE(EXCLUDED.shirt_number, tournament_players.shirt_number),
+					position = COALESCE(EXCLUDED.position, tournament_players.position),
+					updated_at = NOW()
 			`
 			_, _ = r.db.Exec(ctx, tpQuery, tournamentTeamID, masterID, s.shirtNumber, s.position)
 		}
 
 		upSub := `
 			UPDATE tournament_roster_submissions
-			SET status = 'approved'::registration_status_enum,
+			SET status = 'approved',
 			    master_player_id = COALESCE($2, master_player_id),
 			    rejection_reason = NULL,
 			    updated_at = NOW()
@@ -692,7 +734,7 @@ func (r *RegistrationRepository) ApproveRoster(ctx context.Context, tournamentTe
 
 	upTeam := `
 		UPDATE tournament_teams
-		SET roster_status = 'approved'::registration_status_enum,
+		SET roster_status = 'approved',
 		    is_roster_locked = TRUE,
 		    updated_at = NOW()
 		WHERE id = $1
@@ -704,7 +746,7 @@ func (r *RegistrationRepository) ApproveRoster(ctx context.Context, tournamentTe
 func (r *RegistrationRepository) RejectRoster(ctx context.Context, tournamentTeamID uuid.UUID) error {
 	upSub := `
 		UPDATE tournament_roster_submissions
-		SET status = 'rejected'::registration_status_enum,
+		SET status = 'rejected',
 		    updated_at = NOW()
 		WHERE tournament_team_id = $1 AND status = 'pending'
 	`
@@ -712,7 +754,7 @@ func (r *RegistrationRepository) RejectRoster(ctx context.Context, tournamentTea
 
 	upTeam := `
 		UPDATE tournament_teams
-		SET roster_status = 'rejected'::registration_status_enum,
+		SET roster_status = 'rejected',
 		    is_roster_locked = FALSE,
 		    updated_at = NOW()
 		WHERE id = $1
@@ -787,7 +829,11 @@ func (r *RegistrationRepository) ApproveSingleRosterSubmission(ctx context.Conte
 		tpQuery := `
 			INSERT INTO tournament_players (tournament_team_id, master_player_id, shirt_number, position, created_at, updated_at)
 			VALUES ($1, $2, $3, $4, NOW(), NOW())
-			ON CONFLICT DO NOTHING
+			ON CONFLICT (tournament_team_id, master_player_id) WHERE deleted_at IS NULL
+			DO UPDATE SET
+				shirt_number = COALESCE(EXCLUDED.shirt_number, tournament_players.shirt_number),
+				position = COALESCE(EXCLUDED.position, tournament_players.position),
+				updated_at = NOW()
 		`
 		_, _ = r.db.Exec(ctx, tpQuery, s.tournamentTeamID, masterID, s.shirtNumber, s.position)
 	}
@@ -798,7 +844,7 @@ func (r *RegistrationRepository) ApproveSingleRosterSubmission(ctx context.Conte
 	}
 	upSub := `
 		UPDATE tournament_roster_submissions
-		SET status = 'approved'::registration_status_enum,
+		SET status = 'approved',
 		    master_player_id = COALESCE($2, master_player_id),
 		    rejection_reason = NULL,
 		    updated_at = NOW()
@@ -812,7 +858,7 @@ func (r *RegistrationRepository) ApproveSingleRosterSubmission(ctx context.Conte
 	var pendingCount int
 	_ = r.db.QueryRow(ctx, `SELECT COUNT(*) FROM tournament_roster_submissions WHERE tournament_team_id = $1 AND status = 'pending' AND deleted_at IS NULL`, s.tournamentTeamID).Scan(&pendingCount)
 	if pendingCount == 0 {
-		_, _ = r.db.Exec(ctx, `UPDATE tournament_teams SET roster_status = 'approved'::registration_status_enum, is_roster_locked = TRUE, updated_at = NOW() WHERE id = $1`, s.tournamentTeamID)
+		_, _ = r.db.Exec(ctx, `UPDATE tournament_teams SET roster_status = 'approved', is_roster_locked = TRUE, updated_at = NOW() WHERE id = $1`, s.tournamentTeamID)
 	}
 
 	return nil
@@ -821,7 +867,7 @@ func (r *RegistrationRepository) ApproveSingleRosterSubmission(ctx context.Conte
 func (r *RegistrationRepository) RejectSingleRosterSubmission(ctx context.Context, submissionID uuid.UUID, reason string) error {
 	upSub := `
 		UPDATE tournament_roster_submissions
-		SET status = 'rejected'::registration_status_enum,
+		SET status = 'rejected',
 		    rejection_reason = NULLIF($2, ''),
 		    updated_at = NOW()
 		WHERE id = $1

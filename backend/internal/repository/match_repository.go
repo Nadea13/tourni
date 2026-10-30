@@ -273,11 +273,22 @@ func (r *MatchRepository) Update(ctx context.Context, m *model.Match) error {
 		if m.CategoryID == nil {
 			m.CategoryID = existing.CategoryID
 		}
-		if m.HomeTeamID == nil && m.PhHome == nil {
-			m.HomeTeamID = existing.HomeTeamID
+		isEndedOrLive := existing.Status == "finished" || existing.Status == "completed" || existing.Status == "live" || existing.Status == "first_half" || existing.Status == "second_half" || existing.Status == "half_time" || existing.Status == "extra_time" || existing.Status == "penalties"
+		hasResult := isEndedOrLive || existing.HomeScore > 0 || existing.AwayScore > 0
+		if hasResult {
+			if existing.HomeTeamID != nil {
+				m.HomeTeamID = existing.HomeTeamID
+			}
+			if existing.AwayTeamID != nil {
+				m.AwayTeamID = existing.AwayTeamID
+			}
 		}
-		if m.AwayTeamID == nil && m.PhAway == nil {
-			m.AwayTeamID = existing.AwayTeamID
+
+		// Prevent same team for both home and away in the same match
+		if m.HomeTeamID != nil && m.AwayTeamID != nil && *m.HomeTeamID == *m.AwayTeamID {
+			m.AwayTeamID = nil
+			m.PlaceholderB = nil
+			m.PhAway = nil
 		}
 		if m.Status == "" {
 			m.Status = existing.Status
@@ -446,12 +457,25 @@ func (r *MatchRepository) SyncCategoryMatches(ctx context.Context, categoryID uu
 		m.ElapsedSeconds = existing.ElapsedSeconds
 		m.Minute = existing.Minute
 		m.ScoreDetail = existing.ScoreDetail
-		if m.HomeTeamID == nil && existing.HomeTeamID != nil {
-			m.HomeTeamID = existing.HomeTeamID
+
+		isEndedOrLive := existing.Status == "finished" || existing.Status == "completed" || existing.Status == "live" || existing.Status == "first_half" || existing.Status == "second_half" || existing.Status == "half_time" || existing.Status == "extra_time" || existing.Status == "penalties"
+		hasResult := isEndedOrLive || existing.HomeScore > 0 || existing.AwayScore > 0
+		if hasResult {
+			if existing.HomeTeamID != nil {
+				m.HomeTeamID = existing.HomeTeamID
+			}
+			if existing.AwayTeamID != nil {
+				m.AwayTeamID = existing.AwayTeamID
+			}
 		}
-		if m.AwayTeamID == nil && existing.AwayTeamID != nil {
-			m.AwayTeamID = existing.AwayTeamID
+
+		// Prevent same team for both home and away in the same match
+		if m.HomeTeamID != nil && m.AwayTeamID != nil && *m.HomeTeamID == *m.AwayTeamID {
+			m.AwayTeamID = nil
+			m.PlaceholderB = nil
+			m.PhAway = nil
 		}
+
 		if m.ScheduledAt == nil && existing.ScheduledAt != nil {
 			m.ScheduledAt = existing.ScheduledAt
 		}
@@ -496,6 +520,13 @@ func (r *MatchRepository) SyncCategoryMatches(ctx context.Context, categoryID uu
 				activeIDsMap[m.ID] = true
 				continue
 			}
+		}
+
+		// Prevent same team for both home and away in the same match
+		if m.HomeTeamID != nil && m.AwayTeamID != nil && *m.HomeTeamID == *m.AwayTeamID {
+			m.AwayTeamID = nil
+			m.PlaceholderB = nil
+			m.PhAway = nil
 		}
 
 		// Create new match

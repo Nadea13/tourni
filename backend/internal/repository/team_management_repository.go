@@ -36,7 +36,7 @@ func (r *TeamManagementRepository) CreateOrUpdate(ctx context.Context, req *mode
 			UPDATE team_management_requests
 			SET contact_phone = $1,
 			    message = $2,
-			    status = 'pending'::registration_status_enum,
+			    status = 'pending',
 			    updated_at = NOW()
 			WHERE id = $3
 			RETURNING id, status::text, created_at, updated_at
@@ -48,7 +48,7 @@ func (r *TeamManagementRepository) CreateOrUpdate(ctx context.Context, req *mode
 	// Insert new request
 	query := `
 		INSERT INTO team_management_requests (team_id, requester_id, contact_phone, message, status, created_at, updated_at)
-		VALUES ($1, $2, $3, $4, 'pending'::registration_status_enum, NOW(), NOW())
+		VALUES ($1, $2, $3, $4, 'pending', NOW(), NOW())
 		RETURNING id, status::text, created_at, updated_at
 	`
 	return r.db.QueryRow(ctx, query,
@@ -298,5 +298,34 @@ func (r *TeamManagementRepository) Reject(ctx context.Context, requestID uuid.UU
 		return fmt.Errorf("failed to reject request: %w", err)
 	}
 
+	return nil
+}
+
+func (r *TeamManagementRepository) Cancel(ctx context.Context, id uuid.UUID, userID uuid.UUID, isAdmin bool) error {
+	query := `
+		UPDATE team_management_requests
+		SET status = 'cancelled', updated_at = NOW()
+		WHERE (id = $1 OR team_id = $1)
+		  AND requester_id = $2
+		  AND status = 'pending'
+	`
+	args := []interface{}{id, userID}
+	if isAdmin {
+		query = `
+			UPDATE team_management_requests
+			SET status = 'cancelled', updated_at = NOW()
+			WHERE (id = $1 OR team_id = $1)
+			  AND status = 'pending'
+		`
+		args = []interface{}{id}
+	}
+
+	res, err := r.db.Exec(ctx, query, args...)
+	if err != nil {
+		return fmt.Errorf("failed to cancel request: %w", err)
+	}
+	if res.RowsAffected() == 0 {
+		return fmt.Errorf("request not found or already processed")
+	}
 	return nil
 }

@@ -43,10 +43,24 @@ func (s *MatchService) Update(ctx context.Context, m *model.Match) error {
 		s.hub.BroadcastMatchUpdate(m.ID.String(), wsHub.EventMatchUpdate, map[string]interface{}{
 			"match": updatedMatch,
 		})
+		s.hub.BroadcastMatchUpdate(m.ID.String(), wsHub.EventScoreUpdate, map[string]interface{}{
+			"match_id":   m.ID.String(),
+			"home_score": updatedMatch.HomeScore,
+			"away_score": updatedMatch.AwayScore,
+			"status":     string(updatedMatch.Status),
+		})
 		if m.Status != "" {
 			s.hub.BroadcastMatchUpdate(m.ID.String(), wsHub.EventStatusChange, map[string]interface{}{
 				"match_id": m.ID.String(),
 				"status":   string(m.Status),
+			})
+		}
+		if updatedMatch.TournamentCategoryID != nil && s.standingsRepo != nil {
+			standingsService := NewStandingsService(s.standingsRepo, s.repo)
+			newStandings, _ := standingsService.RecalculateAndSave(ctx, *updatedMatch.TournamentCategoryID)
+			s.hub.BroadcastMatchUpdate("all", wsHub.EventStandingsSync, map[string]interface{}{
+				"category_id": updatedMatch.TournamentCategoryID.String(),
+				"standings":   newStandings,
 			})
 		}
 	}
@@ -91,11 +105,24 @@ func (s *MatchService) UpdateScore(ctx context.Context, id uuid.UUID, homeScore,
 		"away_score": awayScore,
 		"status":     status,
 	})
+	s.hub.BroadcastMatchUpdate(id.String(), wsHub.EventMatchUpdate, map[string]interface{}{
+		"match": match,
+	})
+	if status != "" {
+		s.hub.BroadcastMatchUpdate(id.String(), wsHub.EventStatusChange, map[string]interface{}{
+			"match_id": id.String(),
+			"status":   string(status),
+		})
+	}
 
 	// If match belongs to a tournament category, recalculate and persist standings
 	if match.TournamentCategoryID != nil && s.standingsRepo != nil {
 		standingsService := NewStandingsService(s.standingsRepo, s.repo)
-		_, _ = standingsService.RecalculateAndSave(ctx, *match.TournamentCategoryID)
+		newStandings, _ := standingsService.RecalculateAndSave(ctx, *match.TournamentCategoryID)
+		s.hub.BroadcastMatchUpdate("all", wsHub.EventStandingsSync, map[string]interface{}{
+			"category_id": match.TournamentCategoryID.String(),
+			"standings":   newStandings,
+		})
 	}
 
 	return match, nil

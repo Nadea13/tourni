@@ -152,3 +152,29 @@ func (h *TeamManagementHandler) RejectRequest(c *fiber.Ctx) error {
 
 	return c.JSON(fiber.Map{"message": "Request rejected successfully"})
 }
+
+func (h *TeamManagementHandler) CancelRequest(c *fiber.Ctx) error {
+	userIDVal := c.Locals("user_id")
+	if userIDVal == nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Authentication required"})
+	}
+	userID, ok := userIDVal.(uuid.UUID)
+	if !ok {
+		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": "Invalid user session"})
+	}
+
+	role, _ := c.Locals("role").(string)
+	isAdmin := role == "admin" || role == "super_admin"
+
+	reqIDStr := c.Params("id")
+	reqID, err := uuid.Parse(reqIDStr)
+	if err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": "Invalid request ID"})
+	}
+
+	if err := h.repo.Cancel(c.Context(), reqID, userID, isAdmin); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": err.Error()})
+	}
+
+	return c.JSON(fiber.Map{"message": "Request cancelled successfully"})
+}

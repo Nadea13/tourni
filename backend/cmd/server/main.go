@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"log"
+	"net"
 	"strings"
 	"time"
 
@@ -117,14 +118,25 @@ func main() {
 		return c.IP()
 	}
 
-	// 1. General API Rate Limiter (Default: 600 req/min per IP, bypass on localhost for development)
+	isLocalOrPrivateIP := func(ipStr string) bool {
+		if ipStr == "127.0.0.1" || ipStr == "::1" || ipStr == "localhost" {
+			return true
+		}
+		parsed := net.ParseIP(ipStr)
+		if parsed == nil {
+			return false
+		}
+		return parsed.IsLoopback() || parsed.IsPrivate()
+	}
+
+	// 1. General API Rate Limiter (Default: 600 req/min per IP, bypass on localhost/private docker network for development)
 	generalLimiter := limiter.New(limiter.Config{
 		Max:        cfg.RateLimitGeneralMax,
 		Expiration: 1 * time.Minute,
 		KeyGenerator: getClientIP,
 		Next: func(c *fiber.Ctx) bool {
 			ip := getClientIP(c)
-			return ip == "127.0.0.1" || ip == "::1" || ip == "localhost"
+			return isLocalOrPrivateIP(ip)
 		},
 		LimitReached: func(c *fiber.Ctx) error {
 			return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
@@ -134,14 +146,14 @@ func main() {
 	})
 	app.Use(generalLimiter)
 
-	// 2. Strict Auth Rate Limiter for Brute-Force & OTP spam prevention (Default: 30 req/min)
+	// 2. Strict Auth Rate Limiter for Brute-Force & OTP spam prevention (Default: 30 req/min, bypass on localhost/docker)
 	authLimiter := limiter.New(limiter.Config{
 		Max:        cfg.RateLimitAuthMax,
 		Expiration: 1 * time.Minute,
 		KeyGenerator: getClientIP,
 		Next: func(c *fiber.Ctx) bool {
 			ip := getClientIP(c)
-			return ip == "127.0.0.1" || ip == "::1" || ip == "localhost"
+			return isLocalOrPrivateIP(ip)
 		},
 		LimitReached: func(c *fiber.Ctx) error {
 			return c.Status(fiber.StatusTooManyRequests).JSON(fiber.Map{
@@ -156,6 +168,14 @@ func main() {
 			c.Set("Cache-Control", fmt.Sprintf("public, max-age=%d, s-maxage=%d, stale-while-revalidate=%d", maxAgeSeconds, maxAgeSeconds*2, maxAgeSeconds*4))
 			return c.Next()
 		}
+	}
+
+	// 4. No-Cache Helper for Live Realtime Routes (Prevents browser/proxy from serving stale cached scores & standings)
+	noCache := func(c *fiber.Ctx) error {
+		c.Set("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate")
+		c.Set("Pragma", "no-cache")
+		c.Set("Expires", "0")
+		return c.Next()
 	}
 
 	// Health check route (unlimited)
@@ -221,6 +241,7 @@ func main() {
 	teamRequests.Get("/incoming", middleware.Protected(cfg), teamManagementHandler.ListIncomingRequests)
 	teamRequests.Post("/:id/approve", middleware.Protected(cfg), teamManagementHandler.ApproveRequest)
 	teamRequests.Post("/:id/reject", middleware.Protected(cfg), teamManagementHandler.RejectRequest)
+	teamRequests.Post("/:id/cancel", middleware.Protected(cfg), teamManagementHandler.CancelRequest)
 
 	// Master Players routes
 	masterPlayers := api.Group("/master-players")
@@ -260,22 +281,22 @@ func main() {
 
 
 	// Tournament Categories
-	tournaments.Get("/:id/categories", edgeCache(15), tournamentHandler.GetCategories)
+	tournaments.Get("/:id/categories", noCache, tournamentHandler.GetCategories)
 	tournaments.Post("/:id/categories", middleware.Protected(cfg), tournamentHandler.CreateCategory)
 	tournaments.Put("/:id/categories/:categoryId", tournamentHandler.UpdateCategory)
 	tournaments.Patch("/:id/categories/:categoryId", tournamentHandler.UpdateCategory)
 	tournaments.Patch("/:id/categories/:categoryId/canvas", tournamentHandler.UpdateCategoryCanvas)
 	tournaments.Put("/:id/categories/:categoryId/canvas", tournamentHandler.UpdateCategoryCanvas)
 	tournaments.Delete("/:id/categories/:categoryId", middleware.Protected(cfg), tournamentHandler.DeleteCategory)
-	tournaments.Get("/:id/categories/:categoryId/standings", edgeCache(15), standingsHandler.GetByCategory)
+	tournaments.Get("/:id/categories/:categoryId/standings", noCache, standingsHandler.GetByCategory)
 	tournaments.Post("/:id/categories/:categoryId/standings/recalculate", standingsHandler.Recalculate)
-	tournaments.Get("/:id/categories/:categoryId/matches", edgeCache(10), matchHandler.GetByCategory)
+	tournaments.Get("/:id/categories/:categoryId/matches", noCache, matchHandler.GetByCategory)
 	tournaments.Post("/:id/categories/:categoryId/sync-matches", matchHandler.SyncCategoryMatches)
 	tournaments.Delete("/:id/categories/:categoryId/matches", matchHandler.DeleteByCategory)
 
-	// Tournament Matches & Events
-	tournaments.Get("/:id/matches", edgeCache(10), matchHandler.GetByTournament)
-	tournaments.Get("/:id/events", edgeCache(10), matchHandler.GetEventsByTournament)
+	// Tournament Matches & Events (Strictly No-Cache for Live Scores & Real-Time Sync)
+	tournaments.Get("/:id/matches", noCache, matchHandler.GetByTournament)
+	tournaments.Get("/:id/events", noCache, matchHandler.GetEventsByTournament)
 
 	// Tournament Registrations & Teams
 	tournaments.Get("/actions/incoming", middleware.Protected(cfg), registrationHandler.ListIncomingTournamentActions)

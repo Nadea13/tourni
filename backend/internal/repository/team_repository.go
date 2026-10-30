@@ -231,22 +231,95 @@ func (r *TeamRepository) AddPlayer(ctx context.Context, p *model.Player) error {
 	resolvedID, _ := r.ResolveTeamID(ctx, p.TeamID)
 	p.TeamID = resolvedID
 
-	// Auto-create master_player record if not provided
+	// 1. Check if player already exists in this team (active)
+	var existingID uuid.UUID
+	checkQuery := `
+		SELECT id, created_at, updated_at
+		FROM players
+		WHERE team_id = $1 AND deleted_at IS NULL AND (
+			($2::uuid IS NOT NULL AND master_player_id = $2)
+			OR (LOWER(TRIM(first_name)) = LOWER(TRIM($3)) AND LOWER(TRIM(COALESCE(last_name, ''))) = LOWER(TRIM(COALESCE($4, ''))))
+		)
+		LIMIT 1
+	`
+	err := r.db.QueryRow(ctx, checkQuery, p.TeamID, p.MasterPlayerID, p.FirstName, p.LastName).Scan(&existingID, &p.CreatedAt, &p.UpdatedAt)
+	if err == nil {
+		p.ID = existingID
+		return r.UpdatePlayer(ctx, p)
+	}
+
+	// 2. Check if a soft-deleted player exists in this team with matching master_player_id or name
+	var deletedID uuid.UUID
+	checkDeletedQuery := `
+		SELECT id
+		FROM players
+		WHERE team_id = $1 AND deleted_at IS NOT NULL AND (
+			($2::uuid IS NOT NULL AND master_player_id = $2)
+			OR (LOWER(TRIM(first_name)) = LOWER(TRIM($3)) AND LOWER(TRIM(COALESCE(last_name, ''))) = LOWER(TRIM(COALESCE($4, ''))))
+		)
+		LIMIT 1
+	`
+	errDeleted := r.db.QueryRow(ctx, checkDeletedQuery, p.TeamID, p.MasterPlayerID, p.FirstName, p.LastName).Scan(&deletedID)
+	if errDeleted == nil {
+		p.ID = deletedID
+		restoreQuery := `
+			UPDATE players
+			SET deleted_at = NULL,
+			    first_name = COALESCE(NULLIF($1, ''), first_name),
+			    last_name = COALESCE(NULLIF($2, ''), last_name),
+			    jersey_number = COALESCE($3, jersey_number),
+			    position = COALESCE(NULLIF($4, ''), position),
+			    photo_url = COALESCE(NULLIF($5, ''), photo_url),
+			    date_of_birth = COALESCE(NULLIF($6, '')::date, date_of_birth),
+			    master_player_id = COALESCE($7, master_player_id),
+			    updated_at = NOW()
+			WHERE id = $8
+			RETURNING created_at, updated_at
+		`
+		return r.db.QueryRow(ctx, restoreQuery,
+			p.FirstName, p.LastName, p.JerseyNumber, p.Position, p.PhotoURL, p.DateOfBirth, p.MasterPlayerID, deletedID,
+		).Scan(&p.CreatedAt, &p.UpdatedAt)
+	}
+
+	// 3. Auto-create master_player record if not provided
 	if p.MasterPlayerID == nil || *p.MasterPlayerID == uuid.Nil {
-		var newMasterID uuid.UUID
-		err := r.db.QueryRow(ctx, `
-			INSERT INTO master_players (first_name_local, last_name_local, birthday, photo_url, status, verified)
-			VALUES ($1, COALESCE(NULLIF($2, ''), '-'), NULLIF($3, '')::date, $4, 'active', false)
-			RETURNING id
-		`, p.FirstName, p.LastName, p.DateOfBirth, p.PhotoURL).Scan(&newMasterID)
-		if err == nil && newMasterID != uuid.Nil {
-			p.MasterPlayerID = &newMasterID
+		// First check if a master_player already exists by name
+		var existingMasterID uuid.UUID
+		findMasterQuery := `
+			SELECT id FROM master_players
+			WHERE deleted_at IS NULL AND (
+				(LOWER(TRIM(first_name_local)) = LOWER(TRIM($1)) AND LOWER(TRIM(COALESCE(last_name_local, ''))) = LOWER(TRIM(COALESCE($2, ''))))
+				OR (LOWER(TRIM(first_name_intl)) = LOWER(TRIM($1)) AND LOWER(TRIM(COALESCE(last_name_intl, ''))) = LOWER(TRIM(COALESCE($2, ''))))
+			)
+			LIMIT 1
+		`
+		if errMaster := r.db.QueryRow(ctx, findMasterQuery, p.FirstName, p.LastName).Scan(&existingMasterID); errMaster == nil && existingMasterID != uuid.Nil {
+			p.MasterPlayerID = &existingMasterID
+		} else {
+			var newMasterID uuid.UUID
+			err := r.db.QueryRow(ctx, `
+				INSERT INTO master_players (first_name_local, last_name_local, birthday, photo_url, status, verified)
+				VALUES ($1, COALESCE(NULLIF($2, ''), '-'), NULLIF($3, '')::date, $4, 'active', false)
+				RETURNING id
+			`, p.FirstName, p.LastName, p.DateOfBirth, p.PhotoURL).Scan(&newMasterID)
+			if err == nil && newMasterID != uuid.Nil {
+				p.MasterPlayerID = &newMasterID
+			}
 		}
 	}
 
 	query := `
 		INSERT INTO players (team_id, first_name, last_name, jersey_number, position, photo_url, date_of_birth, master_player_id)
 		VALUES ($1, $2, $3, $4, $5, $6, NULLIF($7, '')::date, $8)
+		ON CONFLICT (team_id, master_player_id) WHERE deleted_at IS NULL AND master_player_id IS NOT NULL
+		DO UPDATE SET
+			first_name = EXCLUDED.first_name,
+			last_name = EXCLUDED.last_name,
+			jersey_number = COALESCE(EXCLUDED.jersey_number, players.jersey_number),
+			position = COALESCE(EXCLUDED.position, players.position),
+			photo_url = COALESCE(EXCLUDED.photo_url, players.photo_url),
+			date_of_birth = COALESCE(EXCLUDED.date_of_birth, players.date_of_birth),
+			updated_at = NOW()
 		RETURNING id, created_at, updated_at
 	`
 	return r.db.QueryRow(ctx, query,

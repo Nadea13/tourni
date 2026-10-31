@@ -3,7 +3,7 @@
 import { useState, useEffect, useRef, useTransition } from "react";
 import { useTranslations, useLocale } from "next-intl";
 import { useRouter } from "next/navigation";
-import { Plus, Loader2, Trophy, Calendar, Clock, MapPin, Map, FileText, Activity, Camera } from "lucide-react";
+import { Plus, Loader2, Trophy, Calendar, Clock, MapPin, Map, FileText, Activity, Camera, Crown } from "lucide-react";
 
 import { createTournament } from "@/actions/tournaments/general";
 import { Button } from "@/components/ui/button";
@@ -26,6 +26,8 @@ import { RadioBtn } from "@/components/ui/radio-btn";
 import { DatePicker, DateRangePicker } from "@/components/ui/date-picker";
 import { ApiClient } from "@/lib/api-client";
 import { Header } from "@/components/ui/header";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/dropdown";
+import { getUserPayments, getUserTournaments } from "@/actions/common/payments";
 
 import dynamic from "next/dynamic";
 import "react-quill-new/dist/quill.snow.css";
@@ -73,6 +75,9 @@ export function TournamentCreate({ iconOnlyMobile = false, isDisabled = false }:
     const [description, setDescription] = useState<string>("");
     const [locationName, setLocationName] = useState<string>("");
     const [googleMapUrl, setGoogleMapUrl] = useState<string>("");
+    const [selectedPlan, setSelectedPlan] = useState<string>("");
+    const [remainingTournamentCredits, setRemainingTournamentCredits] = useState<number>(0);
+    const [remainingEventCredits, setRemainingEventCredits] = useState<number>(0);
 
     const scrollContainerRef = useRef<HTMLDivElement>(null);
 
@@ -88,7 +93,7 @@ export function TournamentCreate({ iconOnlyMobile = false, isDisabled = false }:
         }
     }, [open]);
 
-    // Load sports dynamically from database
+    // Load sports and user quota dynamically from database
     useEffect(() => {
         if (open) {
             ApiClient.getToken();
@@ -99,6 +104,46 @@ export function TournamentCreate({ iconOnlyMobile = false, isDisabled = false }:
                 }
             }
             loadSports();
+
+            async function loadQuota() {
+                try {
+                    const [paymentsRes, tournamentsRes] = await Promise.all([
+                        getUserPayments(),
+                        getUserTournaments(),
+                    ]);
+                    const paymentsList = paymentsRes.success && paymentsRes.data ? paymentsRes.data : [];
+                    const tournamentsList = tournamentsRes.success && tournamentsRes.data ? tournamentsRes.data : [];
+
+                    const completed = paymentsList.filter((p: any) => p.status === 'completed' || p.status === 'success');
+                    const tPurchases = completed.filter((p: any) => p.plan === 'tournament' || p.plan === 'cup').length;
+                    const ePurchases = completed.filter((p: any) => p.plan === 'event' || p.plan === 'pro').length;
+
+                    const totalT = tPurchases * 3;
+                    const totalE = ePurchases * 1;
+
+                    const created = tournamentsList.length;
+                    const usedT = Math.min(created, totalT);
+                    const remT = totalT - usedT;
+
+                    const remCreated = Math.max(0, created - usedT);
+                    const usedE = Math.min(remCreated, totalE);
+                    const remE = totalE - usedE;
+
+                    setRemainingTournamentCredits(remT);
+                    setRemainingEventCredits(remE);
+
+                    if (remT > 0) {
+                        setSelectedPlan("tournament");
+                    } else if (remE > 0) {
+                        setSelectedPlan("event");
+                    } else {
+                        setSelectedPlan("free");
+                    }
+                } catch (err) {
+                    console.error("Failed to load user quota:", err);
+                }
+            }
+            loadQuota();
         }
     }, [open]);
 
@@ -120,6 +165,16 @@ export function TournamentCreate({ iconOnlyMobile = false, isDisabled = false }:
 
     const handleSubmit = async (e: React.FormEvent) => {
         e.preventDefault();
+
+        const hasAvailablePackages = remainingTournamentCredits > 0 || remainingEventCredits > 0;
+        if (hasAvailablePackages && !selectedPlan) {
+            toast({
+                title: isThai ? "ข้อมูลไม่ครบถ้วน" : "Required Fields Missing",
+                description: isThai ? "กรุณาเลือกระดับแพ็กเกจการแข่งขันที่ต้องการใช้" : "Please select a tournament package.",
+                variant: "destructive",
+            });
+            return;
+        }
 
         if (!name.trim() || !selectedSport || !startDate || !endDate) {
             toast({
@@ -143,6 +198,7 @@ export function TournamentCreate({ iconOnlyMobile = false, isDisabled = false }:
             const formData = new FormData();
             formData.append("name", name.trim());
             formData.append("sport_id", selectedSport);
+            formData.append("plan", selectedPlan || "free");
             formData.append("start_date", startDate);
             formData.append("end_date", endDate);
             formData.append("document_deadline", docDeadline || "");
@@ -211,6 +267,49 @@ export function TournamentCreate({ iconOnlyMobile = false, isDisabled = false }:
                     </DialogHeader>
 
                     <div ref={scrollContainerRef} className="flex-1 min-h-0 overflow-y-auto p-4">
+                        {/* 0. Tournament Plan Section */}
+                        {(remainingTournamentCredits > 0 || remainingEventCredits > 0) && (
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between px-4 py-2">
+                                <div className="flex items-start gap-3 sm:gap-4 sm:w-1/2">
+                                    <div className="size-9 rounded-sm bg-muted-foreground/10 flex items-center justify-center shrink-0">
+                                        <Crown className="size-4 text-muted-foreground" />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <Header level={6}>
+                                            {isThai ? "แพ็กเกจการแข่งขัน" : "Tournament Plan"} <span className="text-destructive">*</span>
+                                        </Header>
+                                        <p className="text-xs text-muted-foreground">
+                                            {isThai ? "เลือกระดับแพ็กเกจที่จะใช้สำหรับทัวร์นาเมนต์นี้" : "Choose the plan to apply for this tournament"}
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="sm:w-1/2 w-full mt-2 sm:mt-0">
+                                    <Select value={selectedPlan} onValueChange={setSelectedPlan}>
+                                        <SelectTrigger size="sm" className="w-full">
+                                            <SelectValue placeholder={isThai ? "เลือกแพ็กเกจ..." : "Select plan..."} />
+                                        </SelectTrigger>
+                                        <SelectContent>
+                                            {remainingTournamentCredits > 0 && (
+                                                <SelectItem value="tournament">
+                                                    Tournament {isThai ? `(คงเหลือ ${remainingTournamentCredits} สิทธิ์)` : `(${remainingTournamentCredits} remaining)`}
+                                                </SelectItem>
+                                            )}
+                                            {remainingEventCredits > 0 && (
+                                                <SelectItem value="event">
+                                                    Event {isThai ? `(คงเหลือ ${remainingEventCredits} สิทธิ์)` : `(${remainingEventCredits} remaining)`}
+                                                </SelectItem>
+                                            )}
+                                        </SelectContent>
+                                    </Select>
+                                    {!selectedPlan && (
+                                        <p className="text-[11px] text-destructive mt-1">
+                                            {isThai ? "* กรุณาเลือกแพ็กเกจ" : "* Please select a plan"}
+                                        </p>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+
                         {/* 1. Cover & Logo Section */}
                         <div className="flex flex-col sm:flex-row sm:items-start justify-between px-4 py-2">
                             <div className="flex items-start gap-3 sm:gap-4 sm:w-1/2">

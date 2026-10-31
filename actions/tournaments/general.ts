@@ -808,6 +808,7 @@ export async function createTournament(_prevState: ActionResponse, formData: For
         const start_date = formData.get("start_date") as string;
         const end_date = formData.get("end_date") as string;
         const document_deadline = formData.get("document_deadline") as string;
+        const plan = (formData.get("plan") as string) || "free";
 
         if (!name) {
             return { success: false, error: "Name is required" };
@@ -874,9 +875,11 @@ export async function createTournament(_prevState: ActionResponse, formData: For
                 banner_url: cover_img || null,
                 logo_url: logo_img || null,
                 document_deadline: document_deadline || null,
+                plan: plan || "free",
                 settings: {
                     sport_id,
                     google_map_url,
+                    plan: plan || "free",
                 }
             }),
         });

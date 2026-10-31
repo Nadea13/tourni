@@ -174,8 +174,8 @@ export function MyTournamentsClient({ initialTournaments, userPlan }: MyTourname
                         <TournamentCreate
                             iconOnlyMobile
                             isDisabled={(() => {
-                                const isUnlimitedPlan = userPlan === "yearly" || userPlan === "pro_yearly" || userPlan === "cup_yearly" || userPlan === "customs";
-                                const isCupPlan = userPlan === "cup";
+                                const isUnlimitedPlan = userPlan === "yearly" || userPlan === "pro_yearly" || userPlan === "cup_yearly" || userPlan === "tournament_yearly" || userPlan === "customs";
+                                const isCupPlan = userPlan === "cup" || userPlan === "tournament";
                                 const isEventPlan = userPlan === "event" || userPlan === "monthly" || userPlan === "pro" || userPlan === "manager_pro";
                                 const ownedTournaments = initialTournaments.filter(t => t.role === 'owner');
                                 if (isUnlimitedPlan) return false;
@@ -201,8 +201,8 @@ export function MyTournamentsClient({ initialTournaments, userPlan }: MyTourname
                         <div id="tour-create-tournament-btn-empty">
                             <TournamentCreate
                                 isDisabled={(() => {
-                                    const isUnlimitedPlan = userPlan === "yearly" || userPlan === "pro_yearly" || userPlan === "cup_yearly" || userPlan === "customs";
-                                    const isCupPlan = userPlan === "cup";
+                                    const isUnlimitedPlan = userPlan === "yearly" || userPlan === "pro_yearly" || userPlan === "cup_yearly" || userPlan === "tournament_yearly" || userPlan === "customs";
+                                    const isCupPlan = userPlan === "cup" || userPlan === "tournament";
                                     const isEventPlan = userPlan === "event" || userPlan === "monthly" || userPlan === "pro" || userPlan === "manager_pro";
                                     const ownedTournaments = initialTournaments.filter(t => t.role === 'owner');
                                     if (isUnlimitedPlan) return false;

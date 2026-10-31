@@ -180,9 +180,20 @@ export function CreateCategoryForm({
             // Client-side Subscription & Limit Check
             const { getUserSubscriptionPlan } = await import("@/actions/common/user");
             const activePlan = await getUserSubscriptionPlan();
-            const isUnlimitedPlan = activePlan === "yearly" || activePlan === "pro_yearly" || activePlan === "cup_yearly" || activePlan === "customs";
-            const isCupPlan = activePlan === "cup";
-            const isEventPlan = activePlan === "event" || activePlan === "monthly" || activePlan === "pro" || activePlan === "manager_pro";
+
+            let effectivePlan = activePlan;
+            try {
+                const tourneyResp = await ApiClient.fetch<{ tournament: any }>(`/tournaments/${tournamentId}`);
+                if (tourneyResp?.tournament?.plan && tourneyResp.tournament.plan !== 'free') {
+                    effectivePlan = tourneyResp.tournament.plan;
+                }
+            } catch {
+                // fallback to activePlan
+            }
+
+            const isUnlimitedPlan = effectivePlan === "yearly" || effectivePlan === "pro_yearly" || effectivePlan === "cup_yearly" || effectivePlan === "tournament_yearly" || effectivePlan === "customs";
+            const isCupPlan = effectivePlan === "cup" || effectivePlan === "tournament";
+            const isEventPlan = effectivePlan === "event" || effectivePlan === "monthly" || effectivePlan === "pro" || effectivePlan === "manager_pro";
 
             if (!isUnlimitedPlan) {
                 let categoryCount = 0;
@@ -193,7 +204,7 @@ export function CreateCategoryForm({
                     console.error("Error counting categories:", categoryCountError);
                 }
 
-                const maxAllowedCategories = isCupPlan ? Infinity : isEventPlan ? 3 : 1;
+                const maxAllowedCategories = isCupPlan ? 7 : isEventPlan ? 3 : 1;
 
                 if (categoryCount >= maxAllowedCategories) {
                     toast({
@@ -205,7 +216,7 @@ export function CreateCategoryForm({
                                     ? "แพ็คเกจ Event สามารถสร้างรุ่นการแข่งขันได้สูงสุด 3 รุ่นต่อทัวร์นาเมนต์เท่านั้น"
                                     : "ผู้ใช้ทั่วไปสามารถสร้างรุ่นการแข่งขันได้สูงสุด 1 รุ่นเท่านั้น กรุณาอัพเกรดแพ็คเกจ"
                             : isCupPlan
-                                ? "Cup plan allows up to 5 categories per tournament."
+                                ? "Tournament plan allows up to 7 categories per tournament."
                                 : isEventPlan
                                     ? "Event plan allows up to 3 categories per tournament."
                                     : "Free plan users can create only 1 tournament category. Please upgrade your plan.",

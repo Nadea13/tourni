@@ -965,8 +965,11 @@ function CanvasInternal({
         ];
 
         const possessesStaffAccess = Boolean(
-            userPlan && (
+            (tournament?.plan && (tournament.plan as string) !== 'free' && (tournament.plan as string) !== 'match') ||
+            (userPlan && (
                 userPlan === "event" ||
+                userPlan === "tournament" ||
+                userPlan === "tournament_yearly" ||
                 userPlan === "cup" ||
                 userPlan === "cup_yearly" ||
                 userPlan === "monthly" ||
@@ -975,7 +978,7 @@ function CanvasInternal({
                 userPlan === "pro_yearly" ||
                 userPlan === "manager_pro" ||
                 userPlan === "customs"
-            )
+            ))
         );
 
         if (possessesStaffAccess) {
@@ -1762,9 +1765,11 @@ function CanvasInternal({
                                 value={activeCategoryId || ""}
                                 onValueChange={(val) => {
                                     if (val === "create_new") {
-                                        const isUnlimitedPlan = userPlan === "yearly" || userPlan === "pro_yearly" || userPlan === "cup_yearly" || userPlan === "customs";
-                                        const isEventPlan = userPlan === "event" || userPlan === "monthly" || userPlan === "pro" || userPlan === "manager_pro" || userPlan === "cup";
-                                        const maxAllowedCategories = isUnlimitedPlan ? Infinity : (isEventPlan ? 3 : 1);
+                                        const effectivePlan = tournament?.plan || userPlan;
+                                        const isUnlimitedPlan = effectivePlan === "yearly" || effectivePlan === "pro_yearly" || effectivePlan === "cup_yearly" || effectivePlan === "tournament_yearly" || effectivePlan === "customs";
+                                        const isTournamentPlan = effectivePlan === "tournament" || effectivePlan === "cup";
+                                        const isEventPlan = effectivePlan === "event" || effectivePlan === "monthly" || effectivePlan === "pro" || effectivePlan === "manager_pro";
+                                        const maxAllowedCategories = isUnlimitedPlan ? Infinity : isTournamentPlan ? 7 : (isEventPlan ? 3 : 1);
 
                                         if (categories.length >= maxAllowedCategories) {
                                             toast({
@@ -3015,3 +3020,4 @@ export function Canvas(props: CanvasProps) {
         </ReactFlowProvider>
     );
 }
+

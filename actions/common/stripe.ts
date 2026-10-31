@@ -66,8 +66,9 @@ export async function createStripeCheckoutSession({
             };
         }
 
-        const isYearly = planId.includes('yearly') || planId.includes('annual') || planId === 'pro_yearly' || planId === 'cup_yearly';
-        const isMonthly = planId === 'pro' || planId === 'event' || planId === 'cup' || planId === 'manager_pro' || planId === 'monthly';
+        const isYearly = planId.includes('yearly') || planId.includes('annual') || planId === 'pro_yearly' || planId === 'cup_yearly' || planId === 'tournament_yearly';
+        const isOneTime = planId === 'pro' || planId === 'event' || planId === 'cup' || planId === 'tournament';
+        const isMonthly = planId === 'manager_pro' || planId === 'monthly';
 
         // Clean plan title
         const cleanPlanName = planName.replace(/^สมัครใช้\s*/i, '').replace(/^(สมัคร|Subscribe)\s*/i, '').trim();
@@ -76,6 +77,8 @@ export async function createStripeCheckoutSession({
             displayTitle = `สมัครใช้ Tourni ${cleanPlanName.replace(/yearly/i, '').trim()} (Annual)`;
         } else if (isMonthly) {
             displayTitle = `สมัครใช้ Tourni ${cleanPlanName.replace(/monthly/i, '').trim()} (Monthly)`;
+        } else if (isOneTime) {
+            displayTitle = `ซื้อแพ็กเกจ Tourni ${cleanPlanName} (จ่ายรายครั้ง)`;
         }
 
         let baseDesc = "ระบบบริหารจัดการการแข่งขันฟุตบอลแบบมืออาชีพ สร้างทัวร์นาเมนต์ได้ไม่จำกัด ตารางแข่งขันและสถิติ Real-time";
@@ -83,9 +86,9 @@ export async function createStripeCheckoutSession({
             baseDesc = "ระบบบริหารจัดการการแข่งขันแบบมืออาชีพ ตารางคะแนน Real-time สถิตินักกีฬา และระบบลงทะเบียนทีมครบวงจร";
         } else if (planId === "pro_yearly") {
             baseDesc = "แพ็กเกจรายปีคุ้มสุด ระบบบริหารจัดการการแข่งขันครบวงจร ไม่จำกัดทัวร์นาเมนต์ พร้อมระบบซัพพอร์ตพิเศษ";
-        } else if (planId === "cup") {
-            baseDesc = "แพ็กเกจสำหรับการแข่งขันแบบถ้วยฟุตบอล บอลถ้วย ตารางสายการแข่งขัน น็อคเอ้าท์ อัตโนมัติ";
-        } else if (planId === "cup_yearly") {
+        } else if (planId === "cup" || planId === "tournament") {
+            baseDesc = "ระบบบริหารจัดการทัวร์นาเมนต์ขนาดใหญ่ สร้างได้สูงสุด 3 ทัวร์นาเมนต์ 7 รุ่นต่อทัวร์นาเมนต์ สตาฟสูงสุด 7 คน";
+        } else if (planId === "cup_yearly" || planId === "tournament_yearly") {
             baseDesc = "แพ็กเกจรายปีสำหรับบริหารจัดการบอลถ้วย น็อคเอ้าท์และแบ่งกลุ่ม ไม่จำกัดรายการแข่งขัน";
         } else if (planId === "manager_pro") {
             baseDesc = "สำหรับผู้จัดการทีม จัดการรายชื่อนักกีฬา สถิติส่วนตัว ชำระเงินค่าสมัครแข่งครบในที่เดียว";
@@ -94,6 +97,36 @@ export async function createStripeCheckoutSession({
         // Full base price vs discount calculation
         let originalPrice = amount;
         let discounts: Stripe.Checkout.SessionCreateParams.Discount[] | undefined = undefined;
+
+        if (isOneTime) {
+            let hasPurchasedBefore = false;
+            try {
+                const res = await fetch(`${API_BASE_URL}/payments?user_id=${user.id}`, {
+                    headers: { Authorization: `Bearer ${session.token}` },
+                    cache: 'no-store'
+                });
+                if (res.ok) {
+                    const data = await res.json();
+                    const list: any[] = Array.isArray(data) ? data : (data.data || []);
+                    hasPurchasedBefore = list.some((p: any) => 
+                        (p.payment_status === 'completed' || p.payment_status === 'success') &&
+                        (p.plan_name === planId || (planId === 'event' && p.plan_name === 'pro') || (planId === 'tournament' && p.plan_name === 'cup'))
+                    );
+                }
+            } catch (e) {
+                console.error("Error checking past payments:", e);
+            }
+
+            if (planId === 'event' || planId === 'pro') {
+                originalPrice = hasPurchasedBefore 
+                    ? (currency === 'usd' ? 9 : 290)
+                    : (currency === 'usd' ? 4.5 : 145);
+            } else if (planId === 'tournament' || planId === 'cup') {
+                originalPrice = hasPurchasedBefore 
+                    ? (currency === 'usd' ? 17 : 590)
+                    : (currency === 'usd' ? 8.5 : 295);
+            }
+        }
 
         // Pro Monthly Promo: Original 290 THB / $9 USD, Promo 145 THB / $4.50 USD (-50%)
         if ((planId === "pro" || planId === "event") && isMonthly && (amount === 145 || amount === 4.5)) {
@@ -123,9 +156,11 @@ export async function createStripeCheckoutSession({
                 description: baseDesc,
             },
             unit_amount: Math.round(originalPrice * 100), // Original amount in satang or cents
-            recurring: {
-                interval: isYearly ? 'year' : 'month',
-            },
+                        ...(isOneTime ? {} : {
+                recurring: {
+                    interval: isYearly ? 'year' : 'month',
+                },
+            }),
         };
 
         // Find or create Stripe Customer
@@ -149,17 +184,18 @@ export async function createStripeCheckoutSession({
         }
 
         const checkoutOptions: Stripe.Checkout.SessionCreateParams = {
-            payment_method_types: ['card'],
+            payment_method_types: (currency.toLowerCase() === 'thb' && isOneTime) ? ['card', 'promptpay'] : ['card'],
             line_items: [
                 {
                     price_data: priceDataObj,
                     quantity: 1,
                 },
             ],
-            mode: 'subscription',
+            mode: isOneTime ? 'payment' : 'subscription',
             discounts: discounts,
             customer: customerId,
             customer_email: customerId ? undefined : (user.email || undefined),
+            invoice_creation: isOneTime ? { enabled: true } : undefined,
             metadata: {
                 userId: user.id,
                 planId,
@@ -337,5 +373,46 @@ export async function verifyStripeCheckoutSession(sessionId: string): Promise<Ac
             success: false,
             error: error instanceof Error ? error.message : "Failed to verify Stripe payment"
         };
+    }
+}
+
+
+export async function getStripeReceiptUrl(transactionId: string): Promise<ActionResponse<{ url: string | null }>> {
+    try {
+        if (!process.env.STRIPE_SECRET_KEY || process.env.STRIPE_SECRET_KEY.includes("dummy")) {
+            return { success: true, data: { url: null } };
+        }
+
+        if (transactionId.startsWith('pi_')) {
+            const pi = await stripe.paymentIntents.retrieve(transactionId);
+            if (pi.latest_charge) {
+                const charge = await stripe.charges.retrieve(pi.latest_charge as string);
+                return { success: true, data: { url: charge.receipt_url || null } };
+            }
+        } else if (transactionId.startsWith('py_') || transactionId.startsWith('ch_')) {
+            const charge = await stripe.charges.retrieve(transactionId);
+            return { success: true, data: { url: charge.receipt_url || null } };
+        } else if (transactionId.startsWith('in_')) {
+            const invoice = await stripe.invoices.retrieve(transactionId);
+            return { success: true, data: { url: invoice.hosted_invoice_url || invoice.invoice_pdf || null } };
+        } else if (transactionId.startsWith('cs_')) {
+            const session = await stripe.checkout.sessions.retrieve(transactionId);
+            if (session.invoice) {
+                const invoice = await stripe.invoices.retrieve(session.invoice as string);
+                return { success: true, data: { url: invoice.hosted_invoice_url || invoice.invoice_pdf || null } };
+            }
+            if (session.payment_intent) {
+                const pi = await stripe.paymentIntents.retrieve(session.payment_intent as string);
+                if (pi.latest_charge) {
+                    const charge = await stripe.charges.retrieve(pi.latest_charge as string);
+                    return { success: true, data: { url: charge.receipt_url || null } };
+                }
+            }
+        }
+
+        return { success: true, data: { url: null } };
+    } catch (error) {
+        console.error("Error retrieving Stripe receipt:", error);
+        return { success: false, error: "Failed to retrieve receipt" };
     }
 }

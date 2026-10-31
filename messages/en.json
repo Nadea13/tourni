@@ -1644,7 +1644,7 @@
       "title": "Monthly Event"
     },
     "tournament": {
-      "title": "Per Event"
+      "title": "Tournament"
     },
     "free": {
       "title": "Match"
@@ -1698,7 +1698,7 @@
         "Live score display for streaming (OBS Overlay)"
       ],
       "pro": [
-        "Create up to 3 tournaments per month",
+        "Create up to 1 tournament",
         "Create up to 3 categories per tournament",
         "Limit up to 32 teams per tournament",
         "Real-time match events / scorers / fouls recording",
@@ -1708,7 +1708,7 @@
       ],
       "pro_yearly": [
         "Save 2 months compared to monthly!",
-        "Create up to 3 tournaments per month",
+        "Create up to 1 tournament per month",
         "Create up to 3 categories per tournament",
         "Limit up to 32 teams per tournament",
         "Real-time match events / scorers / fouls recording",
@@ -1717,22 +1717,22 @@
         "Live score display for streaming (OBS Overlay)"
       ],
       "cup": [
-        "Create up to 10 tournaments per month",
-        "Unlimited tournament categories",
-        "Limit up to 128 teams per category",
-        "Real-time match events / scorers / fouls recording",
-        "Add co-staff to manage matches",
-        "Registration system with PromptPay payment",
-        "Live score display for streaming (OBS Overlay)"
+        "Create up to 3 tournaments",
+        "Create up to 7 divisions per tournament",
+        "Up to 128 teams per division",
+        "Real-time live match events / scorers / fouls",
+        "Up to 7 staff members per tournament",
+        "Team registration with QR code and transfer slip",
+        "Live Scoreboard Overlay for OBS"
       ],
       "cup_yearly": [
-        "Create up to 10 tournaments per month",
-        "Unlimited tournament categories",
-        "Limit up to 128 teams per category",
-        "Real-time match events / scorers / fouls recording",
-        "Add co-staff to manage matches",
-        "Registration system with PromptPay payment",
-        "Live score display for streaming (OBS Overlay)"
+        "Create up to 3 tournaments per month",
+        "Create up to 7 divisions per tournament",
+        "Up to 128 teams per division",
+        "Real-time live match events / scorers / fouls",
+        "Up to 7 staff members per tournament",
+        "Team registration with QR code and transfer slip",
+        "Live Scoreboard Overlay for OBS"
       ],
       "customs": [
         "Access to all Pro features",
@@ -1746,9 +1746,28 @@
         "Manage multiple squads",
         "Add co-staff/coaches to manage squads",
         "Standard customer support"
+      ],
+      "tournament": [
+        "Create up to 3 tournaments",
+        "Create up to 7 divisions per tournament",
+        "Up to 128 teams per division",
+        "Real-time live match events / scorers / fouls",
+        "Up to 7 staff members per tournament",
+        "Team registration with QR code and transfer slip",
+        "Live Scoreboard Overlay for OBS"
+      ],
+      "tournament_yearly": [
+        "Create up to 3 tournaments per month",
+        "Create up to 7 divisions per tournament",
+        "Up to 128 teams per division",
+        "Real-time live match events / scorers / fouls",
+        "Up to 7 staff members per tournament",
+        "Team registration with QR code and transfer slip",
+        "Live Scoreboard Overlay for OBS"
       ]
     },
-    "select_file": "Select slip file"
+    "select_file": "Select slip file",
+    "plan_tournament": "Tournament"
   },
   "PublicView": {
     "brand": "Tourni",

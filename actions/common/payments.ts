@@ -31,11 +31,11 @@ export async function getUserPayments(): Promise<ActionResponse<Payment[]>> {
         const mappedData: Payment[] = paymentsList.map(item => {
             const createdAt = new Date(item.created_at);
             let subscriptionExpiresAt = null;
-            if (item.plan_name === "monthly" || item.plan_name === "pro" || item.plan_name === "manager_pro" || item.plan_name === "cup" || item.plan_name === "event") {
+            if (item.plan_name === "monthly" || item.plan_name === "pro" || item.plan_name === "manager_pro" || item.plan_name === "cup" || item.plan_name === "tournament" || item.plan_name === "event") {
                 const expires = new Date(createdAt);
                 expires.setMonth(expires.getMonth() + 1);
                 subscriptionExpiresAt = expires.toISOString();
-            } else if (item.plan_name === "yearly" || item.plan_name === "pro_yearly" || item.plan_name === "cup_yearly") {
+            } else if (item.plan_name === "yearly" || item.plan_name === "pro_yearly" || item.plan_name === "cup_yearly" || item.plan_name === "tournament_yearly") {
                 const expires = new Date(createdAt);
                 expires.setFullYear(expires.getFullYear() + 1);
                 subscriptionExpiresAt = expires.toISOString();
@@ -146,11 +146,11 @@ export async function createPaymentRecord(
         // Map database model to expected Payment interface
         const createdAt = new Date(paymentData.created_at);
         let subscriptionExpiresAt = null;
-        if (paymentData.plan_name === "monthly" || paymentData.plan_name === "pro" || paymentData.plan_name === "manager_pro" || paymentData.plan_name === "cup" || paymentData.plan_name === "event") {
+        if (paymentData.plan_name === "monthly" || paymentData.plan_name === "pro" || paymentData.plan_name === "manager_pro" || paymentData.plan_name === "cup" || paymentData.plan_name === "tournament" || paymentData.plan_name === "event") {
             const expires = new Date(createdAt);
             expires.setMonth(expires.getMonth() + 1);
             subscriptionExpiresAt = expires.toISOString();
-        } else if (paymentData.plan_name === "yearly" || paymentData.plan_name === "pro_yearly" || paymentData.plan_name === "cup_yearly") {
+        } else if (paymentData.plan_name === "yearly" || paymentData.plan_name === "pro_yearly" || paymentData.plan_name === "cup_yearly" || paymentData.plan_name === "tournament_yearly") {
             const expires = new Date(createdAt);
             expires.setFullYear(expires.getFullYear() + 1);
             subscriptionExpiresAt = expires.toISOString();

@@ -5,8 +5,9 @@ import Image from "next/image";
 import { ImageIcon, Trash2, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { compressAndConvertToAvif } from "@/lib/image-compression";
+import { ImageCropperDialog } from "@/components/shared/image-cropper-dialog";
 
-interface LogoUploaderProps {
+export interface LogoUploaderProps {
     id: string;
     name?: string;
     initialUrl?: string | null;
@@ -19,6 +20,8 @@ interface LogoUploaderProps {
     imageFit?: "contain" | "cover";
     maxWidth?: number;
     quality?: number;
+    enableCrop?: boolean;
+    cropAspectRatio?: number;
 }
 
 export function LogoUploader({
@@ -32,32 +35,60 @@ export function LogoUploader({
     imageFit = "contain",
     maxWidth = 512,
     quality = 0.8,
+    enableCrop = true,
+    cropAspectRatio = 1,
 }: LogoUploaderProps) {
     const [previewUrl, setPreviewUrl] = useState<string | null>(initialUrl);
     const [isCompressing, setIsCompressing] = useState(false);
+    const [cropperOpen, setCropperOpen] = useState(false);
+    const [cropImageSrc, setCropImageSrc] = useState<string | null>(null);
+    const [pendingFileName, setPendingFileName] = useState("logo.png");
     const fileInputRef = useRef<HTMLInputElement>(null);
 
     useEffect(() => {
         setPreviewUrl(initialUrl);
     }, [initialUrl]);
 
-    const handleFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const processFile = async (fileToProcess: File) => {
+        setIsCompressing(true);
+        try {
+            const compressed = await compressAndConvertToAvif(fileToProcess, maxWidth, quality);
+            const url = URL.createObjectURL(compressed);
+            setPreviewUrl(url);
+            onFileChange?.(compressed);
+        } catch (error) {
+            console.error("Image compression failed, using original file:", error);
+            const url = URL.createObjectURL(fileToProcess);
+            setPreviewUrl(url);
+            onFileChange?.(fileToProcess);
+        } finally {
+            setIsCompressing(false);
+        }
+    };
+
+    const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
         if (file) {
-            setIsCompressing(true);
-            try {
-                const compressed = await compressAndConvertToAvif(file, maxWidth, quality);
-                const url = URL.createObjectURL(compressed);
-                setPreviewUrl(url);
-                onFileChange?.(compressed);
-            } catch (error) {
-                console.error("Image compression failed, using original file:", error);
-                const url = URL.createObjectURL(file);
-                setPreviewUrl(url);
-                onFileChange?.(file);
-            } finally {
-                setIsCompressing(false);
+            setPendingFileName(file.name);
+            if (enableCrop) {
+                setCropImageSrc(URL.createObjectURL(file));
+                setCropperOpen(true);
+            } else {
+                processFile(file);
             }
+        }
+    };
+
+    const handleCropComplete = (croppedFile: File) => {
+        processFile(croppedFile);
+        if (fileInputRef.current) {
+            fileInputRef.current.value = "";
+        }
+    };
+
+    const handleCropCancel = () => {
+        if (fileInputRef.current) {
+            fileInputRef.current.value = "";
         }
     };
 
@@ -124,7 +155,20 @@ export function LogoUploader({
                 ref={fileInputRef}
                 disabled={disabled || isCompressing}
             />
+
+            {enableCrop && (
+                <ImageCropperDialog
+                    open={cropperOpen}
+                    onOpenChange={setCropperOpen}
+                    imageSrc={cropImageSrc}
+                    fileName={pendingFileName}
+                    aspectRatio={cropAspectRatio}
+                    cropShape="round"
+                    title="ปรับแต่งและครอบตัดโลโก้ (1:1)"
+                    onCropComplete={handleCropComplete}
+                    onCancel={handleCropCancel}
+                />
+            )}
         </div>
     );
 }
-

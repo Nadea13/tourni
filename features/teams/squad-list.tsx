@@ -1,13 +1,12 @@
 "use client";
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useEffect } from "react";
 import Image from "next/image";
 import { Player, Team } from "@/types/index";
 import { cn, getPlayerInitials } from "@/lib/utils";
 import { PlayerAvatar } from "@/components/shared/player-avatar";
+import { PlayerUploader } from "@/components/shared/player-uploader";
 import { updatePlayer } from "@/actions/manager/team";
 import { updateGlobalPlayerPhoto } from "@/actions/tournaments/master-player";
-import { validateUploadedFile } from "@/lib/file-validation";
-import { compressAndConvertToAvif } from "@/lib/image-compression";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/dropdown";
@@ -26,8 +25,7 @@ import {
     MoreVertical, 
     Edit2, 
     Trash2,
-    Camera,
-    List,
+        List,
     LayoutGrid
 } from "lucide-react";
 import { useLocale } from "next-intl";
@@ -160,8 +158,7 @@ export function SquadList({
 
     const [editPhotoFile, setEditPhotoFile] = useState<File | null>(null);
     const [editPhotoPreview, setEditPhotoPreview] = useState<string | null>(null);
-    const editFileInputRef = useRef<HTMLInputElement>(null);
-
+    
     const handleUpdatePlayer = async (player: Player) => {
         setIsSaving(true);
         try {
@@ -262,51 +259,23 @@ export function SquadList({
                                             {editingPlayerId === player.id ? (
                                                 <>
                                                     <div className="space-y-1 shrink-0 flex flex-col items-center">
-                                                        <input
-                                                            type="file"
-                                                            accept="image/*"
-                                                            onChange={async (e) => {
-                                                                const file = e.target.files?.[0];
+                                                        <PlayerUploader
+                                                            id={`edit-player-photo-${player.id}`}
+                                                            size="sm"
+                                                            initialUrl={editPhotoPreview || player.photo_url || player.profile_img || player.master_player?.profile_img || player.global_player?.photo_url || player.global_player?.profile_img || null}
+                                                            onFileChange={(file) => {
+                                                                setEditPhotoFile(file);
                                                                 if (file) {
-                                                                    const fileCheck = validateUploadedFile(file);
-                                                                    if (!fileCheck.valid) {
-                                                                        toast({ title: tCommon("error"), description: fileCheck.error, variant: "destructive" });
-                                                                        return;
-                                                                    }
-                                                                    try {
-                                                                        const compressed = await compressAndConvertToAvif(file);
-                                                                        setEditPhotoFile(compressed);
-                                                                        setEditPhotoPreview(URL.createObjectURL(compressed));
-                                                                    } catch (err) {
-                                                                        const errorMessage = err instanceof Error ? err.message : "Failed to compress image";
-                                                                        toast({ title: tCommon("error"), description: errorMessage, variant: "destructive" });
-                                                                    }
+                                                                    setEditPhotoPreview(URL.createObjectURL(file));
+                                                                } else {
+                                                                    setEditPhotoPreview(null);
                                                                 }
                                                             }}
-                                                            ref={editFileInputRef}
-                                                            className="hidden"
-                                                            onClick={(e) => e.stopPropagation()}
-                                                        />
-                                                        <button
-                                                            type="button"
-                                                            onClick={(e) => {
-                                                                e.stopPropagation();
-                                                                editFileInputRef.current?.click();
+                                                            onRemove={() => {
+                                                                setEditPhotoFile(null);
+                                                                setEditPhotoPreview(null);
                                                             }}
-                                                            className="h-8 w-8 rounded-full border transition-all flex items-center justify-center overflow-hidden relative group shrink-0"
-                                                        >
-                                                            <PlayerAvatar
-                                                                photoUrl={editPhotoPreview || undefined}
-                                                                player={player}
-                                                                name={editName}
-                                                                number={editNumber}
-                                                                size="sm"
-                                                                showNumberBadge={false}
-                                                            />
-                                                            <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                                                <Camera className="h-4 w-4 text-foreground" />
-                                                            </div>
-                                                        </button>
+                                                        />
                                                     </div>
 
                                                     <div className="space-y-1 w-full md:w-[60px] shrink-0">

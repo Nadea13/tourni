@@ -5,7 +5,9 @@ import Image from "next/image";
 import { ImageIcon, Trash2, Loader2 } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { compressAndConvertToAvif } from "@/lib/image-compression";
+import { validateUploadedFile } from "@/lib/file-validation";
 import { ImageCropperDialog } from "@/components/shared/image-cropper-dialog";
+import { toast } from "sonner";
 
 export interface LogoUploaderProps {
     id: string;
@@ -22,6 +24,8 @@ export interface LogoUploaderProps {
     quality?: number;
     enableCrop?: boolean;
     cropAspectRatio?: number;
+    maxSize?: number;
+    onError?: (error: string) => void;
 }
 
 export function LogoUploader({
@@ -37,6 +41,8 @@ export function LogoUploader({
     quality = 0.8,
     enableCrop = true,
     cropAspectRatio = 1,
+    maxSize = 5 * 1024 * 1024,
+    onError,
 }: LogoUploaderProps) {
     const [previewUrl, setPreviewUrl] = useState<string | null>(initialUrl);
     const [isCompressing, setIsCompressing] = useState(false);
@@ -68,14 +74,30 @@ export function LogoUploader({
 
     const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const file = e.target.files?.[0];
-        if (file) {
-            setPendingFileName(file.name);
-            if (enableCrop) {
-                setCropImageSrc(URL.createObjectURL(file));
-                setCropperOpen(true);
+        if (!file) return;
+
+        // Validation (max 5MB default)
+        const check = validateUploadedFile(file, { maxSize });
+        if (!check.valid) {
+            const maxMB = (maxSize / (1024 * 1024)).toFixed(0);
+            const errorMsg = check.error?.includes("maximum limit")
+                ? `ขนาดไฟล์โลโก้ต้องไม่เกิน ${maxMB}MB`
+                : (check.error || `ขนาดไฟล์โลโก้ต้องไม่เกิน ${maxMB}MB`);
+            if (onError) {
+                onError(errorMsg);
             } else {
-                processFile(file);
+                toast.error(errorMsg);
             }
+            if (fileInputRef.current) fileInputRef.current.value = "";
+            return;
+        }
+
+        setPendingFileName(file.name);
+        if (enableCrop) {
+            setCropImageSrc(URL.createObjectURL(file));
+            setCropperOpen(true);
+        } else {
+            processFile(file);
         }
     };
 
@@ -164,6 +186,7 @@ export function LogoUploader({
                     fileName={pendingFileName}
                     aspectRatio={cropAspectRatio}
                     cropShape="round"
+                    canvasAspectRatio="2/1"
                     title="ปรับแต่งและครอบตัดโลโก้ (1:1)"
                     onCropComplete={handleCropComplete}
                     onCancel={handleCropCancel}

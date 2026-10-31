@@ -1,11 +1,12 @@
 "use client";
 
 import React, { useState, useTransition, useEffect } from "react";
-import { Plus, X, Loader2, ArrowRight, Camera, User, ClipboardList } from "lucide-react";
+import { Plus, X, Loader2, ArrowRight, User, ClipboardList } from "lucide-react";
 import { useTranslations } from "next-intl";
 import Image from "next/image";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PlayerUploader } from "@/components/shared/player-uploader";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/dropdown";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
@@ -470,41 +471,13 @@ export function RosterSubmissionForm({ registeredTeams }: RosterSubmissionFormPr
 
                                             {/* Photo Selector */}
                                             <div className="relative">
-                                                <input
-                                                    type="file"
+                                                <PlayerUploader
                                                     id={`roster-photo-input-${idx}`}
-                                                    accept="image/*"
-                                                    className="hidden"
-                                                    onChange={(e) => handlePhotoChange(idx, e.target.files?.[0] || null)}
+                                                    size="lg"
+                                                    initialUrl={player.photoPreview}
+                                                    onFileChange={(file) => handlePhotoChange(idx, file)}
+                                                    onRemove={() => handlePhotoChange(idx, null)}
                                                 />
-                                                <label
-                                                    htmlFor={`roster-photo-input-${idx}`}
-                                                    className="h-24 w-24 rounded-full border transition-all flex items-center justify-center overflow-hidden relative group cursor-pointer"
-                                                >
-                                                    {player.photoPreview ? (
-                                                        <Image
-                                                            src={player.photoPreview}
-                                                            alt="Preview"
-                                                            width={36}
-                                                            height={36}
-                                                            className="h-full w-full object-cover"
-                                                        />
-                                                    ) : (
-                                                        <Camera className="h-4 w-4 text-primary" />
-                                                    )}
-                                                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-10 transition-opacity flex items-center justify-center">
-                                                        <Camera className="h-4 w-4 text-foreground" />
-                                                    </div>
-                                                </label>
-                                                {player.photoPreview && (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => handlePhotoChange(idx, null)}
-                                                        className="absolute -top-0 -right-0 bg-destructive text-destructive-foreground rounded-full p-0.5 hover:bg-destructive/90 shadow-md transition-transform z-10"
-                                                    >
-                                                        <X className="h-4 w-4" />
-                                                    </button>
-                                                )}
                                             </div>
 
                                             {/* Fields */}

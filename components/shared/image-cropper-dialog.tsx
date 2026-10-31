@@ -10,7 +10,8 @@ import {
     DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { ZoomIn, ZoomOut, RotateCcw, Check, X, Crop, Loader2 } from "lucide-react";
+import { ZoomIn, ZoomOut, RotateCcw, Check, X, Loader2 } from "lucide-react";
+import { cn } from "@/lib/utils";
 
 export interface ImageCropperDialogProps {
     open: boolean;
@@ -22,6 +23,7 @@ export interface ImageCropperDialogProps {
     title?: string;
     minZoom?: number; // default 1
     maxZoom?: number; // default 3
+    canvasAspectRatio?: "1/2" | "2/1" | "1/1" | "auto" | string;
     onCropComplete: (croppedFile: File) => void;
     onCancel?: () => void;
 }
@@ -100,6 +102,7 @@ export function ImageCropperDialog({
     title = "ปรับแต่งและครอบตัดรูปภาพ",
     minZoom = 1,
     maxZoom = 3,
+    canvasAspectRatio = "2/1",
     onCropComplete,
     onCancel,
 }: ImageCropperDialogProps) {
@@ -108,6 +111,22 @@ export function ImageCropperDialog({
     const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
     const [isProcessing, setIsProcessing] = useState(false);
     const [isReady, setIsReady] = useState(false);
+
+    // Dynamic viewport container sizing based on canvasAspectRatio (2:1 horizontal by default)
+    const getCanvasClass = () => {
+        switch (canvasAspectRatio) {
+            case "2/1":
+                return "w-full aspect-[2/1] mx-auto";
+            case "1/2":
+                return "h-[380px] aspect-[1/2] mx-auto";
+            case "1/1":
+                return "h-[340px] aspect-square mx-auto";
+            case "auto":
+                return "w-full h-[340px]";
+            default:
+                return "w-full aspect-[2/1] mx-auto";
+        }
+    };
 
     // Reset crop and zoom whenever dialog opens or image changes
     // Wait for Dialog layout transition to finish before initializing Cropper
@@ -167,10 +186,7 @@ export function ImageCropperDialog({
                 showCloseButton={false}
             >
                 <DialogHeader className="px-5 py-3 border-b flex flex-row items-center justify-between space-y-0">
-                    <div className="flex items-center gap-2">
-                        <Crop className="size-4 text-primary" />
-                        <DialogTitle className="text-sm font-bold">{title}</DialogTitle>
-                    </div>
+                    <DialogTitle className="text-sm font-bold">{title}</DialogTitle>
                     <button
                         type="button"
                         onClick={handleClose}
@@ -180,9 +196,9 @@ export function ImageCropperDialog({
                     </button>
                 </DialogHeader>
 
-                <div className="p-4 space-y-4">
+                <div className="p-4 space-y-4 flex-1">
                     {/* Viewport with react-easy-crop locked strictly to image bounds */}
-                    <div className="relative w-full h-[340px] bg-neutral-950 rounded-sm overflow-hidden select-none">
+                    <div className={cn("relative bg-neutral-950 rounded-sm overflow-hidden select-none", getCanvasClass())}>
                         {imageSrc && isReady ? (
                             <Cropper
                                 image={imageSrc}
@@ -203,21 +219,19 @@ export function ImageCropperDialog({
                                 <Loader2 className="size-6 text-muted-foreground animate-spin" />
                             </div>
                         )}
-                        <div className="absolute top-2 left-2 px-2 py-0.5 rounded bg-black/60 backdrop-blur-xs text-[10px] font-mono text-white/80 pointer-events-none z-10">
-                            {aspectRatio === 1 ? "1:1" : `${aspectRatio}:1`}
-                        </div>
                     </div>
 
                     {/* Controls */}
-                    <div className="flex items-center gap-3 px-1">
-                        <button
+                    <div className="flex items-center gap-4">
+                        <Button
                             type="button"
+                            variant="ghost"
+                            size="sm"
                             onClick={() => setZoom((z) => Math.max(minZoom, parseFloat((z - 0.1).toFixed(2))))}
-                            className="text-muted-foreground hover:text-foreground transition-colors p-1 cursor-pointer"
                             title="Zoom Out"
                         >
                             <ZoomOut className="size-4" />
-                        </button>
+                        </Button>
 
                         <input
                             type="range"
@@ -229,38 +243,37 @@ export function ImageCropperDialog({
                             className="flex-1 accent-primary h-1.5 bg-muted rounded-lg cursor-pointer"
                         />
 
-                        <button
+                        <Button
                             type="button"
+                            variant="ghost"
+                            size="sm"
                             onClick={() => setZoom((z) => Math.min(maxZoom, parseFloat((z + 0.1).toFixed(2))))}
-                            className="text-muted-foreground hover:text-foreground transition-colors p-1 cursor-pointer"
                             title="Zoom In"
                         >
                             <ZoomIn className="size-4" />
-                        </button>
+                        </Button>
 
                         <Button
                             type="button"
                             variant="ghost"
                             size="sm"
                             onClick={handleReset}
-                            className="h-7 px-2 text-xs gap-1 text-muted-foreground hover:text-foreground cursor-pointer"
                             title="รีเซ็ตขนาดเริ่มต้น"
                         >
-                            <RotateCcw className="size-3.5" />
+                            <RotateCcw className="size-4" />
                             รีเซ็ต
                         </Button>
                     </div>
                 </div>
 
-                <DialogFooter className="px-5 py-3 border-t bg-muted/20 flex flex-row items-center justify-end gap-2">
+                <DialogFooter className="mt-auto">
                     <Button
                         type="button"
                         variant="outline"
                         size="sm"
                         onClick={handleClose}
-                        className="text-xs font-bold"
                     >
-                        <X className="size-3.5 mr-1" />
+                        <X className="size-4" />
                         ยกเลิก
                     </Button>
                     <Button
@@ -268,16 +281,15 @@ export function ImageCropperDialog({
                         size="sm"
                         disabled={isProcessing}
                         onClick={handleConfirm}
-                        className="text-xs font-bold gap-1 bg-primary text-primary-foreground hover:bg-primary/90"
                     >
                         {isProcessing ? (
                             <>
-                                <Loader2 className="size-3.5 animate-spin" />
+                                <Loader2 className="size-4 animate-spin" />
                                 กำลังประมวลผล...
                             </>
                         ) : (
                             <>
-                                <Check className="size-3.5" />
+                                <Check className="size-4" />
                                 ครอบตัดและใช้งาน
                             </>
                         )}

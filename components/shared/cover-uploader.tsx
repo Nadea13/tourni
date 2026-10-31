@@ -9,6 +9,7 @@ import { compressAndConvertToAvif } from "@/lib/image-compression";
 import { validateUploadedFile } from "@/lib/file-validation";
 import { ImageCropperDialog } from "@/components/shared/image-cropper-dialog";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 export interface CoverUploaderProps {
     id: string;
@@ -50,7 +51,7 @@ export function CoverUploader({
     dimensionHint = "(1440x720)",
     maxWidth = 1920,
     quality = 0.85,
-    maxSize = 5 * 1024 * 1024,
+    maxSize = 10 * 1024 * 1024,
     className,
     children,
     onError,
@@ -87,10 +88,18 @@ export function CoverUploader({
         const file = e.target.files?.[0];
         if (!file) return;
 
-        // Validation
+        // Validation (max 10MB default)
         const check = validateUploadedFile(file, { maxSize });
         if (!check.valid) {
-            onError?.(check.error || "Invalid file");
+            const maxMB = (maxSize / (1024 * 1024)).toFixed(0);
+            const errorMsg = check.error?.includes("maximum limit")
+                ? `ขนาดไฟล์ภาพหน้าปกต้องไม่เกิน ${maxMB}MB`
+                : (check.error || `ขนาดไฟล์ภาพหน้าปกต้องไม่เกิน ${maxMB}MB`);
+            if (onError) {
+                onError(errorMsg);
+            } else {
+                toast.error(errorMsg);
+            }
             if (fileInputRef.current) fileInputRef.current.value = "";
             return;
         }
@@ -135,14 +144,14 @@ export function CoverUploader({
             <div
                 onClick={() => !disabled && !isCompressing && fileInputRef.current?.click()}
                 className={cn(
-                    "relative w-full border-2 border-dashed hover:border-primary/50 transition-all rounded-sm overflow-hidden flex flex-col items-center justify-center cursor-pointer group bg-muted/10",
+                    "relative w-full border-2 border-dashed hover:border-primary/50 transition-all rounded-sm overflow-hidden flex flex-col items-center justify-center cursor-pointer group",
                     aspectRatio,
                     (disabled || isCompressing) && "pointer-events-none opacity-60"
                 )}
             >
                 {isCompressing ? (
                     <div className="flex flex-col items-center justify-center gap-2 p-4 text-center">
-                        <Loader2 className="h-6 w-6 text-primary animate-spin" />
+                        <Loader2 className="size-4 text-primary animate-spin" />
                         <span className="text-xs text-muted-foreground">กำลังประมวลผลรูปภาพ...</span>
                     </div>
                 ) : previewUrl ? (
@@ -179,8 +188,8 @@ export function CoverUploader({
                     </>
                 ) : (
                     <div className={cn("flex flex-col items-center justify-center p-4 text-center space-y-2", hasChildren && "pb-12")}>
-                        <div className="group p-3 bg-muted rounded-full text-muted-foreground transition-transform group-hover:bg-primary/10 group-hover:text-primary">
-                            <ImageIcon className="h-5 w-5" />
+                        <div className="group p-4 bg-muted rounded-full text-muted-foreground transition-transform group-hover:bg-primary/10 group-hover:text-primary">
+                            <ImageIcon className="size-4" />
                         </div>
                         <div className="space-y-0.5">
                             <p className="text-xs font-bold text-muted-foreground">
@@ -221,6 +230,7 @@ export function CoverUploader({
                     fileName={pendingFileName}
                     aspectRatio={cropAspectRatio}
                     cropShape="rect"
+                    canvasAspectRatio="2/1"
                     title="ปรับแต่งและครอบตัดภาพหน้าปก (2:1)"
                     onCropComplete={handleCropComplete}
                     onCancel={handleCropCancel}

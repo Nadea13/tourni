@@ -17,7 +17,6 @@ import {
     MapPin,
     Globe,
     Loader2,
-    Upload,
     Lock,
     ShieldAlert
 } from "lucide-react";
@@ -33,8 +32,9 @@ import {
 } from "@/components/ui/alert-dialog";
 import { ActionResponse, Tournament } from "@/types/index";
 import dynamic from "next/dynamic";
-import Image from "next/image";
+
 import { LogoUploader } from "@/components/shared/logo-uploader";
+import { CoverUploader } from "@/components/shared/cover-uploader";
 import { DateRangePicker, DatePicker } from "@/components/ui/date-picker";
 import {
     Select,
@@ -280,66 +280,35 @@ export function GeneralSettings({ tournament, className, onNavigateDangerZone }:
                         </div>
                     </div>
                     <div className="sm:w-2/3 space-y-2">
-                        <div className="relative pb-10">
-                            <div
-                                onClick={() => coverInputRef.current?.click()}
-                                className="relative aspect-[2/1] w-full border border-dashed border-2 hover:border-primary/50 transition-all rounded-sm overflow-hidden flex flex-col items-center justify-center cursor-pointer group bg-muted/10"
+                        <CoverUploader
+                                id="cover_img"
+                                name="cover_img"
+                                initialUrl={coverPreviewUrl}
+                                onFileChange={(file) => {
+                                    setCoverFile(file);
+                                    if (file) {
+                                        setCoverPreviewUrl(URL.createObjectURL(file));
+                                        setCoverRemoved(false);
+                                    } else {
+                                        setCoverPreviewUrl(null);
+                                        setCoverRemoved(true);
+                                    }
+                                    setLastModifiedField('media');
+                                }}
+                                onRemove={() => {
+                                    setCoverFile(null);
+                                    setCoverPreviewUrl(null);
+                                    setCoverRemoved(true);
+                                    setLastModifiedField('media');
+                                }}
+                                uploadLabel={isThai ? "คลิกเพื่ออัปโหลดภาพหน้าปก" : "Click to upload cover banner"}
+                                changeLabel={isThai ? "เปลี่ยนรูป" : "Change Image"}
+                                removeLabel={isThai ? "ลบรูป" : "Remove"}
+                                dimensionHint="(1440x720)"
+                                aspectRatio="aspect-[2/1]"
+                                cropAspectRatio={2}
+                                enableCrop={true}
                             >
-                                {coverPreviewUrl ? (
-                                    <>
-                                        <Image
-                                            src={coverPreviewUrl}
-                                            alt="Cover Preview"
-                                            fill
-                                            className="object-cover p-1 rounded-sm transition-transform group-hover:scale-105"
-                                        />
-                                        <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                                            <Button
-                                                type="button"
-                                                variant="outline"
-                                                size="sm"
-                                                className="font-bold text-xs"
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    coverInputRef.current?.click();
-                                                }}
-                                            >
-                                                {isThai ? "เปลี่ยนรูป" : "Change Image"}
-                                            </Button>
-                                            <Button
-                                                type="button"
-                                                variant="destructive"
-                                                size="sm"
-                                                className="font-bold text-xs"
-                                                onClick={(e) => {
-                                                    e.stopPropagation();
-                                                    setCoverPreviewUrl(null);
-                                                    setCoverFile(null);
-                                                    setCoverRemoved(true);
-                                                    setLastModifiedField('media');
-                                                    if (coverInputRef.current) coverInputRef.current.value = "";
-                                                }}
-                                            >
-                                                {isThai ? "ลบรูป" : "Remove"}
-                                            </Button>
-                                        </div>
-                                    </>
-                                ) : (
-                                    <div className="flex flex-col items-center justify-center p-4 text-center space-y-2 pb-12">
-                                        <div className="group p-3 bg-muted rounded-full text-muted-foreground transition-transform group-hover:bg-primary/10 group-hover:text-primary">
-                                            <Upload className="h-4 w-4" />
-                                        </div>
-                                        <p className="text-xs font-bold text-muted-foreground">
-                                            {isThai ? "คลิกเพื่ออัปโหลดภาพหน้าปก" : "Click to upload cover banner"}
-                                        </p>
-                                        <p className="text-[11px] text-muted-foreground">
-                                            (1440x720)
-                                        </p>
-                                    </div>
-                                )}
-                            </div>
-
-                            <div className="absolute bottom-0 left-1/2 -translate-x-1/2 z-10 bg-card rounded-full shadow-sm">
                                 <LogoUploader
                                     id="logo_img"
                                     name="logo_img"
@@ -366,26 +335,7 @@ export function GeneralSettings({ tournament, className, onNavigateDangerZone }:
                                     previewLabel={isThai ? "ตัวอย่าง" : "Preview"}
                                     imageFit="contain"
                                 />
-                            </div>
-
-                            <input
-                                id="cover_img"
-                                name="cover_img"
-                                type="file"
-                                accept="image/*"
-                                className="hidden"
-                                ref={coverInputRef}
-                                onChange={(e) => {
-                                    const file = e.target.files?.[0];
-                                    if (file) {
-                                        setCoverFile(file);
-                                        setCoverPreviewUrl(URL.createObjectURL(file));
-                                        setCoverRemoved(false);
-                                        setLastModifiedField('media');
-                                    }
-                                }}
-                            />
-                        </div>
+                            </CoverUploader>
                         {activeActionField === 'media' && renderActionButtons()}
                     </div>
                 </div>

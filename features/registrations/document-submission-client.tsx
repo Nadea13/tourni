@@ -3,11 +3,9 @@
 import React, { useState, useTransition, useEffect, useRef } from "react";
 import { 
     Plus, 
-    X, 
-    Loader2, 
+        Loader2, 
     ArrowRight, 
-    Camera, 
-    User, 
+        User, 
     Upload, 
     Download, 
     CheckCircle2, 
@@ -23,6 +21,7 @@ import * as XLSX from "xlsx";
 import Papa from "papaparse";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { PlayerUploader } from "@/components/shared/player-uploader";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/dropdown";
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card";
@@ -815,43 +814,13 @@ export function DocumentSubmissionClient({
 
                                             {/* Photo Selector */}
                                             <div className="relative mt-1">
-                                                <input
-                                                    type="file"
+                                                <PlayerUploader
                                                     id={`doc-roster-photo-${idx}`}
-                                                    accept="image/*"
-                                                    className="hidden"
-                                                    onChange={(e) =>
-                                                        handlePhotoChange(idx, e.target.files?.[0] || null)
-                                                    }
+                                                    size="md"
+                                                    initialUrl={player.photoPreview}
+                                                    onFileChange={(file) => handlePhotoChange(idx, file)}
+                                                    onRemove={() => handlePhotoChange(idx, null)}
                                                 />
-                                                <label
-                                                    htmlFor={`doc-roster-photo-${idx}`}
-                                                    className="h-20 w-20 rounded-full border transition-all flex items-center justify-center overflow-hidden relative group cursor-pointer bg-muted/30 hover:border-primary"
-                                                >
-                                                    {player.photoPreview ? (
-                                                        <Image
-                                                            src={player.photoPreview}
-                                                            alt="Preview"
-                                                            width={80}
-                                                            height={80}
-                                                            className="h-full w-full object-cover"
-                                                        />
-                                                    ) : (
-                                                        <Camera className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-colors" />
-                                                    )}
-                                                    <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center">
-                                                        <Camera className="h-4 w-4 text-white" />
-                                                    </div>
-                                                </label>
-                                                {player.photoPreview && (
-                                                    <button
-                                                        type="button"
-                                                        onClick={() => handlePhotoChange(idx, null)}
-                                                        className="absolute -top-1 -right-1 bg-destructive text-destructive-foreground rounded-full p-0.5 shadow transition-transform hover:scale-110 z-10"
-                                                    >
-                                                        <X className="h-4 w-4" />
-                                                    </button>
-                                                )}
                                             </div>
 
                                             {/* Fields */}

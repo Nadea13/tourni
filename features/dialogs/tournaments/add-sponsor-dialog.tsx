@@ -1,13 +1,14 @@
 "use client";
 
 import { useState, useRef, useEffect } from "react";
-import Image from "next/image";
+
 import { useLocale, useTranslations } from "next-intl";
 import { addSponsor, updateSponsor, Sponsor } from "@/actions/tournaments/sponsor";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Header } from "@/components/ui/header";
 import { LogoUploader } from "@/components/shared/logo-uploader";
+import { CoverUploader } from "@/components/shared/cover-uploader";
 import {
     Dialog,
     DialogContent,
@@ -18,7 +19,7 @@ import {
     DialogTrigger,
 } from "@/components/ui/dialog";
 import { useToast } from "@/hooks/use-toast";
-import { Loader2, Plus, Camera, Award, Globe, ImageIcon } from "lucide-react";
+import { Loader2, Plus, Camera, Award, Globe } from "lucide-react";
 
 interface AddSponsorDialogProps {
     tournamentId: string;
@@ -63,7 +64,7 @@ export function AddSponsorDialog({
     const [isSubmitting, setIsSubmitting] = useState(false);
 
     const scrollRef = useRef<HTMLDivElement>(null);
-    const coverInputRef = useRef<HTMLInputElement>(null);
+
 
     // Initialize or reset form state
     useEffect(() => {
@@ -219,104 +220,53 @@ export function AddSponsorDialog({
                                 </div>
                             </div>
                             <div className="sm:w-1/2 w-full">
-                                <div className="relative pb-10">
-                                    <div
-                                        onClick={() => coverInputRef.current?.click()}
-                                        className="relative aspect-[2/1] w-full border border-dashed border-border hover:border-primary/50 transition-all rounded-sm overflow-hidden flex flex-col items-center justify-center cursor-pointer group bg-transparent"
-                                    >
-                                        {coverUrl ? (
-                                            <>
-                                                <Image
-                                                    src={coverUrl}
-                                                    alt="Cover Preview"
-                                                    fill
-                                                    className="object-cover p-1 rounded-sm transition-transform group-hover:scale-105"
-                                                />
-                                                <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center gap-2">
-                                                    <Button
-                                                        type="button"
-                                                        variant="outline"
-                                                        size="sm"
-                                                        className="font-bold text-xs"
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            coverInputRef.current?.click();
-                                                        }}
-                                                    >
-                                                        {isThai ? "เปลี่ยนรูป" : "Change Image"}
-                                                    </Button>
-                                                    <Button
-                                                        type="button"
-                                                        variant="destructive"
-                                                        size="sm"
-                                                        className="font-bold text-xs"
-                                                        onClick={(e) => {
-                                                            e.stopPropagation();
-                                                            setCoverFile(null);
-                                                            setCoverUrl(null);
-                                                            if (coverInputRef.current) coverInputRef.current.value = "";
-                                                        }}
-                                                    >
-                                                        {isThai ? "ลบรูป" : "Remove"}
-                                                    </Button>
-                                                </div>
-                                            </>
-                                        ) : (
-                                            <div className="flex flex-col items-center justify-center p-4 text-center space-y-2 pb-12">
-                                                <div className="group p-3 bg-transparent rounded-full text-muted-foreground border border-border transition-transform group-hover:border-primary/50 group-hover:text-primary">
-                                                    <ImageIcon className="h-4 w-4" />
-                                                </div>
-                                                <div className="space-y-0.5">
-                                                    <p className="text-xs font-bold text-muted-foreground">
-                                                        {isThai ? "คลิกเพื่ออัปโหลดภาพหน้าปก" : "Click to upload cover banner"}
-                                                    </p>
-                                                    <p className="text-[11px] text-muted-foreground/60">
-                                                        (1440x720)
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        )}
-                                    </div>
-
-                                    <div className="absolute bottom-0 left-1/2 -translate-x-1/2 z-10 rounded-full">
-                                        <LogoUploader
-                                            id={isEditing ? "edit-sponsor-logo-upload" : "sponsor-logo-upload"}
-                                            initialUrl={logoUrl}
-                                            onFileChange={(file: File | null) => {
-                                                setLogoFile(file);
-                                                if (file) {
-                                                    setLogoUrl(URL.createObjectURL(file));
-                                                } else {
-                                                    setLogoUrl(null);
-                                                }
-                                            }}
-                                            onRemove={() => {
-                                                setLogoFile(null);
-                                                setLogoUrl(null);
-                                            }}
-                                            disabled={isSubmitting}
-                                            uploadLabel={isThai ? "อัปโหลดโลโก้" : "Upload Logo"}
-                                            clickToUploadLabel={isThai ? "คลิกเพื่อเปลี่ยน" : "Click to Change"}
-                                            previewLabel={isThai ? "ตัวอย่าง" : "Preview"}
-                                            imageFit="contain"
-                                        />
-                                    </div>
-
-                                    <input
-                                        ref={coverInputRef}
-                                        id={isEditing ? "edit-sponsor-cover-upload" : "sponsor-cover-upload"}
-                                        type="file"
-                                        accept="image/*"
-                                        className="hidden"
-                                        onChange={(e) => {
-                                            const file = e.target.files?.[0];
+                                <CoverUploader
+                                    id={isEditing ? "edit-sponsor-cover-upload" : "sponsor-cover-upload"}
+                                    name="cover_img"
+                                    initialUrl={coverUrl}
+                                    onFileChange={(file: File | null) => {
+                                        setCoverFile(file);
+                                        if (file) {
+                                            setCoverUrl(URL.createObjectURL(file));
+                                        } else {
+                                            setCoverUrl(null);
+                                        }
+                                    }}
+                                    onRemove={() => {
+                                        setCoverFile(null);
+                                        setCoverUrl(null);
+                                    }}
+                                    disabled={isSubmitting}
+                                    uploadLabel={isThai ? "คลิกเพื่ออัปโหลดภาพหน้าปก" : "Click to upload cover banner"}
+                                    changeLabel={isThai ? "เปลี่ยนรูป" : "Change Image"}
+                                    removeLabel={isThai ? "ลบรูป" : "Remove"}
+                                    dimensionHint="(1440x720)"
+                                    aspectRatio="aspect-[2/1]"
+                                    cropAspectRatio={2}
+                                    enableCrop={true}
+                                >
+                                    <LogoUploader
+                                        id={isEditing ? "edit-sponsor-logo-upload" : "sponsor-logo-upload"}
+                                        initialUrl={logoUrl}
+                                        onFileChange={(file: File | null) => {
+                                            setLogoFile(file);
                                             if (file) {
-                                                setCoverFile(file);
-                                                setCoverUrl(URL.createObjectURL(file));
+                                                setLogoUrl(URL.createObjectURL(file));
+                                            } else {
+                                                setLogoUrl(null);
                                             }
                                         }}
+                                        onRemove={() => {
+                                            setLogoFile(null);
+                                            setLogoUrl(null);
+                                        }}
+                                        disabled={isSubmitting}
+                                        uploadLabel={isThai ? "อัปโหลดโลโก้" : "Upload Logo"}
+                                        clickToUploadLabel={isThai ? "คลิกเพื่อเปลี่ยน" : "Click to Change"}
+                                        previewLabel={isThai ? "ตัวอย่าง" : "Preview"}
+                                        imageFit="contain"
                                     />
-                                </div>
+                                </CoverUploader>
                             </div>
                         </div>
 

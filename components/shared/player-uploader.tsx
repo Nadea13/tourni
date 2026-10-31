@@ -8,6 +8,7 @@ import { compressAndConvertToAvif } from "@/lib/image-compression";
 import { validateUploadedFile } from "@/lib/file-validation";
 import { ImageCropperDialog } from "@/components/shared/image-cropper-dialog";
 import { cn } from "@/lib/utils";
+import { toast } from "sonner";
 
 export type PlayerUploaderSize = "xs" | "sm" | "md" | "lg" | "xl" | "custom";
 
@@ -128,10 +129,18 @@ export function PlayerUploader({
         const file = e.target.files?.[0];
         if (!file) return;
 
-        // Validation
+        // Validation (max 5MB default)
         const check = validateUploadedFile(file, { maxSize });
         if (!check.valid) {
-            onError?.(check.error || "Invalid file");
+            const maxMB = (maxSize / (1024 * 1024)).toFixed(0);
+            const errorMsg = check.error?.includes("maximum limit")
+                ? `ขนาดไฟล์รูปถ่ายต้องไม่เกิน ${maxMB}MB`
+                : (check.error || `ขนาดไฟล์รูปถ่ายต้องไม่เกิน ${maxMB}MB`);
+            if (onError) {
+                onError(errorMsg);
+            } else {
+                toast.error(errorMsg);
+            }
             if (fileInputRef.current) fileInputRef.current.value = "";
             return;
         }
@@ -243,6 +252,7 @@ export function PlayerUploader({
                     fileName={pendingFileName}
                     aspectRatio={cropAspectRatio}
                     cropShape="round"
+                    canvasAspectRatio="2/1"
                     title="ปรับแต่งและครอบตัดรูปนักกีฬา (1:1)"
                     onCropComplete={handleCropComplete}
                     onCancel={handleCropCancel}

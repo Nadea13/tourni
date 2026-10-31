@@ -1,12 +1,11 @@
 "use client";
 
-import React, { useState, useRef } from "react";
+import React, { useState } from "react";
 import Image from "next/image";
 import { 
     Loader2, 
     ArrowRight, 
-    Camera, 
-    ChevronDown, 
+        ChevronDown, 
     UserPlus, 
     Check, 
     Calendar,
@@ -23,11 +22,10 @@ import { Label } from "@/components/ui/label";
 import { Dropdown, DropdownContent, DropdownItem, DropdownTrigger, DropdownValue } from "@/components/ui/dropdown";
 import { DatePicker } from "@/components/ui/date-picker";
 import { RadioBtn } from "@/components/ui/radio-btn";
+import { PlayerUploader } from "@/components/shared/player-uploader";
 import { useToast } from "@/hooks/use-toast";
 import { addPlayer } from "@/actions/manager/team";
 import { searchMasterPlayers } from "@/actions/common/user";
-import { validateUploadedFile } from "@/lib/file-validation";
-import { compressAndConvertToAvif } from "@/lib/image-compression";
 import { getPositionOptions } from "@/lib/positions";
 import { cn } from "@/lib/utils";
 import { resolveStorageUrl } from "@/lib/storage-utils";
@@ -131,7 +129,6 @@ export function AddPlayerForm({ teamId, onSuccess, effectivelyLocked, sport, cla
 
     const [photoFile, setPhotoFile] = useState<File | null>(null);
     const [photoPreview, setPhotoPreview] = useState<string | null>(null);
-    const fileInputRef = useRef<HTMLInputElement>(null);
 
     // Search dropdown state
     const [searchResults, setSearchResults] = useState<MasterPlayerSearchResult[]>([]);
@@ -149,24 +146,7 @@ export function AddPlayerForm({ teamId, onSuccess, effectivelyLocked, sport, cla
         { value: "assistant_coach", labelTh: "ผู้ช่วยผู้ฝึกสอน", labelEn: "Assistant Coach" },
     ];
 
-    const handlePhotoChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-        const file = e.target.files?.[0];
-        if (file) {
-            const fileCheck = validateUploadedFile(file);
-            if (!fileCheck.valid) {
-                toast({ title: tCommon("error"), description: fileCheck.error, variant: "destructive" });
-                return;
-            }
-            try {
-                const compressed = await compressAndConvertToAvif(file);
-                setPhotoFile(compressed);
-                setPhotoPreview(URL.createObjectURL(compressed));
-            } catch (err) {
-                const errorMessage = err instanceof Error ? err.message : "Failed to compress image";
-                toast({ title: tCommon("error"), description: errorMessage, variant: "destructive" });
-            }
-        }
-    };
+
 
     const handleSearch = async (val: string) => {
         const query = val.trim();
@@ -399,7 +379,6 @@ export function AddPlayerForm({ teamId, onSuccess, effectivelyLocked, sport, cla
             setSelectedMasterPlayerId(null);
             setPhotoFile(null);
             setPhotoPreview(null);
-            if (fileInputRef.current) fileInputRef.current.value = "";
             onSuccess();
         } else {
             toast({ title: tCommon("error"), description: result.error, variant: "destructive" });
@@ -461,25 +440,24 @@ export function AddPlayerForm({ teamId, onSuccess, effectivelyLocked, sport, cla
                 <div className="flex flex-wrap items-end gap-2 relative">
                     {/* Photo Uploader */}
                     <div className="space-y-1 shrink-0 flex flex-col items-center">
-                        <input
-                            type="file"
-                            accept="image/*"
-                            onChange={handlePhotoChange}
-                            ref={fileInputRef}
-                            className="hidden"
+                        <PlayerUploader
+                            id="add-player-photo"
+                            size="sm"
+                            initialUrl={photoPreview}
+                            onFileChange={(file) => {
+                                setPhotoFile(file);
+                                if (file) {
+                                    setPhotoPreview(URL.createObjectURL(file));
+                                } else {
+                                    setPhotoPreview(null);
+                                }
+                            }}
+                            onRemove={() => {
+                                setPhotoFile(null);
+                                setPhotoPreview(null);
+                            }}
+                            uploadTitle={isThai ? "อัปโหลดรูปภาพ" : "Upload photo"}
                         />
-                        <button
-                            type="button"
-                            onClick={() => fileInputRef.current?.click()}
-                            title={isThai ? "อัปโหลดรูปภาพ" : "Upload photo"}
-                            className="h-8 w-8 rounded-full border-2 border-dashed transition-all flex items-center justify-center overflow-hidden relative group hover:border-primary/50 bg-muted/20"
-                        >
-                            {photoPreview ? (
-                                <Image src={photoPreview} alt="Preview" width={32} height={32} className="h-full w-full object-cover" />
-                            ) : (
-                                <Camera className="h-4 w-4 text-muted-foreground group-hover:text-primary transition-all" />
-                            )}
-                        </button>
                     </div>
 
                     {/* Full Name (ชื่อ - นามสกุล) with Master Search Popover */}

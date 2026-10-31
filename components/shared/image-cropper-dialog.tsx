@@ -1,8 +1,7 @@
 "use client";
 
-import React, { useState, useCallback, useRef, useEffect } from "react";
-import Cropper, { type Area } from "react-easy-crop";
-import "react-easy-crop/react-easy-crop.css";
+import React, { useState, useCallback } from "react";
+import Cropper, { type Point, type Area } from "react-easy-crop";
 import {
     Dialog,
     DialogContent,
@@ -11,7 +10,7 @@ import {
     DialogFooter,
 } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
-import { ZoomIn, ZoomOut, RotateCcw, Check, X, Crop } from "lucide-react";
+import { ZoomIn, ZoomOut, RotateCcw, Check, X, Crop, Loader2 } from "lucide-react";
 
 export interface ImageCropperDialogProps {
     open: boolean;
@@ -34,129 +33,96 @@ const createImage = (url: string): Promise<HTMLImageElement> =>
         image.src = url;
     });
 
+async function getCroppedImg(
+    imageSrc: string,
+    pixelCrop: Area,
+    fileName: string = "cropped.png"
+): Promise<File> {
+    const image = await createImage(imageSrc);
+    const canvas = document.createElement("canvas");
+    const ctx = canvas.getContext("2d");
+
+    if (!ctx) {
+        throw new Error("No 2d context available");
+    }
+
+    canvas.width = Math.round(pixelCrop.width);
+    canvas.height = Math.round(pixelCrop.height);
+
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = "high";
+
+    ctx.drawImage(
+        image,
+        pixelCrop.x,
+        pixelCrop.y,
+        pixelCrop.width,
+        pixelCrop.height,
+        0,
+        0,
+        canvas.width,
+        canvas.height
+    );
+
+    return new Promise((resolve, reject) => {
+        canvas.toBlob(
+            (blob) => {
+                if (!blob) {
+                    reject(new Error("Canvas toBlob failed"));
+                    return;
+                }
+                const ext = fileName.split(".").pop() || "png";
+                const safeName = fileName.replace(/\.[^/.]+$/, "") + `-cropped.${ext}`;
+                const file = new File([blob], safeName, {
+                    type: "image/png",
+                    lastModified: Date.now(),
+                });
+                resolve(file);
+            },
+            "image/png",
+            0.95
+        );
+    });
+}
+
 export function ImageCropperDialog({
     open,
     onOpenChange,
     imageSrc,
-    fileName = "cropped-image.png",
+    fileName = "image.png",
     aspectRatio = 1,
     cropShape = "rect",
     title = "ปรับแต่งและครอบตัดรูปภาพ",
     onCropComplete,
     onCancel,
 }: ImageCropperDialogProps) {
-    const containerRef = useRef<HTMLDivElement>(null);
-    const [containerSize, setContainerSize] = useState({ width: 500, height: 400 });
-
-    const [crop, setCrop] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
+    const [crop, setCrop] = useState<Point>({ x: 0, y: 0 });
     const [zoom, setZoom] = useState(1);
     const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
     const [isProcessing, setIsProcessing] = useState(false);
 
-    // Measure container size dynamically for optimal crop box scale
-    useEffect(() => {
-        if (!open || !containerRef.current) return;
-
-        const updateSize = () => {
-            if (containerRef.current) {
-                const rect = containerRef.current.getBoundingClientRect();
-                if (rect.width > 0 && rect.height > 0) {
-                    setContainerSize({ width: rect.width, height: rect.height });
-                }
-            }
-        };
-
-        updateSize();
-        const observer = new ResizeObserver(updateSize);
-        observer.observe(containerRef.current);
-        return () => observer.disconnect();
-    }, [open]);
-
-    // Reset state on open
-    useEffect(() => {
-        if (open) {
-            setCrop({ x: 0, y: 0 });
-            setZoom(1);
-            setIsProcessing(false);
-        }
-    }, [open, imageSrc]);
-
-    // Calculate maximum possible crop size to maximize visibility and fill the image
-    const padding = 20; // 20px padding around the crop box
-    const maxAvailableWidth = Math.max(120, containerSize.width - padding);
-    const maxAvailableHeight = Math.max(120, containerSize.height - padding);
-
-    let cropWidth = maxAvailableWidth;
-    let cropHeight = cropWidth / aspectRatio;
-
-    if (cropHeight > maxAvailableHeight) {
-        cropHeight = maxAvailableHeight;
-        cropWidth = cropHeight * aspectRatio;
-    }
-
-    const computedCropSize = {
-        width: Math.round(cropWidth),
-        height: Math.round(cropHeight),
-    };
-
-    const onCropCompleteCallback = useCallback((_croppedArea: Area, croppedPixels: Area) => {
-        setCroppedAreaPixels(croppedPixels);
-    }, []);
+    const onCropCompleteCallback = useCallback(
+        (_croppedArea: Area, currentCroppedAreaPixels: Area) => {
+            setCroppedAreaPixels(currentCroppedAreaPixels);
+        },
+        []
+    );
 
     const handleReset = () => {
         setCrop({ x: 0, y: 0 });
         setZoom(1);
     };
 
-    const handleCrop = async () => {
+    const handleConfirm = async () => {
         if (!imageSrc || !croppedAreaPixels) return;
-
         setIsProcessing(true);
         try {
-            const image = await createImage(imageSrc);
-            const canvas = document.createElement("canvas");
-            canvas.width = Math.round(croppedAreaPixels.width);
-            canvas.height = Math.round(croppedAreaPixels.height);
-            const ctx = canvas.getContext("2d");
-
-            if (!ctx) {
-                throw new Error("Could not create canvas context");
-            }
-
-            ctx.imageSmoothingEnabled = true;
-            ctx.imageSmoothingQuality = "high";
-
-            ctx.drawImage(
-                image,
-                croppedAreaPixels.x,
-                croppedAreaPixels.y,
-                croppedAreaPixels.width,
-                croppedAreaPixels.height,
-                0,
-                0,
-                canvas.width,
-                canvas.height
-            );
-
-            canvas.toBlob(
-                (blob) => {
-                    if (blob) {
-                        const ext = fileName.split(".").pop() || "png";
-                        const safeName = fileName.replace(/\.[^/.]+$/, "") + `-cropped.${ext}`;
-                        const file = new File([blob], safeName, {
-                            type: "image/png",
-                            lastModified: Date.now(),
-                        });
-                        onCropComplete(file);
-                        onOpenChange(false);
-                    }
-                    setIsProcessing(false);
-                },
-                "image/png",
-                0.95
-            );
-        } catch (error) {
-            console.error("[ImageCropperDialog] Failed to crop image:", error);
+            const croppedFile = await getCroppedImg(imageSrc, croppedAreaPixels, fileName);
+            onCropComplete(croppedFile);
+            onOpenChange(false);
+        } catch (e) {
+            console.error("[ImageCropperDialog] Failed to crop image:", e);
+        } finally {
             setIsProcessing(false);
         }
     };
@@ -169,7 +135,7 @@ export function ImageCropperDialog({
     return (
         <Dialog open={open} onOpenChange={handleClose}>
             <DialogContent
-                className="max-w-[560px] p-0 overflow-hidden bg-card text-card-foreground border rounded-sm"
+                className="max-w-[520px] p-0 overflow-hidden bg-card text-card-foreground border rounded-sm"
                 showCloseButton={false}
             >
                 <DialogHeader className="px-5 py-3 border-b flex flex-row items-center justify-between space-y-0">
@@ -187,34 +153,31 @@ export function ImageCropperDialog({
                 </DialogHeader>
 
                 <div className="p-4 space-y-4">
-                    {/* Cropper Container - Large view to allow full circle expansion */}
-                    <div
-                        ref={containerRef}
-                        className="relative w-full h-[400px] bg-neutral-950 rounded-sm overflow-hidden select-none"
-                    >
+                    {/* Viewport with react-easy-crop */}
+                    <div className="relative w-full h-[340px] bg-neutral-950 rounded-sm overflow-hidden select-none">
                         {imageSrc && (
                             <Cropper
                                 image={imageSrc}
                                 crop={crop}
                                 zoom={zoom}
-                                minZoom={1}
-                                maxZoom={3}
                                 aspect={aspectRatio}
                                 cropShape={cropShape}
-                                cropSize={computedCropSize}
                                 showGrid={true}
                                 onCropChange={setCrop}
                                 onZoomChange={setZoom}
                                 onCropComplete={onCropCompleteCallback}
                             />
                         )}
+                        <div className="absolute top-2 left-2 px-2 py-0.5 rounded bg-black/60 backdrop-blur-xs text-[10px] font-mono text-white/80 pointer-events-none z-10">
+                            {aspectRatio === 1 ? "1:1" : `${aspectRatio}:1`}
+                        </div>
                     </div>
 
-                    {/* Controls: Zoom slider & Reset */}
+                    {/* Controls */}
                     <div className="flex items-center gap-3 px-1">
                         <button
                             type="button"
-                            onClick={() => setZoom((prev) => Math.max(1, prev - 0.2))}
+                            onClick={() => setZoom((z) => Math.max(1, z - 0.2))}
                             className="text-muted-foreground hover:text-foreground transition-colors p-1 cursor-pointer"
                             title="Zoom Out"
                         >
@@ -225,7 +188,7 @@ export function ImageCropperDialog({
                             type="range"
                             min={1}
                             max={3}
-                            step={0.02}
+                            step={0.01}
                             value={zoom}
                             onChange={(e) => setZoom(parseFloat(e.target.value))}
                             className="flex-1 accent-primary h-1.5 bg-muted rounded-lg cursor-pointer"
@@ -233,7 +196,7 @@ export function ImageCropperDialog({
 
                         <button
                             type="button"
-                            onClick={() => setZoom((prev) => Math.min(3, prev + 0.2))}
+                            onClick={() => setZoom((z) => Math.min(3, z + 0.2))}
                             className="text-muted-foreground hover:text-foreground transition-colors p-1 cursor-pointer"
                             title="Zoom In"
                         >
@@ -245,7 +208,7 @@ export function ImageCropperDialog({
                             variant="ghost"
                             size="sm"
                             onClick={handleReset}
-                            className="h-7 px-2 text-xs gap-1 text-muted-foreground hover:text-foreground"
+                            className="h-7 px-2 text-xs gap-1 text-muted-foreground hover:text-foreground cursor-pointer"
                             title="รีเซ็ตตำแหน่ง"
                         >
                             <RotateCcw className="size-3.5" />
@@ -260,7 +223,6 @@ export function ImageCropperDialog({
                         variant="outline"
                         size="sm"
                         onClick={handleClose}
-                        disabled={isProcessing}
                         className="text-xs font-bold"
                     >
                         <X className="size-3.5 mr-1" />
@@ -269,12 +231,21 @@ export function ImageCropperDialog({
                     <Button
                         type="button"
                         size="sm"
-                        onClick={handleCrop}
                         disabled={isProcessing}
+                        onClick={handleConfirm}
                         className="text-xs font-bold gap-1 bg-primary text-primary-foreground hover:bg-primary/90"
                     >
-                        <Check className="size-3.5" />
-                        {isProcessing ? "กำลังประมวลผล..." : "ครอบตัดและใช้งาน"}
+                        {isProcessing ? (
+                            <>
+                                <Loader2 className="size-3.5 animate-spin" />
+                                กำลังประมวลผล...
+                            </>
+                        ) : (
+                            <>
+                                <Check className="size-3.5" />
+                                ครอบตัดและใช้งาน
+                            </>
+                        )}
                     </Button>
                 </DialogFooter>
             </DialogContent>

@@ -107,12 +107,25 @@ export function ImageCropperDialog({
     const [zoom, setZoom] = useState(1);
     const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
     const [isProcessing, setIsProcessing] = useState(false);
+    const [isReady, setIsReady] = useState(false);
 
     // Reset crop and zoom whenever dialog opens or image changes
+    // Wait for Dialog layout transition to finish before initializing Cropper
+    // to avoid dimension mismatch caused by dialog opening animations
     useEffect(() => {
         if (open) {
             setCrop({ x: 0, y: 0 });
             setZoom(1);
+            const timer = setTimeout(() => {
+                setIsReady(true);
+                // Trigger resize event to ensure react-easy-crop calculates flush dimensions
+                if (typeof window !== "undefined") {
+                    window.dispatchEvent(new Event("resize"));
+                }
+            }, 60);
+            return () => clearTimeout(timer);
+        } else {
+            setIsReady(false);
         }
     }, [open, imageSrc]);
 
@@ -150,7 +163,7 @@ export function ImageCropperDialog({
     return (
         <Dialog open={open} onOpenChange={handleClose}>
             <DialogContent
-                className="max-w-[520px] p-0 overflow-hidden bg-card text-card-foreground border rounded-sm"
+                className="max-w-[520px] p-0 overflow-hidden bg-card text-card-foreground border rounded-sm animate-none duration-0"
                 showCloseButton={false}
             >
                 <DialogHeader className="px-5 py-3 border-b flex flex-row items-center justify-between space-y-0">
@@ -170,7 +183,7 @@ export function ImageCropperDialog({
                 <div className="p-4 space-y-4">
                     {/* Viewport with react-easy-crop locked strictly to image bounds */}
                     <div className="relative w-full h-[340px] bg-neutral-950 rounded-sm overflow-hidden select-none">
-                        {imageSrc && (
+                        {imageSrc && isReady ? (
                             <Cropper
                                 image={imageSrc}
                                 crop={crop}
@@ -185,6 +198,10 @@ export function ImageCropperDialog({
                                 onZoomChange={setZoom}
                                 onCropComplete={onCropCompleteCallback}
                             />
+                        ) : (
+                            <div className="absolute inset-0 flex items-center justify-center">
+                                <Loader2 className="size-6 text-muted-foreground animate-spin" />
+                            </div>
                         )}
                         <div className="absolute top-2 left-2 px-2 py-0.5 rounded bg-black/60 backdrop-blur-xs text-[10px] font-mono text-white/80 pointer-events-none z-10">
                             {aspectRatio === 1 ? "1:1" : `${aspectRatio}:1`}

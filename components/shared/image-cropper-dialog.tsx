@@ -1,7 +1,8 @@
 "use client";
 
-import React, { useState, useCallback } from "react";
+import React, { useState, useCallback, useRef, useEffect } from "react";
 import Cropper, { type Area } from "react-easy-crop";
+import "react-easy-crop/react-easy-crop.css";
 import {
     Dialog,
     DialogContent,
@@ -44,10 +45,59 @@ export function ImageCropperDialog({
     onCropComplete,
     onCancel,
 }: ImageCropperDialogProps) {
+    const containerRef = useRef<HTMLDivElement>(null);
+    const [containerSize, setContainerSize] = useState({ width: 500, height: 400 });
+
     const [crop, setCrop] = useState<{ x: number; y: number }>({ x: 0, y: 0 });
     const [zoom, setZoom] = useState(1);
     const [croppedAreaPixels, setCroppedAreaPixels] = useState<Area | null>(null);
     const [isProcessing, setIsProcessing] = useState(false);
+
+    // Measure container size dynamically for optimal crop box scale
+    useEffect(() => {
+        if (!open || !containerRef.current) return;
+
+        const updateSize = () => {
+            if (containerRef.current) {
+                const rect = containerRef.current.getBoundingClientRect();
+                if (rect.width > 0 && rect.height > 0) {
+                    setContainerSize({ width: rect.width, height: rect.height });
+                }
+            }
+        };
+
+        updateSize();
+        const observer = new ResizeObserver(updateSize);
+        observer.observe(containerRef.current);
+        return () => observer.disconnect();
+    }, [open]);
+
+    // Reset state on open
+    useEffect(() => {
+        if (open) {
+            setCrop({ x: 0, y: 0 });
+            setZoom(1);
+            setIsProcessing(false);
+        }
+    }, [open, imageSrc]);
+
+    // Calculate maximum possible crop size to maximize visibility and fill the image
+    const padding = 20; // 20px padding around the crop box
+    const maxAvailableWidth = Math.max(120, containerSize.width - padding);
+    const maxAvailableHeight = Math.max(120, containerSize.height - padding);
+
+    let cropWidth = maxAvailableWidth;
+    let cropHeight = cropWidth / aspectRatio;
+
+    if (cropHeight > maxAvailableHeight) {
+        cropHeight = maxAvailableHeight;
+        cropWidth = cropHeight * aspectRatio;
+    }
+
+    const computedCropSize = {
+        width: Math.round(cropWidth),
+        height: Math.round(cropHeight),
+    };
 
     const onCropCompleteCallback = useCallback((_croppedArea: Area, croppedPixels: Area) => {
         setCroppedAreaPixels(croppedPixels);
@@ -119,7 +169,7 @@ export function ImageCropperDialog({
     return (
         <Dialog open={open} onOpenChange={handleClose}>
             <DialogContent
-                className="max-w-[520px] p-0 overflow-hidden bg-card text-card-foreground border rounded-sm"
+                className="max-w-[560px] p-0 overflow-hidden bg-card text-card-foreground border rounded-sm"
                 showCloseButton={false}
             >
                 <DialogHeader className="px-5 py-3 border-b flex flex-row items-center justify-between space-y-0">
@@ -137,15 +187,21 @@ export function ImageCropperDialog({
                 </DialogHeader>
 
                 <div className="p-4 space-y-4">
-                    {/* Cropper Container */}
-                    <div className="relative w-full h-[340px] bg-neutral-950 rounded-sm overflow-hidden select-none">
+                    {/* Cropper Container - Large view to allow full circle expansion */}
+                    <div
+                        ref={containerRef}
+                        className="relative w-full h-[400px] bg-neutral-950 rounded-sm overflow-hidden select-none"
+                    >
                         {imageSrc && (
                             <Cropper
                                 image={imageSrc}
                                 crop={crop}
                                 zoom={zoom}
+                                minZoom={1}
+                                maxZoom={3}
                                 aspect={aspectRatio}
                                 cropShape={cropShape}
+                                cropSize={computedCropSize}
                                 showGrid={true}
                                 onCropChange={setCrop}
                                 onZoomChange={setZoom}
@@ -169,7 +225,7 @@ export function ImageCropperDialog({
                             type="range"
                             min={1}
                             max={3}
-                            step={0.05}
+                            step={0.02}
                             value={zoom}
                             onChange={(e) => setZoom(parseFloat(e.target.value))}
                             className="flex-1 accent-primary h-1.5 bg-muted rounded-lg cursor-pointer"

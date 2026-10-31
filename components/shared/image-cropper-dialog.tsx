@@ -20,7 +20,7 @@ export interface ImageCropperDialogProps {
     aspectRatio?: number; // width / height (e.g. 1 for 1:1, 2 for 2:1)
     cropShape?: "rect" | "round";
     title?: string;
-    minZoom?: number; // default 0.5
+    minZoom?: number; // default 1
     maxZoom?: number; // default 3
     onCropComplete: (croppedFile: File) => void;
     onCancel?: () => void;
@@ -57,17 +57,16 @@ async function getCroppedImg(
     ctx.imageSmoothingEnabled = true;
     ctx.imageSmoothingQuality = "high";
 
-    // Clear canvas with transparent
-    ctx.clearRect(0, 0, canvas.width, canvas.height);
-
-    // Draw the image relative to the crop window.
-    // Handles zoom-in (pixelCrop.x > 0) and zoom-out (pixelCrop.x < 0) safely.
     ctx.drawImage(
         image,
-        -pixelCrop.x,
-        -pixelCrop.y,
-        image.naturalWidth,
-        image.naturalHeight
+        pixelCrop.x,
+        pixelCrop.y,
+        pixelCrop.width,
+        pixelCrop.height,
+        0,
+        0,
+        targetWidth,
+        targetHeight
     );
 
     return new Promise((resolve, reject) => {
@@ -99,7 +98,7 @@ export function ImageCropperDialog({
     aspectRatio = 1,
     cropShape = "rect",
     title = "ปรับแต่งและครอบตัดรูปภาพ",
-    minZoom = 0.5,
+    minZoom = 1,
     maxZoom = 3,
     onCropComplete,
     onCancel,
@@ -127,12 +126,6 @@ export function ImageCropperDialog({
     const handleReset = () => {
         setCrop({ x: 0, y: 0 });
         setZoom(1);
-    };
-
-    const handleFitCrop = () => {
-        setCrop({ x: 0, y: 0 });
-        // For 1:1 round crop, a square inscribed inside the circle has zoom = 1 / sqrt(2) ≈ 0.71
-        setZoom(cropShape === "round" ? 0.71 : minZoom);
     };
 
     const handleConfirm = async () => {
@@ -175,7 +168,7 @@ export function ImageCropperDialog({
                 </DialogHeader>
 
                 <div className="p-4 space-y-4">
-                    {/* Viewport with react-easy-crop */}
+                    {/* Viewport with react-easy-crop locked strictly to image bounds */}
                     <div className="relative w-full h-[340px] bg-neutral-950 rounded-sm overflow-hidden select-none">
                         {imageSrc && (
                             <Cropper
@@ -187,7 +180,7 @@ export function ImageCropperDialog({
                                 showGrid={true}
                                 minZoom={minZoom}
                                 maxZoom={maxZoom}
-                                restrictPosition={false}
+                                restrictPosition={true}
                                 onCropChange={setCrop}
                                 onZoomChange={setZoom}
                                 onCropComplete={onCropCompleteCallback}
@@ -199,7 +192,7 @@ export function ImageCropperDialog({
                     </div>
 
                     {/* Controls */}
-                    <div className="flex items-center gap-2 px-1">
+                    <div className="flex items-center gap-3 px-1">
                         <button
                             type="button"
                             onClick={() => setZoom((z) => Math.max(minZoom, parseFloat((z - 0.1).toFixed(2))))}
@@ -228,30 +221,17 @@ export function ImageCropperDialog({
                             <ZoomIn className="size-4" />
                         </button>
 
-                        <div className="flex items-center gap-1.5 ml-1 border-l pl-2">
-                            <Button
-                                type="button"
-                                variant="outline"
-                                size="sm"
-                                onClick={handleFitCrop}
-                                className="h-7 px-2 text-xs text-muted-foreground hover:text-foreground cursor-pointer"
-                                title="ย่อให้รูปภาพทั้งหมดพอดีกรอบวงกลม"
-                            >
-                                พอดีกรอบ
-                            </Button>
-
-                            <Button
-                                type="button"
-                                variant="ghost"
-                                size="sm"
-                                onClick={handleReset}
-                                className="h-7 px-2 text-xs gap-1 text-muted-foreground hover:text-foreground cursor-pointer"
-                                title="รีเซ็ตขนาดเริ่มต้น"
-                            >
-                                <RotateCcw className="size-3.5" />
-                                รีเซ็ต
-                            </Button>
-                        </div>
+                        <Button
+                            type="button"
+                            variant="ghost"
+                            size="sm"
+                            onClick={handleReset}
+                            className="h-7 px-2 text-xs gap-1 text-muted-foreground hover:text-foreground cursor-pointer"
+                            title="รีเซ็ตขนาดเริ่มต้น"
+                        >
+                            <RotateCcw className="size-3.5" />
+                            รีเซ็ต
+                        </Button>
                     </div>
                 </div>
 

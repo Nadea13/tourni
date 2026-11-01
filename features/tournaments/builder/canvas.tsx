@@ -29,8 +29,9 @@ import {
     Settings, ShieldAlert,
     Calendar, ChevronLeft, ChevronRight, ExternalLink, Megaphone,
     Calendar as CalendarIcon, Lock, Unlock, Share2, Trophy, MoreVertical, Shield, Heart,
-    LayoutGrid, ArrowLeft, Loader2, Dices
+    LayoutGrid, ArrowLeft, Loader2, Dices, Sparkles
 } from "lucide-react";
+import { AutoScheduleDialog } from "./auto-schedule-dialog";
 import {
     Popover,
     PopoverContent,
@@ -58,6 +59,12 @@ import {
     ActionMenuItem,
     ActionMenuTrigger,
 } from "@/components/ui/action-menu";
+import {
+    Tooltip,
+    TooltipContent,
+    TooltipProvider,
+    TooltipTrigger,
+} from "@/components/ui/tooltip";
 import { addDays, subDays, addMonths, subMonths, format, startOfMonth, endOfMonth, eachDayOfInterval, getDay } from "date-fns";
 import { formatDate } from "@/lib/date";
 import { saveBracketCanvas } from "@/actions/tournaments/bracket";
@@ -199,6 +206,32 @@ function DeletableEdge({
                 finalTargetPosition = Position.Bottom;
             }
         }
+    } else {
+        // Adjust endpoints for Round nodes and horizontal connections so edges meet the node border flush without gaps
+        const sW = sourceInternalNode?.measured?.width ?? 320;
+        const sH = sourceInternalNode?.measured?.height ?? 220;
+        const sPosX = (sourceInternalNode as any)?.internals?.positionAbsolute?.x ?? (sourceInternalNode as any)?.position?.x;
+        const sPosY = (sourceInternalNode as any)?.internals?.positionAbsolute?.y ?? (sourceInternalNode as any)?.position?.y;
+
+        const tH = targetInternalNode?.measured?.height ?? 220;
+        const tPosX = (targetInternalNode as any)?.internals?.positionAbsolute?.x ?? (targetInternalNode as any)?.position?.x;
+        const tPosY = (targetInternalNode as any)?.internals?.positionAbsolute?.y ?? (targetInternalNode as any)?.position?.y;
+
+        if (sourceInternalNode && (effectiveSourceHandle === "round-out" || effectiveSourceHandle === "draw-out" || (sourceInternalNode.type === "matchNode" && isRound))) {
+            if (sPosX !== undefined) finalSourceX = sPosX + sW;
+            if (sPosY !== undefined) finalSourceY = sPosY + sH / 2;
+            finalSourcePosition = Position.Right;
+        } else if (sourceInternalNode && finalSourcePosition === Position.Right) {
+            if (sPosX !== undefined) finalSourceX = sPosX + sW;
+        }
+
+        if (targetInternalNode && (effectiveTargetHandle === "round-in" || (targetInternalNode.type === "matchNode" && isRound && effectiveTargetHandle !== "group-in"))) {
+            if (tPosX !== undefined) finalTargetX = tPosX;
+            if (tPosY !== undefined) finalTargetY = tPosY + tH / 2;
+            finalTargetPosition = Position.Left;
+        } else if (targetInternalNode && finalTargetPosition === Position.Left) {
+            if (tPosX !== undefined) finalTargetX = tPosX;
+        }
     }
 
     const [edgePath, labelX, labelY] = getBezierPath({
@@ -285,9 +318,24 @@ function CustomConnectionLine({
         isWinner = !hasWinnerEdge;
     }
     const stroke = (isWinner || isRank || isGroupMatches || isDraw || isRound) ? "var(--muted-foreground)" : "var(--border)";
+    let startX = fromX;
+    let startY = fromY;
+    if (fromNode && (fromHandle?.id === "round-out" || fromHandle?.id === "draw-out" || isRound)) {
+        const sW = fromNode.measured?.width ?? (fromNode as any).width ?? 320;
+        const sH = fromNode.measured?.height ?? (fromNode as any).height ?? 220;
+        const sPosX = (fromNode as any).internals?.positionAbsolute?.x ?? fromNode.position?.x;
+        const sPosY = (fromNode as any).internals?.positionAbsolute?.y ?? fromNode.position?.y;
+        if (sPosX !== undefined) {
+            startX = sPosX + sW;
+        }
+        if (sPosY !== undefined) {
+            startY = sPosY + sH / 2;
+        }
+    }
+
     const [edgePath] = getBezierPath({
-        sourceX: fromX,
-        sourceY: fromY,
+        sourceX: startX,
+        sourceY: startY,
         sourcePosition: fromPosition,
         targetX: toX,
         targetY: toY,
@@ -525,6 +573,8 @@ function CanvasInternal({
         }
     }, [tournamentId]);
 
+
+    const [isAutoScheduleOpen, setIsAutoScheduleOpen] = useState(false);
 
     // Calendar logic helpers
     const calendarDays = useMemo(() => {
@@ -1921,165 +1971,218 @@ function CanvasInternal({
                         {!readonly && (
                             <>
                                 {/* Desktop Sidebar & Tool Buttons */}
-                                <div className="hidden md:flex items-center" id="tour-console-sidebar-buttons">
+                                <TooltipProvider delayDuration={0}>
+                                    <div className="hidden md:flex items-center" id="tour-console-sidebar-buttons">
 
-                                    <div id="tour-console-share-select">
-                                        <ActionMenu>
-                                            <ActionMenuTrigger asChild>
+                                        {/* 1. โล่: การจัดการทีม */}
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
                                                 <Button
-                                                    variant="ghost"
+                                                    variant={activeNodeId === 'registration-setting-node' ? "default" : "ghost"}
                                                     size="icon-sm"
-                                                    title={locale === 'th' ? "แชร์ลิงก์" : "Share"}
-                                                    className="text-foreground"
+                                                    onClick={handleOpenRegistrationSettings}
+                                                    className={cn(
+                                                        "relative transition-all",
+                                                        activeNodeId === 'registration-setting-node'
+                                                            ? "bg-primary"
+                                                            : "text-foreground"
+                                                    )}
                                                 >
-                                                    <Share2 className="size-4" />
+                                                    <Shield className="size-4" />
+                                                    {hasPendingRegistration && (
+                                                        <span className="absolute top-0 right-0 bg-destructive rounded-full h-2 w-2 ring-2 ring-card" />
+                                                    )}
                                                 </Button>
-                                            </ActionMenuTrigger>
-                                            <ActionMenuContent align="end" className="w-fit min-w-[180px] bg-card shadow-2xl rounded-sm p-1">
-                                                <ActionMenuItem
-                                                    onClick={handleOpenLink}
-                                                    className="cursor-pointer text-xs font-semibold flex items-center gap-2 py-1.5"
+                                            </TooltipTrigger>
+                                            <TooltipContent side="bottom" sideOffset={8}>
+                                                {locale === 'th' ? "การจัดการทีม" : "Team Management"}
+                                            </TooltipContent>
+                                        </Tooltip>
+
+                                        {/* 2. ปฏิทิน: ตารางการแข่งขัน */}
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <Button
+                                                    variant={activeSidebar === 'schedule' ? "default" : "ghost"}
+                                                    size="icon-sm"
+                                                    onClick={async () => {
+                                                        if (activeSidebar === 'schedule') {
+                                                            setActiveSidebar('teams');
+                                                            updateUrlParams({ tab: null, subtab: null });
+                                                        } else {
+                                                            setActiveNodeId(null);
+                                                            selectNode(null);
+                                                            setActiveSidebar('schedule');
+                                                            updateUrlParams({ tab: 'schedule', subtab: null });
+                                                            if (isDirty) {
+                                                                await handleSave(false);
+                                                            }
+                                                            if (activeCategoryId) {
+                                                                fetchMatches(activeCategoryId);
+                                                            }
+                                                        }
+                                                    }}
+                                                    className={cn(
+                                                        "transition-all",
+                                                        activeSidebar === 'schedule'
+                                                            ? "bg-primary"
+                                                            : "text-foreground"
+                                                    )}
                                                 >
-                                                    <ExternalLink className="size-4 text-muted-foreground" />
-                                                    <span>{locale === 'th' ? "เปิดหน้าทัวร์นาเมนต์" : "Open Tournament Page"}</span>
-                                                </ActionMenuItem>
-                                                <ActionMenuItem
-                                                    onClick={handleOpenLinkRegister}
-                                                    className="cursor-pointer text-xs font-semibold flex items-center gap-2 py-1.5"
+                                                    <Calendar className="size-4" />
+                                                </Button>
+                                            </TooltipTrigger>
+                                            <TooltipContent side="bottom" sideOffset={8}>
+                                                {locale === 'th' ? "ตารางการแข่งขัน" : "Tournament Schedule"}
+                                            </TooltipContent>
+                                        </Tooltip>
+
+                                        {/* 3. ถ้วย: อันดับการแข่งขัน */}
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <Button
+                                                    variant={activeNodeId === 'ranking-setting-node' ? "default" : "ghost"}
+                                                    size="icon-sm"
+                                                    onClick={handleOpenRankingSettings}
+                                                    className={cn(
+                                                        "transition-all",
+                                                        activeNodeId === 'ranking-setting-node'
+                                                            ? "bg-primary"
+                                                            : "text-foreground"
+                                                    )}
                                                 >
-                                                    <ExternalLink className="size-4 text-muted-foreground" />
-                                                    <span>{locale === 'th' ? "เปิดหน้าลงทะเบียน" : "Open Registration Page"}</span>
-                                                </ActionMenuItem>
-                                                <ActionMenuItem
-                                                    onClick={handleOpenLinkDocumentions}
-                                                    className="cursor-pointer text-xs font-semibold flex items-center gap-2 py-1.5"
+                                                    <Trophy className="size-4" />
+                                                </Button>
+                                            </TooltipTrigger>
+                                            <TooltipContent side="bottom" sideOffset={8}>
+                                                {locale === 'th' ? "อันดับการแข่งขัน" : "Tournament Rankings"}
+                                            </TooltipContent>
+                                        </Tooltip>
+
+                                        {/* 4. หัวใจ: ผู้สนับสนุน */}
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <Button
+                                                    variant={activeNodeId === 'sponsor-setting-node' ? "default" : "ghost"}
+                                                    size="icon-sm"
+                                                    onClick={handleOpenSponsorSettings}
+                                                    className={cn(
+                                                        "transition-all",
+                                                        activeNodeId === 'sponsor-setting-node'
+                                                            ? "bg-primary"
+                                                            : "text-foreground"
+                                                    )}
                                                 >
-                                                    <ExternalLink className="size-4 text-muted-foreground" />
-                                                    <span>{locale === 'th' ? "เปิดหน้ายื่นเอกสาร" : "Open Document Submission"}</span>
-                                                </ActionMenuItem>
-                                            </ActionMenuContent>
-                                        </ActionMenu>
+                                                    <Heart className="size-4" />
+                                                </Button>
+                                            </TooltipTrigger>
+                                            <TooltipContent side="bottom" sideOffset={8}>
+                                                {locale === 'th' ? "ผู้สนับสนุน" : "Sponsors"}
+                                            </TooltipContent>
+                                        </Tooltip>
+
+                                        {/* 5. โทรโข่ง: ประกาศ */}
+                                        <Tooltip>
+                                            <TooltipTrigger asChild>
+                                                <Button
+                                                    variant={activeNodeId === 'announcement-setting-node' ? "default" : "ghost"}
+                                                    size="icon-sm"
+                                                    onClick={handleOpenAnnouncementSettings}
+                                                    className={cn(
+                                                        "transition-all",
+                                                        activeNodeId === 'announcement-setting-node'
+                                                            ? "bg-primary"
+                                                            : "text-foreground"
+                                                    )}
+                                                >
+                                                    <Megaphone className="size-4" />
+                                                </Button>
+                                            </TooltipTrigger>
+                                            <TooltipContent side="bottom" sideOffset={8}>
+                                                {locale === 'th' ? "ประกาศ" : "Announcements"}
+                                            </TooltipContent>
+                                        </Tooltip>
+
+                                        {/* 6. แชร์: แชร์ลิงก์ */}
+                                        <div id="tour-console-share-select">
+                                            <ActionMenu>
+                                                <Tooltip>
+                                                    <TooltipTrigger asChild>
+                                                        <ActionMenuTrigger asChild>
+                                                            <Button
+                                                                variant="ghost"
+                                                                size="icon-sm"
+                                                                className="text-foreground"
+                                                            >
+                                                                <Share2 className="size-4" />
+                                                            </Button>
+                                                        </ActionMenuTrigger>
+                                                    </TooltipTrigger>
+                                                    <TooltipContent side="bottom" sideOffset={8}>
+                                                        {locale === 'th' ? "แชร์ลิงก์" : "Share"}
+                                                    </TooltipContent>
+                                                </Tooltip>
+                                                <ActionMenuContent align="end" className="w-fit min-w-[180px] bg-card shadow-2xl rounded-sm p-1">
+                                                    <ActionMenuItem
+                                                        onClick={handleOpenLink}
+                                                        className="cursor-pointer text-xs font-semibold flex items-center gap-2 py-1.5"
+                                                    >
+                                                        <ExternalLink className="size-4 text-muted-foreground" />
+                                                        <span>{locale === 'th' ? "เปิดหน้าทัวร์นาเมนต์" : "Open Tournament Page"}</span>
+                                                    </ActionMenuItem>
+                                                    <ActionMenuItem
+                                                        onClick={handleOpenLinkRegister}
+                                                        className="cursor-pointer text-xs font-semibold flex items-center gap-2 py-1.5"
+                                                    >
+                                                        <ExternalLink className="size-4 text-muted-foreground" />
+                                                        <span>{locale === 'th' ? "เปิดหน้าลงทะเบียน" : "Open Registration Page"}</span>
+                                                    </ActionMenuItem>
+                                                    <ActionMenuItem
+                                                        onClick={handleOpenLinkDocumentions}
+                                                        className="cursor-pointer text-xs font-semibold flex items-center gap-2 py-1.5"
+                                                    >
+                                                        <ExternalLink className="size-4 text-muted-foreground" />
+                                                        <span>{locale === 'th' ? "เปิดหน้ายื่นเอกสาร" : "Open Document Submission"}</span>
+                                                    </ActionMenuItem>
+                                                </ActionMenuContent>
+                                            </ActionMenu>
+                                        </div>
+
+                                        {/* 7. ตั้งค่า: ตั้งค่าทัวร์นาเมนต์ (สุดท้าย) */}
+                                        {userInvitationRole !== 'staff' && userInvitationRole !== 'referee' && (
+                                            <Tooltip>
+                                                <TooltipTrigger asChild>
+                                                    <Button
+                                                        variant={activeSidebar === 'settings' ? "default" : "ghost"}
+                                                        size="icon-sm"
+                                                        onClick={() => {
+                                                            if (activeSidebar === 'settings') {
+                                                                setActiveSidebar('teams');
+                                                                updateUrlParams({ tab: null, subtab: null });
+                                                            } else {
+                                                                setActiveNodeId(null);
+                                                                selectNode(null);
+                                                                setActiveSidebar('settings');
+                                                                updateUrlParams({ tab: 'settings', subtab: activeSettingsTab || 'general' });
+                                                            }
+                                                        }}
+                                                        className={cn(
+                                                            "transition-all",
+                                                            activeSidebar === 'settings'
+                                                                ? "bg-primary"
+                                                                : "text-foreground"
+                                                        )}
+                                                    >
+                                                        <Settings className="size-4" />
+                                                    </Button>
+                                                </TooltipTrigger>
+                                                <TooltipContent side="bottom" sideOffset={8}>
+                                                    {locale === 'th' ? "ตั้งค่าทัวร์นาเมนต์" : "Tournament Settings"}
+                                                </TooltipContent>
+                                            </Tooltip>
+                                        )}
                                     </div>
-
-                                    <Button
-                                        variant={activeNodeId === 'announcement-setting-node' ? "default" : "ghost"}
-                                        size="icon-sm"
-                                        onClick={handleOpenAnnouncementSettings}
-                                        title={locale === 'th' ? "ประกาศ" : "Announcements"}
-                                        className={cn(
-                                            "transition-all",
-                                            activeNodeId === 'announcement-setting-node'
-                                                ? "bg-primary"
-                                                : "text-foreground"
-                                        )}
-                                    >
-                                        <Megaphone className="size-4" />
-                                    </Button>
-
-                                    <Button
-                                        variant={activeNodeId === 'registration-setting-node' ? "default" : "ghost"}
-                                        size="icon-sm"
-                                        onClick={handleOpenRegistrationSettings}
-                                        title={locale === 'th' ? "การจัดการทีม" : "Team Management"}
-                                        className={cn(
-                                            "relative transition-all",
-                                            activeNodeId === 'registration-setting-node'
-                                                ? "bg-primary"
-                                                : "text-foreground"
-                                        )}
-                                    >
-                                        <Shield className="size-4" />
-                                        {hasPendingRegistration && (
-                                            <span className="absolute top-0 right-0 bg-destructive rounded-full h-2 w-2 ring-2 ring-card" />
-                                        )}
-                                    </Button>
-
-                                    <Button
-                                        variant={activeNodeId === 'sponsor-setting-node' ? "default" : "ghost"}
-                                        size="icon-sm"
-                                        onClick={handleOpenSponsorSettings}
-                                        title={locale === 'th' ? "ผู้สนับสนุน" : "Sponsors"}
-                                        className={cn(
-                                            "transition-all",
-                                            activeNodeId === 'sponsor-setting-node'
-                                                ? "bg-primary"
-                                                : "text-foreground"
-                                        )}
-                                    >
-                                        <Heart className="size-4" />
-                                    </Button>
-
-                                    <Button
-                                        variant={activeNodeId === 'ranking-setting-node' ? "default" : "ghost"}
-                                        size="icon-sm"
-                                        onClick={handleOpenRankingSettings}
-                                        title={locale === 'th' ? "อันดับการแข่งขัน" : "Tournament Rankings"}
-                                        className={cn(
-                                            "transition-all",
-                                            activeNodeId === 'ranking-setting-node'
-                                                ? "bg-primary"
-                                                : "text-foreground"
-                                        )}
-                                    >
-                                        <Trophy className="size-4" />
-                                    </Button>
-
-                                    <Button
-                                        variant={activeSidebar === 'schedule' ? "default" : "ghost"}
-                                        size="icon-sm"
-                                        onClick={async () => {
-                                            if (activeSidebar === 'schedule') {
-                                                setActiveSidebar('teams');
-                                                updateUrlParams({ tab: null, subtab: null });
-                                            } else {
-                                                setActiveNodeId(null);
-                                                selectNode(null);
-                                                setActiveSidebar('schedule');
-                                                updateUrlParams({ tab: 'schedule', subtab: null });
-                                                if (isDirty) {
-                                                    await handleSave(false);
-                                                }
-                                                if (activeCategoryId) {
-                                                    fetchMatches(activeCategoryId);
-                                                }
-                                            }
-                                        }}
-                                        className={cn(
-                                            "transition-all",
-                                            activeSidebar === 'schedule'
-                                                ? "bg-primary"
-                                                : "text-foreground"
-                                        )}
-                                    >
-                                        <Calendar className="size-4" />
-                                    </Button>
-
-                                    {userInvitationRole !== 'staff' && userInvitationRole !== 'referee' && (
-                                        <Button
-                                            variant={activeSidebar === 'settings' ? "default" : "ghost"}
-                                            size="icon-sm"
-                                            onClick={() => {
-                                                if (activeSidebar === 'settings') {
-                                                    setActiveSidebar('teams');
-                                                    updateUrlParams({ tab: null, subtab: null });
-                                                } else {
-                                                    setActiveNodeId(null);
-                                                    selectNode(null);
-                                                    setActiveSidebar('settings');
-                                                    updateUrlParams({ tab: 'settings', subtab: activeSettingsTab || 'general' });
-                                                }
-                                            }}
-                                            className={cn(
-                                                "transition-all",
-                                                activeSidebar === 'settings'
-                                                    ? "bg-primary"
-                                                    : "text-foreground"
-                                            )}
-                                        >
-                                            <Settings className="size-4" />
-                                        </Button>
-                                    )}
-                                </div>
+                                </TooltipProvider>
 
                                 {/* Mobile Menu (...) Dropdown or Close (X) button */}
                                 <div className="flex md:hidden items-center" id="tour-console-mobile-menu">
@@ -2424,6 +2527,18 @@ function CanvasInternal({
                                                 ))}
                                             </SelectContent>
                                         </Select>
+
+                                        {!readonly && !isLocked && (
+                                            <Button
+                                                size="sm"
+                                                variant="outline"
+                                                onClick={() => setIsAutoScheduleOpen(true)}
+                                                className="h-8 gap-1.5 text-xs font-semibold shrink-0 border-primary/40 text-primary hover:bg-primary/10"
+                                            >
+                                                <Sparkles className="size-3.5" />
+                                                <span>{locale === 'th' ? "จัดตารางเวลาอัตโนมัติ" : "Auto Schedule"}</span>
+                                            </Button>
+                                        )}
                                     </div>
 
                                     {/* Desktop Controls Sidebar */}
@@ -2592,6 +2707,20 @@ function CanvasInternal({
                                                 </SelectContent>
                                             </Select>
                                         </div>
+
+                                        {/* Auto-Schedule Action Button */}
+                                        {!readonly && !isLocked && (
+                                            <div className="pt-2">
+                                                <Button
+                                                    size="sm"
+                                                    onClick={() => setIsAutoScheduleOpen(true)}
+                                                    className="w-full gap-2 text-xs font-bold bg-primary hover:bg-primary/90 text-black shadow-sm"
+                                                >
+                                                    <Sparkles className="size-4" />
+                                                    <span>{locale === 'th' ? "จัดตารางเวลาอัตโนมัติ" : "Auto-Schedule"}</span>
+                                                </Button>
+                                            </div>
+                                        )}
                                     </aside>
 
                                     {/* Main Content */}
@@ -2878,6 +3007,14 @@ function CanvasInternal({
                         router.replace(`${pathname}?${params.toString()}`, { scroll: false });
                     }
                 }}
+            />
+
+            {/* Auto-Schedule Dialog in Schedule View */}
+            <AutoScheduleDialog
+                open={isAutoScheduleOpen}
+                onOpenChange={setIsAutoScheduleOpen}
+                tournament={tournament}
+                activeCategoryId={activeCategoryId}
             />
 
             {/* Unsaved Changes Warning Dialog */}

@@ -12,6 +12,7 @@ import { Match, Registration, SportType } from "@/types";
 import { TeamRosterDetailsDialog } from "@/features/dialogs";
 import { useLocale } from "next-intl";
 import { useToast } from "@/hooks/use-toast";
+import { sortStandingsByTieBreak } from "./tie-break-utils";
 
 export interface CalculatedStanding {
     name: string;
@@ -38,6 +39,8 @@ export interface GroupNodeData {
     advancingCount?: number;
     teams?: string[];
     rankings?: string[];
+    tieBreakOrder?: string[];
+    manualDrawOrder?: Record<string, number>;
     sport?: SportType;
     showPlayed?: boolean;
     showWin?: boolean;
@@ -143,7 +146,9 @@ export const GroupNode = memo(({
             const isWinnerHandle = !!winnerMatch;
             const matchIdx = winnerMatch ? parseInt(winnerMatch[1], 10) : loserMatch ? parseInt(loserMatch[1], 10) : -1;
             if (matchIdx !== -1) {
-                const labelBase = sNode.data.label ? `${sNode.data.label}` : `Match ${matchIdx + 1}`;
+                const sMatches = Array.isArray(sNode.data.matches) ? sNode.data.matches : [];
+                const isMulti = sMatches.length > 1;
+                const labelBase = isMulti ? `Match ${matchIdx + 1}` : (sNode.data.label ? `${sNode.data.label}` : `Match ${matchIdx + 1}`);
                 return isWinnerHandle ? `Winner (${labelBase})` : `Loser (${labelBase})`;
             }
         }
@@ -369,19 +374,17 @@ export const GroupNode = memo(({
                     form: s.form.slice(-5),
                 }));
 
-                // Sort: If matches were played, sort by tournament points/difference; otherwise keep original slot order!
+                // Sort: If matches were played, sort by tie-break criteria; otherwise keep original slot order!
                 if (totalMatchesPlayed > 0) {
-                    resultList.sort((a, b) => {
-                        if (b.pts !== a.pts) return b.pts - a.pts;
-                        if (isVolleyball) {
-                            if (b.sd !== a.sd) return b.sd - a.sd;
-                            if (b.sw !== a.sw) return b.sw - a.sw;
-                        } else {
-                            if (b.gd !== a.gd) return b.gd - a.gd;
-                            if (b.gf !== a.gf) return b.gf - a.gf;
-                        }
-                        return a.originalSlotIndex - b.originalSlotIndex;
-                    });
+                    const sorted = sortStandingsByTieBreak(
+                        resultList,
+                        data.tieBreakOrder,
+                        dbMatches,
+                        isVolleyball,
+                        data.manualDrawOrder
+                    );
+                    resultList.length = 0;
+                    resultList.push(...sorted);
                 } else {
                     resultList.sort((a, b) => a.originalSlotIndex - b.originalSlotIndex);
                 }

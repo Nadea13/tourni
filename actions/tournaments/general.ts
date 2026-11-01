@@ -425,6 +425,14 @@ export async function updateTournament(
         if (formType === 'general' || formType === 'venue' || !formType) {
             if (formData.has("location_name")) updateData.location = formData.get("location_name") as string || null;
             if (formData.has("google_map_url")) currentSettings.google_map_url = formData.get("google_map_url") as string || null;
+            if (formData.has("fields")) {
+                const fieldsRaw = formData.get("fields") as string;
+                try {
+                    currentSettings.fields = JSON.parse(fieldsRaw);
+                } catch {
+                    currentSettings.fields = fieldsRaw.split(',').map(s => s.trim()).filter(Boolean);
+                }
+            }
         }
 
         updateData.settings = currentSettings;

@@ -18,7 +18,10 @@ import {
     Globe,
     Loader2,
     Lock,
-    ShieldAlert
+    ShieldAlert,
+    Plus,
+    X,
+    Layers
 } from "lucide-react";
 import {
     AlertDialog,
@@ -67,7 +70,7 @@ interface GeneralSettingsProps {
     onNavigateDangerZone?: () => void;
 }
 
-type ActionField = 'media' | 'name' | 'status' | 'period' | 'deadline' | 'description' | 'location' | 'map';
+type ActionField = 'media' | 'name' | 'status' | 'period' | 'deadline' | 'description' | 'location' | 'fields' | 'map';
 
 export function GeneralSettings({ tournament, className, onNavigateDangerZone }: GeneralSettingsProps) {
     const t = useTranslations("Settings");
@@ -90,6 +93,9 @@ export function GeneralSettings({ tournament, className, onNavigateDangerZone }:
     const initialDocDeadline = tournament.document_deadline ? new Date(tournament.document_deadline).toISOString().split('T')[0] : "";
     const initialLogoUrl = tournament.logo_img || (tournament as any).logo_url || null;
     const initialCoverUrl = tournament.cover_img || (tournament as any).banner_url || null;
+    const initialFields: string[] = Array.isArray(tournament.settings?.fields)
+        ? tournament.settings.fields
+        : [];
 
     // Form states
     const [name, setName] = useState(initialName);
@@ -103,6 +109,8 @@ export function GeneralSettings({ tournament, className, onNavigateDangerZone }:
     const [startDate, setStartDate] = useState<string>(initialStartDate);
     const [endDate, setEndDate] = useState<string>(initialEndDate);
     const [docDeadline, setDocDeadline] = useState<string>(initialDocDeadline);
+    const [fields, setFields] = useState<string[]>(initialFields);
+    const [newFieldInput, setNewFieldInput] = useState("");
 
     const [logoPreviewUrl, setLogoPreviewUrl] = useState<string | null>(initialLogoUrl);
     const [coverPreviewUrl, setCoverPreviewUrl] = useState<string | null>(initialCoverUrl);
@@ -125,6 +133,8 @@ export function GeneralSettings({ tournament, className, onNavigateDangerZone }:
         setStartDate(initialStartDate);
         setEndDate(initialEndDate);
         setDocDeadline(initialDocDeadline);
+        setFields(initialFields);
+        setNewFieldInput("");
         setLogoPreviewUrl(initialLogoUrl);
         setCoverPreviewUrl(initialCoverUrl);
         setLogoFile(null);
@@ -132,7 +142,7 @@ export function GeneralSettings({ tournament, className, onNavigateDangerZone }:
         setLogoRemoved(false);
         setCoverRemoved(false);
         setLastModifiedField(null);
-    }, [initialName, initialStatus, initialLocationName, initialGoogleMapUrl, initialDescription, initialStartDate, initialEndDate, initialDocDeadline, initialLogoUrl, initialCoverUrl]);
+    }, [initialName, initialStatus, initialLocationName, initialGoogleMapUrl, initialDescription, initialStartDate, initialEndDate, initialDocDeadline, initialLogoUrl, initialCoverUrl, tournament.settings?.fields]);
 
     useEffect(() => {
         if (state.success) {
@@ -162,9 +172,10 @@ export function GeneralSettings({ tournament, className, onNavigateDangerZone }:
     const isDeadlineDirty = docDeadline !== initialDocDeadline;
     const isDescriptionDirty = description !== initialDescription;
     const isLocationDirty = locationName !== initialLocationName;
+    const isFieldsDirty = JSON.stringify(fields) !== JSON.stringify(initialFields);
     const isMapDirty = googleMapUrl !== initialGoogleMapUrl;
 
-    const isDirty = isMediaDirty || isNameDirty || isStatusDirty || isPeriodDirty || isDeadlineDirty || isDescriptionDirty || isLocationDirty || isMapDirty;
+    const isDirty = isMediaDirty || isNameDirty || isStatusDirty || isPeriodDirty || isDeadlineDirty || isDescriptionDirty || isLocationDirty || isFieldsDirty || isMapDirty;
 
     const activeActionField: ActionField | null = !isDirty
         ? null
@@ -176,6 +187,7 @@ export function GeneralSettings({ tournament, className, onNavigateDangerZone }:
             (lastModifiedField === 'deadline' && isDeadlineDirty) ||
             (lastModifiedField === 'description' && isDescriptionDirty) ||
             (lastModifiedField === 'location' && isLocationDirty) ||
+            (lastModifiedField === 'fields' && isFieldsDirty) ||
             (lastModifiedField === 'map' && isMapDirty)
         )
         ? lastModifiedField
@@ -191,6 +203,8 @@ export function GeneralSettings({ tournament, className, onNavigateDangerZone }:
         ? 'description'
         : isLocationDirty
         ? 'location'
+        : isFieldsDirty
+        ? 'fields'
         : isMapDirty
         ? 'map'
         : isMediaDirty
@@ -206,6 +220,8 @@ export function GeneralSettings({ tournament, className, onNavigateDangerZone }:
         setStartDate(initialStartDate);
         setEndDate(initialEndDate);
         setDocDeadline(initialDocDeadline);
+        setFields(initialFields);
+        setNewFieldInput("");
         setLogoPreviewUrl(initialLogoUrl);
         setCoverPreviewUrl(initialCoverUrl);
         setLogoFile(null);
@@ -599,7 +615,98 @@ export function GeneralSettings({ tournament, className, onNavigateDangerZone }:
                     </div>
                 </div>
 
-                {/* 8. Map Location */}
+                {/* 8. Competition Courts / Fields */}
+                <div className="flex flex-col sm:flex-row sm:items-start justify-between px-4 py-2 gap-3">
+                    <div className="flex items-start gap-4 sm:w-2/3">
+                        <div className="size-9 rounded-sm bg-muted-foreground/10 flex items-center justify-center shrink-0">
+                            <Layers className="size-4 text-muted-foreground" />
+                        </div>
+                        <div className="space-y-1">
+                            <Header level={6}>
+                                {isThai ? "สนามแข่งขัน (Courts / Pitches)" : "Competition Courts / Pitches"}
+                            </Header>
+                            <p className="text-xs text-muted-foreground">
+                                {isThai
+                                    ? "ระบุชื่อสนามย่อยเพื่อนำไปใช้จัดตารางเวลาและกำหนดคู่แข่งขัน"
+                                    : "Add courts or pitch names to auto-schedule matches"}
+                            </p>
+                        </div>
+                    </div>
+                    <div className="sm:w-2/3 space-y-2">
+                        {/* List of existing fields */}
+                        <div className="flex flex-wrap gap-2">
+                            {fields.map((f, fIdx) => (
+                                <div
+                                    key={fIdx}
+                                    className="flex items-center gap-1.5 px-2.5 py-1 rounded-sm border bg-muted/40 text-xs font-semibold text-foreground group"
+                                >
+                                    <span>{f}</span>
+                                    <button
+                                        type="button"
+                                        onClick={() => {
+                                            const updated = fields.filter((_, i) => i !== fIdx);
+                                            setFields(updated);
+                                            setLastModifiedField('fields');
+                                        }}
+                                        className="text-muted-foreground hover:text-destructive transition-colors p-0.5 rounded cursor-pointer"
+                                        title={isThai ? "ลบสนามนี้" : "Remove court"}
+                                    >
+                                        <X className="size-3" />
+                                    </button>
+                                </div>
+                            ))}
+                            {fields.length === 0 && (
+                                <span className="text-xs text-muted-foreground/60 italic py-1">
+                                    {isThai ? "ยังไม่ได้เพิ่มสนามแข่ง (กด + เพื่อเพิ่ม)" : "No courts added yet (Click + to add)"}
+                                </span>
+                            )}
+                        </div>
+
+                        {/* Add court input */}
+                        <div className="flex items-center gap-2">
+                            <Input
+                                size="sm"
+                                value={newFieldInput}
+                                onChange={(e) => setNewFieldInput(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === "Enter") {
+                                        e.preventDefault();
+                                        const trimmed = newFieldInput.trim();
+                                        if (trimmed && !fields.includes(trimmed)) {
+                                            setFields([...fields, trimmed]);
+                                            setNewFieldInput("");
+                                            setLastModifiedField('fields');
+                                        }
+                                    }
+                                }}
+                                placeholder={isThai ? "เช่น สนาม 1, Court A" : "e.g. Court 1, Pitch A"}
+                                className="flex-1"
+                            />
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                onClick={() => {
+                                    const trimmed = newFieldInput.trim();
+                                    if (trimmed && !fields.includes(trimmed)) {
+                                        setFields([...fields, trimmed]);
+                                        setNewFieldInput("");
+                                        setLastModifiedField('fields');
+                                    }
+                                }}
+                                disabled={!newFieldInput.trim()}
+                                className="h-8 gap-1 text-xs shrink-0 cursor-pointer"
+                            >
+                                <Plus className="size-3.5" />
+                                <span>{isThai ? "เพิ่มสนาม" : "Add Court"}</span>
+                            </Button>
+                        </div>
+                        <input type="hidden" name="fields" value={JSON.stringify(fields)} />
+                        {activeActionField === 'fields' && renderActionButtons()}
+                    </div>
+                </div>
+
+                {/* 9. Map Location */}
                 <div className="flex flex-col sm:flex-row sm:items-start justify-between px-4 py-2 gap-3">
                     <div className="flex items-start gap-4 sm:w-2/3">
                         <div className="size-9 rounded-sm bg-muted-foreground/10 flex items-center justify-center shrink-0">

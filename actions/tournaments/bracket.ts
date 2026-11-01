@@ -246,6 +246,8 @@ export async function saveBracketCanvasInternal(
                     minute: existingDbMatch?.minute ?? existingDbMatch?.current_minute ?? null,
                     scheduled_at: scheduledAt,
                     scheduled_time: scheduledAt,
+                    venue: (match as any).field_name || (match as any).venue || existingDbMatch?.venue || null,
+                    field_name: (match as any).field_name || (match as any).venue || existingDbMatch?.field_name || null,
                     round: existingDbMatch?.round || 1,
                     round_number: existingDbMatch?.round || 1,
                     stage: matches.length > 1 ? 'group' : 'knockout',

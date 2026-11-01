@@ -216,4 +216,202 @@ describe('useBracketStore - Group Node to Round realtime sync', () => {
         expect(arsenalCount).toBe(3);
         expect(chelseaCount).toBe(3);
     });
+    it('should halve the match count in next round when a Round node connects (4 matches -> 2 matches -> 1 match)', () => {
+        const roundNode = {
+            id: 'match-20',
+            type: 'matchNode',
+            position: { x: 0, y: 0 },
+            data: {
+                label: 'Round Match #20',
+                isRound: true,
+                matches: [
+                    { id: 'm-1', placeholderA: 'TBD', placeholderB: 'TBD' },
+                    { id: 'm-2', placeholderA: 'TBD', placeholderB: 'TBD' },
+                    { id: 'm-3', placeholderA: 'TBD', placeholderB: 'TBD' },
+                    { id: 'm-4', placeholderA: 'TBD', placeholderB: 'TBD' },
+                ],
+            },
+        };
+
+        const nextRoundNode = {
+            id: 'match-21',
+            type: 'matchNode',
+            position: { x: 300, y: 0 },
+            data: {
+                label: 'Match #21',
+                isRound: true,
+                matches: [{ id: 'm-next-1', placeholderA: 'TBD', placeholderB: 'TBD' }],
+            },
+        };
+
+        const finalNode = {
+            id: 'match-22',
+            type: 'matchNode',
+            position: { x: 600, y: 0 },
+            data: {
+                label: 'Match #22',
+                matches: [{ id: 'm-next-2', placeholderA: 'TBD', placeholderB: 'TBD' }],
+            },
+        };
+
+        useBracketStore.setState({
+            nodes: [roundNode as any, nextRoundNode as any, finalNode as any],
+            edges: [],
+        });
+
+        // Connect Round #20 (4 matches) -> Match #21 (should become 2 matches)
+        useBracketStore.getState().onConnect({
+            source: 'match-20',
+            sourceHandle: 'round-out',
+            target: 'match-21',
+            targetHandle: 'slot-a-0',
+        });
+
+        const state1 = useBracketStore.getState();
+        const updatedMatch21 = state1.nodes.find((n) => n.id === 'match-21');
+        const matches21 = (updatedMatch21?.data?.matches as any[]) || [];
+        expect(matches21.length).toBe(2);
+        expect(updatedMatch21?.data?.isRound).toBe(true);
+        expect(state1.edges.some(e => e.source === 'match-20' && e.target === 'match-21' && e.targetHandle === 'round-in')).toBe(true);
+
+        // Match 1: Winner (Match 1) vs Winner (Match 2)
+        expect(matches21[0].placeholderA).toBe('Winner (Match 1)');
+        expect(matches21[0].placeholderB).toBe('Winner (Match 2)');
+
+        // Match 2: Winner (Match 3) vs Winner (Match 4)
+        expect(matches21[1].placeholderA).toBe('Winner (Match 3)');
+        expect(matches21[1].placeholderB).toBe('Winner (Match 4)');
+
+        // Connect Match #21 (2 matches) -> Match #22 (should become 1 match - Final)
+        useBracketStore.getState().onConnect({
+            source: 'match-21',
+            sourceHandle: 'round-out',
+            target: 'match-22',
+            targetHandle: 'slot-a-0',
+        });
+
+        const state2 = useBracketStore.getState();
+        const updatedMatch22 = state2.nodes.find((n) => n.id === 'match-22');
+        const matches22 = (updatedMatch22?.data?.matches as any[]) || [];
+        expect(matches22.length).toBe(1);
+        expect(updatedMatch22?.data?.isRound).toBe(false);
+        expect(state2.edges.some(e => e.source === 'match-21' && e.target === 'match-22' && e.targetHandle === 'round-in')).toBe(true);
+        expect(matches22[0].placeholderA).toBe('Winner (Match 1)');
+        expect(matches22[0].placeholderB).toBe('Winner (Match 2)');
+    });
+
+    it('should connect Round node with 4 matches to sibling individual Match nodes correctly', () => {
+        const roundNode = {
+            id: 'rnd-1',
+            type: 'matchNode',
+            position: { x: 0, y: 100 },
+            data: {
+                label: 'Round of 8',
+                isRound: true,
+                matches: [
+                    { id: 'm-1', placeholderA: 'TBD', placeholderB: 'TBD' },
+                    { id: 'm-2', placeholderA: 'TBD', placeholderB: 'TBD' },
+                    { id: 'm-3', placeholderA: 'TBD', placeholderB: 'TBD' },
+                    { id: 'm-4', placeholderA: 'TBD', placeholderB: 'TBD' },
+                ],
+            },
+        };
+
+        const match21 = {
+            id: 'm-21',
+            type: 'matchNode',
+            position: { x: 300, y: 50 },
+            data: {
+                label: 'Match #21',
+                isRound: false,
+                matches: [{ id: 'sub-21', placeholderA: 'TBD', placeholderB: 'TBD' }],
+            },
+        };
+
+        const match22 = {
+            id: 'm-22',
+            type: 'matchNode',
+            position: { x: 300, y: 250 },
+            data: {
+                label: 'Match #22',
+                isRound: false,
+                matches: [{ id: 'sub-22', placeholderA: 'TBD', placeholderB: 'TBD' }],
+            },
+        };
+
+        useBracketStore.setState({
+            nodes: [roundNode as any, match21 as any, match22 as any],
+            edges: [],
+        });
+
+        // First connect rnd-1 -> m-21
+        useBracketStore.getState().onConnect({
+            source: 'rnd-1',
+            sourceHandle: 'round-out',
+            target: 'm-21',
+            targetHandle: 'slot-a-0',
+        });
+
+        // Then connect rnd-1 -> m-22
+        useBracketStore.getState().onConnect({
+            source: 'rnd-1',
+            sourceHandle: 'round-out',
+            target: 'm-22',
+            targetHandle: 'slot-a-0',
+        });
+
+        const state = useBracketStore.getState();
+        const updatedM21 = state.nodes.find((n) => n.id === 'm-21');
+        const updatedM22 = state.nodes.find((n) => n.id === 'm-22');
+
+        const m21Matches = (updatedM21?.data?.matches as any[]) || [];
+        const m22Matches = (updatedM22?.data?.matches as any[]) || [];
+
+        expect(m21Matches[0].placeholderA).toBe('Winner (Match 1)');
+        expect(m21Matches[0].placeholderB).toBe('Winner (Match 2)');
+
+        expect(m22Matches[0].placeholderA).toBe('Winner (Match 3)');
+        expect(m22Matches[0].placeholderB).toBe('Winner (Match 4)');
+    });
+
+    it('should auto fill eligible teams into first round knockout matches', () => {
+        const round1 = {
+            id: 'r1',
+            type: 'matchNode',
+            position: { x: 0, y: 100 },
+            data: {
+                label: 'Quarter Finals',
+                isRound: true,
+                matches: [
+                    { id: 'm-1', placeholderA: 'TBD', placeholderB: 'TBD' },
+                    { id: 'm-2', placeholderA: 'TBD', placeholderB: 'TBD' },
+                ],
+            },
+        };
+
+        useBracketStore.setState({
+            nodes: [round1 as any],
+            edges: [],
+            teams: [
+                { id: 't1', name: 'Alpha', payment_status: 'paid' } as any,
+                { id: 't2', name: 'Beta', payment_status: 'paid' } as any,
+                { id: 't3', name: 'Gamma', payment_status: 'paid' } as any,
+                { id: 't4', name: 'Delta', payment_status: 'paid' } as any,
+            ],
+        });
+
+        const result = useBracketStore.getState().autoFillTeams();
+        expect(result.success).toBe(true);
+        expect(result.target).toBe('match');
+        expect(result.count).toBe(4);
+
+        const state = useBracketStore.getState();
+        const node = state.nodes.find(n => n.id === 'r1');
+        const matches = (node?.data?.matches as any[]) || [];
+        const filled = [matches[0].placeholderA, matches[0].placeholderB, matches[1].placeholderA, matches[1].placeholderB];
+        expect(filled).toContain('Alpha');
+        expect(filled).toContain('Beta');
+        expect(filled).toContain('Gamma');
+        expect(filled).toContain('Delta');
+    });
 });

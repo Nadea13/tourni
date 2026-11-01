@@ -97,9 +97,6 @@ export const MatchNode = memo(function MatchNode({
     const hasRoundInEdge = edges.some(
         (e) => e.target === id && (e.targetHandle === "round-in" || e.targetHandle === "group-in")
     );
-    const hasRoundOutEdge = edges.some(
-        (e) => e.source === id && e.sourceHandle === "round-out"
-    );
 
     const handleOpenTeamDetails = async (teamLabel: string, teamId?: string | null, fallbackLogo?: string | null) => {
         const trimmed = (teamLabel || "").trim();
@@ -628,7 +625,9 @@ export const MatchNode = memo(function MatchNode({
             );
         }
 
-        if (matchDate || matchTime) {
+        const courtName = m.field_name || m.venue || dbM?.field_name || dbM?.venue;
+
+        if (matchDate || matchTime || courtName) {
             const formattedDate = (() => {
                 if (!matchDate) return "";
                 const raw = matchDate.split("T")[0];
@@ -647,12 +646,20 @@ export const MatchNode = memo(function MatchNode({
 
             return (
                 <span className={cn(
-                    "text-[10px] font-semibold",
+                    "text-[10px] font-semibold flex items-center gap-1",
                     inHeader ? "text-white/90" : "text-muted-foreground"
                 )}>
                     {formattedDate && <span>{formattedDate}</span>}
-                    {formattedDate && formattedTime && <span className={cn("mx-1", inHeader ? "text-white/60" : "text-muted-foreground/60")}>|</span>}
+                    {formattedDate && formattedTime && <span className={cn(inHeader ? "text-white/60" : "text-muted-foreground/60")}>|</span>}
                     {formattedTime && <span>{formattedTime}</span>}
+                    {courtName && (
+                        <span className={cn(
+                            "px-1 py-0.2 rounded text-[9px] font-bold border",
+                            inHeader ? "bg-black/20 border-white/20 text-white" : "bg-muted border-border text-foreground"
+                        )}>
+                            {courtName}
+                        </span>
+                    )}
                 </span>
             );
         }
@@ -682,35 +689,30 @@ export const MatchNode = memo(function MatchNode({
                 style={{ top: "50%", left: "50%", transform: "translate(-50%, -50%)" }}
             />
 
-            {/* Single Input and Output handles when in Round mode */}
-            {isRound && (
+            {/* Single Input and Output handles when in Round mode OR when connected via round-in */}
+            {(isRound || hasRoundInEdge) && (
                 <>
                     <Handle
                         type="target"
                         position={Position.Left}
                         id="round-in"
                         className={cn(
-                            "!opacity-0 !bg-transparent !border-0 !w-3 !h-full !transform-none !rounded-none cursor-crosshair",
-                            (hasRoundInEdge || edges.some(e => e.target === id && e.targetHandle?.startsWith('slot-a-')))
-                                ? "z-0 pointer-events-none"
-                                : "z-10 pointer-events-auto"
+                            "!opacity-0 !bg-transparent !border-0 !w-5 !h-full !rounded-none cursor-crosshair",
+                            hasRoundInEdge ? "z-0 pointer-events-none" : "z-20 pointer-events-auto"
                         )}
-                        style={{ left: "-2px", top: 0, height: "100%", transform: "none" }}
+                        style={{ left: "-4px", top: 0, height: "100%", transform: "none" }}
                         title={locale === "th" ? "รับทีมเข้าสู่รอบนี้ (Round Input)" : "Round Input"}
                     />
-                    <Handle
-                        type="source"
-                        position={Position.Right}
-                        id="round-out"
-                        className={cn(
-                            "!opacity-0 !bg-transparent !border-0 !w-3 !h-full !transform-none !rounded-none cursor-crosshair",
-                            (hasRoundOutEdge || edges.some(e => e.source === id && e.sourceHandle?.startsWith('winner-')))
-                                ? "z-0 pointer-events-none"
-                                : "z-10 pointer-events-auto"
-                        )}
-                        style={{ right: "-2px", top: 0, height: "100%", transform: "none" }}
-                        title={locale === "th" ? "ส่งทีมจากรอบนี้ (Round Output)" : "Round Output"}
-                    />
+                    {isRound && (
+                        <Handle
+                            type="source"
+                            position={Position.Right}
+                            id="round-out"
+                            className="!opacity-0 !bg-transparent !border-0 !w-5 !h-full !rounded-none cursor-crosshair z-20 pointer-events-auto"
+                            style={{ right: "-4px", top: 0, height: "100%", transform: "none" }}
+                            title={locale === "th" ? "ส่งทีมจากรอบนี้ (Round Output)" : "Round Output"}
+                        />
+                    )}
                 </>
             )}
 
@@ -776,7 +778,44 @@ export const MatchNode = memo(function MatchNode({
                                     const isExplicitTBD = !placeholder || placeholder === "TBD" || placeholder.startsWith("Seed #");
                                     const hasResult = hasMatchResult(dbMatch);
                                     const handleId = `slot-${slot}-${index}`;
-                                    const edge = edges.find(e => e.target === id && e.targetHandle === handleId);
+                                    let edge = edges.find(e => e.target === id && e.targetHandle === handleId);
+
+                                    let isFromRound = false;
+                                    let roundPairIdx = 0;
+
+                                    if (!edge) {
+                                        const roundEdge = edges.find(e => {
+                                            if (e.target !== id) return false;
+                                            const sNode = nodes.find(n => n.id === e.source);
+                                            if (!sNode || sNode.type !== 'matchNode') return false;
+                                            return (Array.isArray(sNode.data.matches) && sNode.data.matches.length > 1) || e.sourceHandle === 'round-out' || Boolean(sNode.data.isRound);
+                                        });
+                                        if (roundEdge) {
+                                            edge = roundEdge;
+                                            isFromRound = true;
+                                            const allRoundEdges = edges
+                                                .filter(e => e.source === roundEdge.source)
+                                                .sort((eA, eB) => {
+                                                    const nA = nodes.find(n => n.id === eA.target);
+                                                    const nB = nodes.find(n => n.id === eB.target);
+                                                    return (nA?.position?.y ?? 0) - (nB?.position?.y ?? 0);
+                                                });
+                                            roundPairIdx = Math.max(0, allRoundEdges.findIndex(e => e.target === id));
+                                        }
+                                    } else {
+                                        const sNode = nodes.find(n => n.id === edge?.source);
+                                        if (sNode && sNode.type === 'matchNode' && ((Array.isArray(sNode.data.matches) && sNode.data.matches.length > 1) || edge.sourceHandle === 'round-out' || Boolean(sNode.data.isRound))) {
+                                            isFromRound = true;
+                                            const allRoundEdges = edges
+                                                .filter(e => e.source === sNode.id)
+                                                .sort((eA, eB) => {
+                                                    const nA = nodes.find(n => n.id === eA.target);
+                                                    const nB = nodes.find(n => n.id === eB.target);
+                                                    return (nA?.position?.y ?? 0) - (nB?.position?.y ?? 0);
+                                                });
+                                            roundPairIdx = Math.max(0, allRoundEdges.findIndex(e => e.target === id));
+                                        }
+                                    }
 
                                     // When match has no results and no incoming edge, use the node's placeholder directly so edits/swaps reflect in real time
                                     if (!hasResult && !edge) {
@@ -819,13 +858,24 @@ export const MatchNode = memo(function MatchNode({
 
                                     // Handle MatchNode propagation (Winner / Loser)
                                     if (sourceNode.type === 'matchNode') {
-                                        const winnerMatch = edge.sourceHandle?.match(/winner-(\d+)/);
-                                        const loserMatch = edge.sourceHandle?.match(/loser-(\d+)/);
-                                        const isWinnerHandle = !!winnerMatch;
-                                        const matchIdx = winnerMatch ? parseInt(winnerMatch[1], 10) : loserMatch ? parseInt(loserMatch[1], 10) : -1;
+                                        let matchIdx = -1;
+                                        let isWinnerHandle = true;
+
+                                        if (isFromRound) {
+                                            matchIdx = isRound ? (index * 2 + (slot === 'a' ? 0 : 1)) : (roundPairIdx * 2 + (slot === 'a' ? 0 : 1));
+                                            isWinnerHandle = true;
+                                        } else {
+                                            const winnerMatch = edge.sourceHandle?.match(/winner-(\d+)/);
+                                            const loserMatch = edge.sourceHandle?.match(/loser-(\d+)/);
+                                            isWinnerHandle = !loserMatch;
+                                            matchIdx = winnerMatch ? parseInt(winnerMatch[1], 10) : loserMatch ? parseInt(loserMatch[1], 10) : -1;
+                                        }
 
                                         if (matchIdx !== -1) {
                                             const sourceMatches = Array.isArray(sourceNode.data.matches) ? (sourceNode.data.matches as any[]) : [];
+                                            if (isFromRound && matchIdx >= sourceMatches.length) {
+                                                return "Bye";
+                                            }
                                             const sourceMatchItem = sourceMatches[matchIdx];
 
                                             const sourceDbMatch = storeMatches.find(m =>
@@ -887,7 +937,8 @@ export const MatchNode = memo(function MatchNode({
                                                 }
                                             }
 
-                                            const labelBase = sourceNode.data.label ? `${sourceNode.data.label}` : `Match ${matchIdx + 1}`;
+                                            const isMultiMatch = sourceMatches.length > 1;
+                                            const labelBase = isFromRound ? `Match ${matchIdx + 1}` : (isMultiMatch ? `Match ${matchIdx + 1}` : (sourceNode.data.label ? `${sourceNode.data.label}` : `Match ${matchIdx + 1}`));
                                             if (isWinnerHandle) {
                                                 return `Winner (${labelBase})`;
                                             } else {
@@ -961,14 +1012,22 @@ export const MatchNode = memo(function MatchNode({
                                                     );
                                                 });
 
-                                                const hasIncomingRoundEdge = hasRoundInEdge;
+                                                const hasIncomingRoundEdge = hasRoundInEdge || edges.some(e => {
+        if (e.target !== id) return false;
+        const sNode = nodes.find(n => n.id === e.source);
+        if (!sNode || sNode.type !== 'matchNode') return false;
+        return (Array.isArray(sNode.data.matches) && sNode.data.matches.length > 1) || e.sourceHandle === 'round-out' || Boolean(sNode.data.isRound);
+    });
 
                                                 const hasSlotAEdge = hasDirectSlotAEdge || isDrawConnected || hasIncomingRoundEdge;
                                                 const hasSlotBEdge = hasDirectSlotBEdge || isDrawConnected || hasIncomingRoundEdge;
 
                                                 return (
                                                     <div className="relative flex flex-col divide-y divide-border">
-                                                        {/* Target Handles for each match slot */}
+                                                        {/* Only render individual match slot handles in Match mode when not in Round and not receiving round input */}
+                                                        {!isRound && !hasRoundInEdge && (
+                                                            <>
+{/* Target Handles for each match slot */}
                                                         <Handle
                                                             type="target"
                                                             position={Position.Left}
@@ -1015,7 +1074,8 @@ export const MatchNode = memo(function MatchNode({
                                                             style={{ right: "-2px", top: 0, height: "100%", transform: "none" }}
                                                             title={locale === 'th' ? "ผู้แพ้ (Loser)" : "Loser"}
                                                         />
-
+                                                            </>
+                                                        )}
                                                         {/* Slot A Row */}
                                                         <div className="relative group/slot-a">
                                                             <SlotRow

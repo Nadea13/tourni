@@ -19,6 +19,8 @@ export interface MatchNodeData {
         placeholderB: string;
         match_date?: string;
         match_time?: string;
+        field_name?: string;
+        venue?: string;
         dbId?: string;
         matchId?: string;
     }[];
@@ -165,6 +167,7 @@ interface BracketState {
     updateDrawPair: (drawNodeId: string, pairIndex: number, slot: "teamA" | "teamB", newTeam: string) => void;
     swapDrawPairSlots: (drawNodeId: string, pairIndex: number) => void;
     generateNextRoundFromDraw: (drawNodeId: string, format: "round" | "matches") => void;
+    autoFillTeams: (teamsToFill?: TournamentTeam[]) => { success: boolean; count: number; target: "group" | "match"; error?: string };
     insertTemplate: (templateNodes: Node[], templateEdges: Edge[], targetPosition?: { x: number; y: number }) => void;
     generateRoundRobinMatches: (groupId: string) => void;
     generateRoundRobinMatchDays: (groupId: string) => void;
@@ -479,13 +482,19 @@ export const useBracketStore = create<BracketState>((set, get) => ({
         // - Outgoing: 1st line is always Winner (winner-X), 2nd line is Loser (loser-X)
         // - Incoming: 1st line goes to Team A (slot-a-X), 2nd line goes to Team B (slot-b-X)
         let effectiveSourceHandle = rawConnection.sourceHandle;
-        if (sourceNode.type === 'matchNode' && rawConnection.sourceHandle !== 'round-out') {
-            const sMatch = (rawConnection.sourceHandle || '').match(/^(?:winner|loser)-(\d+)$/);
-            const sIdx = sMatch ? parseInt(sMatch[1], 10) : 0;
-            const hasWinnerEdge = currentEdges.some(
-                (e) => e.source === rawConnection.source && e.sourceHandle === `winner-${sIdx}`
-            );
-            effectiveSourceHandle = hasWinnerEdge ? `loser-${sIdx}` : `winner-${sIdx}`;
+        let isSourceRound = false;
+        if (sourceNode.type === 'matchNode') {
+            isSourceRound = Boolean(sourceNode.data.isRound) || ((sourceNode.data.matches as any[])?.length > 1) || rawConnection.sourceHandle === 'round-out';
+            if (isSourceRound) {
+                effectiveSourceHandle = 'round-out';
+            } else {
+                const sMatch = (rawConnection.sourceHandle || '').match(/^(?:winner|loser)-(\d+)$/);
+                const sIdx = sMatch ? parseInt(sMatch[1], 10) : 0;
+                const hasWinnerEdge = currentEdges.some(
+                    (e) => e.source === rawConnection.source && e.sourceHandle === `winner-${sIdx}`
+                );
+                effectiveSourceHandle = hasWinnerEdge ? `loser-${sIdx}` : `winner-${sIdx}`;
+            }
         }
 
         if (sourceNode.type === 'drawNode') {
@@ -497,13 +506,18 @@ export const useBracketStore = create<BracketState>((set, get) => ({
         }
 
         let effectiveTargetHandle = rawConnection.targetHandle;
-        if (targetNode.type === 'matchNode' && rawConnection.targetHandle !== 'group-in' && rawConnection.targetHandle !== 'round-in') {
-            const tMatch = (rawConnection.targetHandle || '').match(/^slot-(?:a|b)-(\d+)$/);
-            const tIdx = tMatch ? parseInt(tMatch[1], 10) : 0;
-            const hasSlotAEdge = currentEdges.some(
-                (e) => e.target === rawConnection.target && e.targetHandle === `slot-a-${tIdx}`
-            );
-            effectiveTargetHandle = hasSlotAEdge ? `slot-b-${tIdx}` : `slot-a-${tIdx}`;
+        if (targetNode.type === 'matchNode' && rawConnection.targetHandle !== 'group-in') {
+            const isTargetRound = Boolean(targetNode.data.isRound) || ((targetNode.data.matches as any[])?.length > 1);
+            if (isSourceRound || isTargetRound) {
+                effectiveTargetHandle = 'round-in';
+            } else if (rawConnection.targetHandle !== 'round-in') {
+                const tMatch = (rawConnection.targetHandle || '').match(/^slot-(?:a|b)-(\d+)$/);
+                const tIdx = tMatch ? parseInt(tMatch[1], 10) : 0;
+                const hasSlotAEdge = currentEdges.some(
+                    (e) => e.target === rawConnection.target && e.targetHandle === `slot-a-${tIdx}`
+                );
+                effectiveTargetHandle = hasSlotAEdge ? `slot-b-${tIdx}` : `slot-a-${tIdx}`;
+            }
         } else if (targetNode.type === 'drawNode') {
             // DrawNode collects all incoming teams into a single centered input point
             effectiveTargetHandle = 'draw-in';
@@ -532,24 +546,82 @@ export const useBracketStore = create<BracketState>((set, get) => ({
                 }
             }
 
-            // When connecting from Round to Round (single line)
-            if (sourceNode.type === 'matchNode' && (connection.sourceHandle === 'round-out' || Boolean(sourceNode.data.isRound)) && connection.targetHandle === 'round-in') {
+            // When connecting from a Round node to the next node (Round or Match node)
+            if (
+                sourceNode.type === 'matchNode' &&
+                (connection.sourceHandle === 'round-out' || Boolean(sourceNode.data.isRound) || (Array.isArray(sourceNode.data.matches) && sourceNode.data.matches.length > 1))
+            ) {
                 const sourceMatches = Array.isArray(sourceNode.data.matches) ? sourceNode.data.matches : [];
                 const targetMatches = Array.isArray(targetNode.data.matches) ? targetNode.data.matches : [];
-                const sourceLabel = sourceNode.data.label || "Round";
-                const neededMatchCount = Math.max(1, Math.ceil(sourceMatches.length / 2));
-                const nextMatches = Array.from({ length: Math.max(targetMatches.length, neededMatchCount) }).map((_, idx) => {
-                    const m1 = sourceMatches[idx * 2];
-                    const m2 = sourceMatches[idx * 2 + 1];
-                    const winnerA = m1?.placeholderA && m1.placeholderA !== "TBD" ? m1.placeholderA : `Winner of ${sourceLabel} (${idx * 2 + 1})`;
-                    const winnerB = m2 ? (m2?.placeholderA && m2.placeholderA !== "TBD" ? m2.placeholderA : `Winner of ${sourceLabel} (${idx * 2 + 2})`) : "Bye";
-                    return {
-                        id: (targetMatches[idx] as any)?.id || `m-rnd-${Date.now()}-${idx + 1}`,
+
+                const isTargetRound = Boolean(targetNode.data.isRound);
+
+                if (isTargetRound) {
+                    // Halve matches for next round (e.g. 4 matches -> 2 matches -> 1 match)
+                    const neededMatchCount = Math.max(1, Math.ceil(sourceMatches.length / 2));
+                    const nextMatches = Array.from({ length: neededMatchCount }).map((_, idx) => {
+                        const m1Idx = idx * 2;
+                        const m2Idx = idx * 2 + 1;
+                        const m2 = sourceMatches[m2Idx];
+
+                        const m1 = sourceMatches[m1Idx];
+                        const isRealTeam = (t?: string) => Boolean(t && t !== "TBD" && !t.startsWith("Winner (") && !t.startsWith("Loser (") && !t.startsWith("Seed #"));
+                        const winnerA = isRealTeam(m1?.placeholderA) ? m1!.placeholderA : `Winner (Match ${m1Idx + 1})`;
+                        const winnerB = m2 ? (isRealTeam(m2?.placeholderA) ? m2.placeholderA : `Winner (Match ${m2Idx + 1})`) : "Bye";
+
+                        const existingMatch = targetMatches[idx];
+                        return {
+                            id: (existingMatch as any)?.id || `m-rnd-${Date.now()}-${idx + 1}`,
+                            placeholderA: winnerA,
+                            placeholderB: winnerB,
+                            match_date: (existingMatch as any)?.match_date || "",
+                            match_time: (existingMatch as any)?.match_time || "",
+                            pitch: (existingMatch as any)?.pitch || "",
+                        };
+                    });
+
+                    updateNodeData(targetNode.id, {
+                        matches: nextMatches,
+                        isRound: true,
+                        placeholderA: nextMatches[0]?.placeholderA,
+                        placeholderB: nextMatches[0]?.placeholderB,
+                    });
+                } else {
+                    // Sibling single match nodes mode: distribute pairs across individual match nodes
+                    const otherConnectedSingleTargets = currentEdges
+                        .filter(e => e.source === sourceNode.id && e.target !== targetNode.id)
+                        .map(e => nodes.find(n => n.id === e.target))
+                        .filter((n): n is Node => Boolean(n && n.type === 'matchNode' && !n.data.isRound));
+
+                    const allTargets = [...otherConnectedSingleTargets, targetNode].sort((a, b) => (a.position?.y ?? 0) - (b.position?.y ?? 0));
+                    const roundPairIdx = Math.max(0, allTargets.findIndex(n => n.id === targetNode.id));
+
+                    const m1Idx = roundPairIdx * 2;
+                    const m2Idx = roundPairIdx * 2 + 1;
+                    const m1 = sourceMatches[m1Idx];
+                    const m2 = sourceMatches[m2Idx];
+
+                    const isRealTeam = (t?: string) => Boolean(t && t !== "TBD" && !t.startsWith("Winner (") && !t.startsWith("Loser (") && !t.startsWith("Seed #"));
+                    const winnerA = isRealTeam(m1?.placeholderA) ? m1!.placeholderA : `Winner (Match ${m1Idx + 1})`;
+                    const winnerB = m2 ? (isRealTeam(m2?.placeholderA) ? m2.placeholderA : `Winner (Match ${m2Idx + 1})`) : "Bye";
+
+                    const existingMatch = targetMatches[0];
+                    const nextMatch = {
+                        id: (existingMatch as any)?.id || `m-${Date.now()}-1`,
                         placeholderA: winnerA,
                         placeholderB: winnerB,
+                        match_date: (existingMatch as any)?.match_date || "",
+                        match_time: (existingMatch as any)?.match_time || "",
+                        pitch: (existingMatch as any)?.pitch || "",
                     };
-                });
-                updateNodeData(targetNode.id, { matches: nextMatches, isRound: true });
+
+                    updateNodeData(targetNode.id, {
+                        matches: [nextMatch],
+                        placeholderA: winnerA,
+                        placeholderB: winnerB,
+                        isRound: false,
+                    });
+                }
             }
 
             let teamName = null;
@@ -766,19 +838,23 @@ export const useBracketStore = create<BracketState>((set, get) => ({
         const isLoser = Boolean(connection.sourceHandle && connection.sourceHandle.startsWith("loser"));
 
         const isDrawEdge = sourceNode.type === 'drawNode' || targetNode.type === 'drawNode';
-        const isRoundEdge = connection.sourceHandle === 'round-out' || connection.targetHandle === 'round-in';
+        const isRoundEdge = connection.sourceHandle === 'round-out' || connection.targetHandle === 'round-in' || (Boolean(sourceNode.data.isRound) && targetNode.type === 'matchNode');
 
         set((state) => {
             // Remove any existing edge connected to the same source handle or target handle
             // (Except for DrawNode which is a pool that accepts multiple incoming connections into the single draw-in handle)
             const filteredEdges = state.edges.filter((edge) => {
                 if (edge.source === connection.source && (edge.sourceHandle ?? null) === (connection.sourceHandle ?? null)) {
+                    // Allow multiple outgoing connections from a Round node (round-out) to different match nodes
+                    if (isRoundEdge && edge.target !== connection.target) {
+                        return true;
+                    }
                     return false;
                 }
                 if (targetNode.type === 'drawNode') {
                     return true;
                 }
-                if (edge.target === connection.target && (edge.targetHandle ?? null) === (connection.targetHandle ?? null)) {
+                if (edge.target === connection.target && (connection.targetHandle === 'round-in' || (edge.targetHandle ?? null) === (connection.targetHandle ?? null))) {
                     return false;
                 }
                 return true;
@@ -831,6 +907,7 @@ export const useBracketStore = create<BracketState>((set, get) => ({
             position: pos,
             data: {
                 label: `Match #${nextIndex}`,
+                isRound: false,
                 matches: [],
             },
         };
@@ -1191,22 +1268,21 @@ export const useBracketStore = create<BracketState>((set, get) => ({
                 data: {
                     label: roundLabel,
                     matches,
+                    isRound: true,
                 },
             };
             newNodes.push(roundNode);
 
-            // Connect each pair from draw results directly to its match in the round node
-            pairs.forEach((_, idx) => {
-                newEdges.push({
-                    id: `edge-${Date.now()}-${idx}-${Math.random().toString(36).substring(2, 7)}`,
-                    source: drawNodeId,
-                    target: roundNodeId,
-                    sourceHandle: `pair-out-${idx}`,
-                    targetHandle: `slot-a-${idx}`,
-                    type: "bezier",
-                    animated: false,
-                    style: { stroke: "var(--muted-foreground)", strokeWidth: 2 },
-                });
+            // Connect draw node to round node via unified round handles (draw-out -> round-in)
+            newEdges.push({
+                id: `edge-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`,
+                source: drawNodeId,
+                target: roundNodeId,
+                sourceHandle: "draw-out",
+                targetHandle: "round-in",
+                type: "bezier",
+                animated: false,
+                style: { stroke: "var(--muted-foreground)", strokeWidth: 2 },
             });
         } else {
             // format === "matches"
@@ -1331,11 +1407,137 @@ export const useBracketStore = create<BracketState>((set, get) => ({
         });
     },
 
+    autoFillTeams: (teamsToFill?: TournamentTeam[]) => {
+        get().takeSnapshot();
+        const { nodes, edges, updateNodeData, teams: storeTeams } = get();
 
+        // 1. Determine eligible registered teams
+        const rawTeams = (teamsToFill && teamsToFill.length > 0) ? teamsToFill : storeTeams;
+        const eligibleTeams = rawTeams.filter((t) => {
+            if (!t || !t.name || t.name === "TBD") return false;
+            const ps = String((t as any).payment_status || "").toLowerCase();
+            const rs = String((t as any).registration_status || "").toLowerCase();
+            const s = String((t as any).status || "").toLowerCase();
+            if (rs === "rejected" || ps === "rejected" || s === "rejected") return false;
+            if (ps || rs || s) {
+                return (
+                    rs === "approved" ||
+                    rs === "confirmed" ||
+                    s === "approved" ||
+                    ps === "paid" ||
+                    (s === "registered" && rs !== "pending" && ps !== "pending")
+                );
+            }
+            return true;
+        });
 
+        if (eligibleTeams.length === 0) {
+            return { success: false, count: 0, target: "match", error: "no_teams" };
+        }
 
+        // Shuffle teams using Fisher-Yates algorithm
+        const shuffled = [...eligibleTeams];
+        for (let i = shuffled.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+        }
 
+        // 2. Case: Group nodes exist
+        const groupNodes = nodes.filter((n) => n.type === "groupNode");
+        if (groupNodes.length > 0) {
+            // Sort group nodes by label or position
+            groupNodes.sort((a, b) => {
+                const labelA = String(a.data?.label || "");
+                const labelB = String(b.data?.label || "");
+                const comp = labelA.localeCompare(labelB);
+                if (comp !== 0) return comp;
+                return (a.position.y - b.position.y) || (a.position.x - b.position.x);
+            });
 
+            let teamIdx = 0;
+            groupNodes.forEach((gNode) => {
+                const slotCount = Math.max(2, Number(gNode.data?.teamCount || (Array.isArray(gNode.data?.teams) ? gNode.data.teams.length : 4)));
+                const newTeams: string[] = [];
+                for (let s = 0; s < slotCount; s++) {
+                    if (teamIdx < shuffled.length) {
+                        newTeams.push(shuffled[teamIdx].name);
+                        teamIdx++;
+                    } else {
+                        newTeams.push("TBD");
+                    }
+                }
+                updateNodeData(gNode.id, {
+                    teamCount: slotCount,
+                    teams: newTeams,
+                });
+            });
+
+            set({ isDirty: true });
+            return { success: true, count: Math.min(shuffled.length, teamIdx), target: "group" };
+        }
+
+        // 3. Case: Knockout / Match nodes only
+        const matchNodes = nodes.filter((n) => n.type === "matchNode");
+        if (matchNodes.length === 0) {
+            return { success: false, count: 0, target: "match", error: "no_nodes" };
+        }
+
+        // First round match nodes: match nodes that have NO incoming edges from another matchNode, groupNode, or drawNode
+        const firstRoundMatchNodes = matchNodes.filter((mNode) => {
+            const hasIncomingEdge = edges.some((e) => {
+                if (e.target !== mNode.id) return false;
+                const sourceNode = nodes.find((n) => n.id === e.source);
+                return sourceNode && (
+                    sourceNode.type === "matchNode" ||
+                    sourceNode.type === "groupNode" ||
+                    sourceNode.type === "standingNode" ||
+                    sourceNode.type === "drawNode"
+                );
+            });
+            return !hasIncomingEdge;
+        });
+
+        if (firstRoundMatchNodes.length === 0) {
+            return { success: false, count: 0, target: "match", error: "no_first_round" };
+        }
+
+        // Sort first-round match nodes vertically
+        firstRoundMatchNodes.sort((a, b) => (a.position.y - b.position.y) || (a.position.x - b.position.x));
+
+        let teamIdx = 0;
+        firstRoundMatchNodes.forEach((mNode) => {
+            const rawMatches = Array.isArray(mNode.data?.matches) && mNode.data.matches.length > 0
+                ? mNode.data.matches
+                : [{ id: `m-init-${Date.now()}`, placeholderA: "TBD", placeholderB: "TBD" }];
+
+            const updatedMatches = rawMatches.map((matchItem: any) => {
+                let teamA = matchItem.placeholderA;
+                let teamB = matchItem.placeholderB;
+
+                if (teamIdx < shuffled.length) {
+                    teamA = shuffled[teamIdx].name;
+                    teamIdx++;
+                }
+                if (teamIdx < shuffled.length) {
+                    teamB = shuffled[teamIdx].name;
+                    teamIdx++;
+                }
+
+                return {
+                    ...matchItem,
+                    placeholderA: teamA,
+                    placeholderB: teamB,
+                };
+            });
+
+            updateNodeData(mNode.id, {
+                matches: updatedMatches,
+            });
+        });
+
+        set({ isDirty: true });
+        return { success: true, count: Math.min(shuffled.length, teamIdx), target: "match" };
+    },
 
     generateRoundRobinMatches: (groupId: string) => {
         get().takeSnapshot();
@@ -1576,6 +1778,109 @@ export const useBracketStore = create<BracketState>((set, get) => ({
                     }
                 };
             });
+
+        // Auto-sync Round -> next Round/Match node count on load
+        validNodes.forEach((node) => {
+            if (node.type !== 'matchNode') return;
+            const incomingRoundEdge = normalizedEdges.find((e) => {
+                if (e.target !== node.id) return false;
+                const sNode = validNodes.find((n) => n.id === e.source);
+                if (!sNode || sNode.type !== 'matchNode') return false;
+                return (
+                    (Array.isArray(sNode.data?.matches) && sNode.data.matches.length > 1) ||
+                    e.sourceHandle === 'round-out' ||
+                    Boolean(sNode.data?.isRound)
+                );
+            });
+            if (!incomingRoundEdge) return;
+            if (incomingRoundEdge.targetHandle !== 'round-in' && incomingRoundEdge.targetHandle !== 'group-in') {
+                incomingRoundEdge.targetHandle = 'round-in';
+            }
+            const sourceNode = validNodes.find((n) => n.id === incomingRoundEdge.source);
+            if (!sourceNode) return;
+            const sourceMatches = Array.isArray(sourceNode.data?.matches) ? sourceNode.data.matches : [];
+            if (sourceMatches.length <= 1) return;
+            const neededMatchCount = Math.max(1, Math.ceil(sourceMatches.length / 2));
+            const targetMatches = Array.isArray(node.data?.matches) ? node.data.matches : [];
+            const isTargetRound = Boolean(node.data?.isRound) || targetMatches.length > 1;
+
+            if (isTargetRound) {
+                if (targetMatches.length < neededMatchCount) {
+                    const nextMatches = Array.from({ length: neededMatchCount }).map((_, idx) => {
+                        const m1Idx = idx * 2;
+                        const m2Idx = idx * 2 + 1;
+                        const m2 = sourceMatches[m2Idx];
+                        const m1 = sourceMatches[m1Idx];
+                        const isRealTeam = (t?: string) => Boolean(t && t !== "TBD" && !t.startsWith("Winner (") && !t.startsWith("Loser (") && !t.startsWith("Seed #"));
+                        const winnerA = isRealTeam(m1?.placeholderA) ? m1!.placeholderA : `Winner (Match ${m1Idx + 1})`;
+                        const winnerB = m2 ? (isRealTeam(m2?.placeholderA) ? m2.placeholderA : `Winner (Match ${m2Idx + 1})`) : "Bye";
+                        const existingMatch = targetMatches[idx];
+                        return {
+                            id: (existingMatch as any)?.id || `m-rnd-${Date.now()}-${idx + 1}`,
+                            placeholderA: winnerA,
+                            placeholderB: winnerB,
+                            match_date: (existingMatch as any)?.match_date || "",
+                            match_time: (existingMatch as any)?.match_time || "",
+                            pitch: (existingMatch as any)?.pitch || "",
+                        };
+                    });
+                    node.data = {
+                        ...node.data,
+                        matches: nextMatches,
+                        isRound: true,
+                    };
+                }
+            } else {
+                const allSingleTargets = normalizedEdges
+                    .filter(e => e.source === sourceNode.id)
+                    .map(e => validNodes.find(n => n.id === e.target))
+                    .filter((n): n is Node => Boolean(n && n.type === 'matchNode' && !n.data?.isRound && (!Array.isArray(n.data?.matches) || n.data.matches.length <= 1)))
+                    .sort((a, b) => (a.position?.y ?? 0) - (b.position?.y ?? 0));
+
+                const roundPairIdx = Math.max(0, allSingleTargets.findIndex(n => n.id === node.id));
+                const m1Idx = roundPairIdx * 2;
+                const m2Idx = roundPairIdx * 2 + 1;
+                const m1 = sourceMatches[m1Idx];
+                const m2 = sourceMatches[m2Idx];
+                const isRealTeam = (t?: string) => Boolean(t && t !== "TBD" && !t.startsWith("Winner (") && !t.startsWith("Loser (") && !t.startsWith("Seed #"));
+                const winnerA = isRealTeam(m1?.placeholderA) ? m1!.placeholderA : `Winner (Match ${m1Idx + 1})`;
+                const winnerB = m2 ? (isRealTeam(m2?.placeholderA) ? m2.placeholderA : `Winner (Match ${m2Idx + 1})`) : "Bye";
+
+                const existingMatch = targetMatches[0];
+                const nextMatch = {
+                    id: (existingMatch as any)?.id || `m-${Date.now()}-1`,
+                    placeholderA: winnerA,
+                    placeholderB: winnerB,
+                    match_date: (existingMatch as any)?.match_date || "",
+                    match_time: (existingMatch as any)?.match_time || "",
+                    pitch: (existingMatch as any)?.pitch || "",
+                };
+                node.data = {
+                    ...node.data,
+                    matches: [nextMatch],
+                    placeholderA: winnerA,
+                    placeholderB: winnerB,
+                    isRound: false,
+                };
+            }
+        });
+
+        // Normalize any edge from drawNode targeting a round matchNode
+        validNodes.forEach((node) => {
+            if (node.type !== 'matchNode') return;
+            const isTargetRound = Boolean(node.data?.isRound) || ((node.data?.matches as any[])?.length > 1);
+            if (!isTargetRound) return;
+
+            normalizedEdges.forEach((e) => {
+                if (e.target === node.id) {
+                    const sNode = validNodes.find((n) => n.id === e.source);
+                    if (sNode?.type === 'drawNode') {
+                        e.sourceHandle = 'draw-out';
+                        e.targetHandle = 'round-in';
+                    }
+                }
+            });
+        });
 
         // Auto-restore missing dashed Round Robin edge between GroupNode and its corresponding MatchNode
         validNodes.forEach((node) => {

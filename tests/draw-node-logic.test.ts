@@ -395,11 +395,9 @@ describe("Draw Node Logic & Bracket Store Integration", () => {
         store.generateNextRoundFromDraw(drawNode.id, "round");
 
         const edges = useBracketStore.getState().edges.filter((e) => e.source === drawNode.id);
-        expect(edges).toHaveLength(2);
-        expect(edges[0].sourceHandle).toBe("pair-out-0");
-        expect(edges[0].targetHandle).toBe("slot-a-0");
-        expect(edges[1].sourceHandle).toBe("pair-out-1");
-        expect(edges[1].targetHandle).toBe("slot-a-1");
+        expect(edges).toHaveLength(1);
+        expect(edges[0].sourceHandle).toBe("draw-out");
+        expect(edges[0].targetHandle).toBe("round-in");
     });
 
     it("should connect a Round node into a Draw node via centered draw-in handle", () => {

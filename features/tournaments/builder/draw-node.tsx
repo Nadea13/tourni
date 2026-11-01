@@ -284,22 +284,22 @@ export const DrawNode = memo(({
                 />
             ))}
 
-            {/* General Output Handle (Right: anchored at the exact vertical center of the node) */}
+            {/* General Output Handle (Right: anchored along the right edge of the node) */}
             <Handle
                 type="source"
                 position={Position.Right}
                 id="draw-out"
                 className={cn(
-                    "!opacity-0 !bg-transparent !border-0 !w-4 cursor-crosshair",
-                    (hasOutgoingEdge || drawnPairs.length > 0) ? "z-0 pointer-events-none" : "z-20 pointer-events-auto"
+                    "!opacity-0 !bg-transparent !border-0 !w-5 !h-full !rounded-none cursor-crosshair",
+                    hasOutgoingEdge ? "z-0 pointer-events-none" : "z-20 pointer-events-auto"
                 )}
                 style={{
-                    right: "-2px",
-                    top: "50%",
-                    height: "64px",
-                    transform: "translateY(-50%)",
+                    right: "-4px",
+                    top: 0,
+                    height: "100%",
+                    transform: "none",
                 }}
-                title={isThai ? "ลากเส้นเชื่อมต่อไปยังรอบถัดไป (จากตรงกลางโหนด)" : "Connect to next round (from center)"}
+                title={isThai ? "ลากเส้นเชื่อมต่อไปยังรอบถัดไป (Round Output)" : "Connect to next round"}
             />
 
             <div className="overflow-hidden">
@@ -307,7 +307,7 @@ export const DrawNode = memo(({
                 <div className="flex items-center justify-between px-4 py-2 bg-node-4">
                     <div className="flex items-center gap-2 min-w-0">
                         <div className="size-6 rounded-sm flex items-center justify-center shrink-0">
-                            <Dices className={cn("size-4", isShuffling && "animate-spin")} />
+                            <Dices className="size-4" />
                         </div>
                         <span className="text-xs font-bold truncate">
                             {data.label || (isThai ? "สุ่มจับสลากรอบต่อไป" : "Random Draw / Shuffle")}
@@ -343,7 +343,7 @@ export const DrawNode = memo(({
                         disabled={teams.length < 2 || isShuffling}
                         className="w-full text-node-4 transition-colors"
                     >
-                        <Shuffle className={cn("size-4", isShuffling && "animate-spin")} />
+                        <Shuffle className="size-4" />
                         {isShuffling
                             ? (isThai ? "กำลังสุ่มจับสลาก..." : "Shuffling...")
                             : drawnPairs.length > 0

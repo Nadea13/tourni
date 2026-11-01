@@ -10,7 +10,7 @@ import { useBracketStore } from "@/lib/stores/bracket-store";
 import { saveBracketCanvas } from "@/actions/tournaments/bracket";
 import { useToast } from "@/hooks/use-toast";
 import { isMatchEnded, hasMatchResult, isSameTeamIdentifier } from "./match-node";
-import { Match, Registration } from "@/types";
+import { Match, Registration, Tournament } from "@/types";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
@@ -29,6 +29,8 @@ export type MatchItem = {
     placeholderB: string;
     match_date?: string;
     match_time?: string;
+    field_name?: string;
+    venue?: string;
     dbId?: string;
     matchId?: string;
 };
@@ -39,6 +41,7 @@ export interface MatchNodeSettingsProps {
     tournamentId: string;
     activeCategoryId?: string | null;
     dbMatches: Match[];
+    tournament?: Tournament;
 }
 
 export function MatchNodeSettings({
@@ -47,6 +50,7 @@ export function MatchNodeSettings({
     tournamentId,
     activeCategoryId,
     dbMatches,
+    tournament,
 }: MatchNodeSettingsProps) {
     const locale = useLocale();
     const router = useRouter();
@@ -55,6 +59,9 @@ export function MatchNodeSettings({
     const [isCreatingConsoleId, setIsCreatingConsoleId] = React.useState<string | null>(null);
     const [selectedTeamForDetails, setSelectedTeamForDetails] = React.useState<Registration | null>(null);
     const activeDbMatches = storeMatches.length > 0 ? storeMatches : dbMatches;
+    const availableCourts: string[] = Array.isArray(tournament?.settings?.fields)
+        ? tournament.settings.fields
+        : [];
 
     // Resolve live teams from edges or database assignments
     const getResolvedTeam = React.useCallback(
@@ -62,7 +69,44 @@ export function MatchNodeSettings({
             const trimmedPlaceholder = (placeholder || "").trim();
             const isSlotTBD = !trimmedPlaceholder || trimmedPlaceholder === "TBD" || trimmedPlaceholder.startsWith("Seed #");
             const hasResult = hasMatchResult(dbMatch);
-            const edge = edges.find(e => e.target === targetId && e.targetHandle === handleId);
+            let edge = edges.find(e => e.target === targetId && e.targetHandle === handleId);
+
+            let isFromRound = false;
+            let roundPairIdx = 0;
+
+            if (!edge) {
+                const roundEdge = edges.find(e => {
+                    if (e.target !== targetId) return false;
+                    const sNode = nodes.find(n => n.id === e.source);
+                    if (!sNode || sNode.type !== 'matchNode') return false;
+                    return (Array.isArray(sNode.data.matches) && sNode.data.matches.length > 1) || e.sourceHandle === 'round-out' || Boolean(sNode.data.isRound);
+                });
+                if (roundEdge) {
+                    edge = roundEdge;
+                    isFromRound = true;
+                    const allRoundEdges = edges
+                        .filter(e => e.source === roundEdge.source)
+                        .sort((eA, eB) => {
+                            const nA = nodes.find(n => n.id === eA.target);
+                            const nB = nodes.find(n => n.id === eB.target);
+                            return (nA?.position?.y ?? 0) - (nB?.position?.y ?? 0);
+                        });
+                    roundPairIdx = Math.max(0, allRoundEdges.findIndex(e => e.target === targetId));
+                }
+            } else {
+                const sNode = nodes.find(n => n.id === edge?.source);
+                if (sNode && sNode.type === 'matchNode' && ((Array.isArray(sNode.data.matches) && sNode.data.matches.length > 1) || edge.sourceHandle === 'round-out' || Boolean(sNode.data.isRound))) {
+                    isFromRound = true;
+                    const allRoundEdges = edges
+                        .filter(e => e.source === sNode.id)
+                        .sort((eA, eB) => {
+                            const nA = nodes.find(n => n.id === eA.target);
+                            const nB = nodes.find(n => n.id === eB.target);
+                            return (nA?.position?.y ?? 0) - (nB?.position?.y ?? 0);
+                        });
+                    roundPairIdx = Math.max(0, allRoundEdges.findIndex(e => e.target === targetId));
+                }
+            }
 
             // When match has no results and no incoming edge, use the node's placeholder directly so edits/swaps reflect in real time
             if (!hasResult && !edge) {
@@ -105,13 +149,27 @@ export function MatchNodeSettings({
 
             // Handle MatchNode propagation (Winner / Loser)
             if (sourceNode.type === 'matchNode') {
-                const winnerMatch = edge.sourceHandle?.match(/winner-(\d+)/);
-                const loserMatch = edge.sourceHandle?.match(/loser-(\d+)/);
-                const isWinnerHandle = !!winnerMatch;
-                const matchIdx = winnerMatch ? parseInt(winnerMatch[1], 10) : loserMatch ? parseInt(loserMatch[1], 10) : -1;
+                let matchIdx = -1;
+                let isWinnerHandle = true;
+
+                if (isFromRound) {
+                    const targetN = nodes.find(n => n.id === targetId);
+                    const isTargetRound = Boolean(targetN?.data.isRound) || (Array.isArray(targetN?.data.matches) && targetN.data.matches.length > 1);
+                    const matchIndexInNode = parseInt(handleId.split('-')[2] || '0', 10);
+                    matchIdx = isTargetRound ? (matchIndexInNode * 2 + (slot === 'a' ? 0 : 1)) : (roundPairIdx * 2 + (slot === 'a' ? 0 : 1));
+                    isWinnerHandle = true;
+                } else {
+                    const winnerMatch = edge.sourceHandle?.match(/winner-(\d+)/);
+                    const loserMatch = edge.sourceHandle?.match(/loser-(\d+)/);
+                    isWinnerHandle = !loserMatch;
+                    matchIdx = winnerMatch ? parseInt(winnerMatch[1], 10) : loserMatch ? parseInt(loserMatch[1], 10) : -1;
+                }
 
                 if (matchIdx !== -1) {
                     const sourceMatches = Array.isArray(sourceNode.data.matches) ? (sourceNode.data.matches as any[]) : [];
+                    if (isFromRound && matchIdx >= sourceMatches.length) {
+                        return "Bye";
+                    }
                     const sourceMatchItem = sourceMatches[matchIdx];
 
                     const sourceDbMatch = (activeDbMatches || []).find(m =>
@@ -173,7 +231,8 @@ export function MatchNodeSettings({
                         }
                     }
 
-                    const labelBase = sourceNode.data.label ? `${sourceNode.data.label}` : `Match ${matchIdx + 1}`;
+                    const isMultiMatch = sourceMatches.length > 1;
+                    const labelBase = isFromRound ? `Match ${matchIdx + 1}` : (isMultiMatch ? `Match ${matchIdx + 1}` : (sourceNode.data.label ? `${sourceNode.data.label}` : `Match ${matchIdx + 1}`));
                     if (isWinnerHandle) {
                         return `Winner (${labelBase})`;
                     } else {
@@ -555,6 +614,55 @@ export function MatchNodeSettings({
                                         size="sm"
                                         className="h-7 px-2 text-xs min-w-0"
                                     />
+                                    {/* Court / Pitch Selector or Input */}
+                                    {availableCourts.length > 0 ? (
+                                        <Select
+                                            value={match.field_name || match.venue || "none"}
+                                            onValueChange={(val) => {
+                                                const finalVal = val === "none" ? undefined : val;
+                                                updateMatch({ field_name: finalVal, venue: finalVal });
+                                                useBracketStore.setState({ isDirty: true });
+                                            }}
+                                        >
+                                            <SelectPrimitive.Trigger asChild>
+                                                <button
+                                                    type="button"
+                                                    disabled={hasResult}
+                                                    className="h-7 px-2 text-xs border rounded-sm bg-background hover:bg-muted/50 flex items-center gap-1 shrink-0 text-muted-foreground hover:text-foreground transition-colors cursor-pointer disabled:cursor-not-allowed max-w-[120px]"
+                                                    title={locale === "th" ? "เลือกสนามแข่งขัน" : "Select Court/Pitch"}
+                                                >
+                                                    <span className="truncate">
+                                                        {match.field_name || match.venue || (locale === "th" ? "เลือกสนาม" : "Court")}
+                                                    </span>
+                                                </button>
+                                            </SelectPrimitive.Trigger>
+                                            <SelectContent position="popper" align="start">
+                                                <SelectItem value="none">
+                                                    <span className="text-muted-foreground italic">
+                                                        {locale === "th" ? "ไม่ระบุสนาม" : "No Court"}
+                                                    </span>
+                                                </SelectItem>
+                                                {availableCourts.map((cName) => (
+                                                    <SelectItem key={cName} value={cName}>
+                                                        <span>{cName}</span>
+                                                    </SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    ) : (
+                                        <input
+                                            type="text"
+                                            disabled={hasResult}
+                                            value={match.field_name || match.venue || ""}
+                                            onChange={(e) => {
+                                                const val = e.target.value.trim() ? e.target.value : undefined;
+                                                updateMatch({ field_name: val, venue: val });
+                                                useBracketStore.setState({ isDirty: true });
+                                            }}
+                                            placeholder={locale === "th" ? "สนามแข่ง..." : "Court..."}
+                                            className="h-7 px-2 text-xs border rounded-sm bg-background text-foreground placeholder:text-muted-foreground w-20 shrink-0 focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
+                                        />
+                                    )}
                                 </div>
                                 {hasResult && (
                                     <Lock className="size-4 text-warning" />

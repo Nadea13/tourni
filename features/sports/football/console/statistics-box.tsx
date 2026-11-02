@@ -273,7 +273,8 @@ export function MatchStatisticsBox({ match, events, homeScore, awayScore, visibl
         if (!teamId) return 0;
         return events.filter(e => e.team_id === teamId && (
             e.event_type === 'red_card' ||
-            (e.event_type === 'foul' && (e.extra_info as Record<string, unknown> | null)?.card_type === 'red')
+            (e.event_type === 'foul' && (e.extra_info as Record<string, unknown> | null)?.card_type === 'red') ||
+            Boolean((e.extra_info as Record<string, unknown> | null)?.is_second_yellow || (e.detail as Record<string, unknown> | null)?.is_second_yellow)
         )).length;
     };
 

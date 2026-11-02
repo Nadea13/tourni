@@ -1,4 +1,4 @@
-﻿import { useState, useEffect } from "react";
+import { useState, useEffect } from "react";
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from "@/components/ui/dialog";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -91,6 +91,21 @@ export function MatchEventDialog({
         return `${numPart}${player.name}`;
     };
 
+    const checkPlayerHasYellow = (targetPlayerId: string, targetPlayerName?: string, eventsList: MatchEvent[] = []) => {
+        if (!targetPlayerId || targetPlayerId === 'unknown') return false;
+        return eventsList.some(e => {
+            const pid = e.player_id || (e.extra_info as Record<string, unknown> | null)?.player_id || (e.detail as Record<string, unknown> | null)?.player_id;
+            const isSameId = pid && String(pid) === String(targetPlayerId);
+            const isSameName = targetPlayerName && e.player_name && e.player_name.trim().toLowerCase() === targetPlayerName.trim().toLowerCase();
+            if (!isSameId && !isSameName) return false;
+
+            const type = e.event_type || e.type;
+            if (type === 'yellow_card') return true;
+            const cardType = (e.extra_info as Record<string, unknown> | null)?.card_type || (e.detail as Record<string, unknown> | null)?.card_type;
+            return cardType === 'yellow';
+        });
+    };
+
     const handleSave = (bypassConfirm = false) => {
         const min = parseInt(minute) || 0;
         const extraInfo: Record<string, unknown> = {};
@@ -101,6 +116,10 @@ export function MatchEventDialog({
         if (eventType === 'yellow_card' || eventType === 'red_card') {
             finalEventType = selectedCardType === 'red' ? 'red_card' : 'yellow_card';
         }
+
+        const selectedPlayer = players.find(p => p.id === finalPlayerId);
+        const selectedPlayerName = selectedPlayer?.name;
+        const hasPreviousYellow = checkPlayerHasYellow(finalPlayerId, selectedPlayerName, existingEvents);
 
         // Own Goal Handling
         if (eventType === 'goal' && isOwnGoal) {
@@ -126,39 +145,29 @@ export function MatchEventDialog({
             }
             if (foulCardType !== 'none') {
                 extraInfo.card_type = foulCardType;
-                if (foulCardType === 'yellow' && finalPlayerId && finalPlayerId !== 'unknown' && !bypassConfirm) {
-                    const previousYellows = existingEvents.filter(e =>
-                        e.player_id === finalPlayerId &&
-                        (e.event_type === 'yellow_card' || (e.event_type === 'foul' && e.extra_info && (e.extra_info as Record<string, unknown>).card_type === 'yellow'))
-                    );
-                    if (previousYellows.length >= 1) {
+                if (foulCardType === 'yellow' && finalPlayerId && finalPlayerId !== 'unknown') {
+                    if (!bypassConfirm && hasPreviousYellow) {
                         setShowConfirm(true);
                         return;
                     }
-                }
-                if (foulCardType === 'yellow' && finalPlayerId && finalPlayerId !== 'unknown' && bypassConfirm) {
-                    autoRed = true;
-                    extraInfo.is_second_yellow = true;
+                    if (bypassConfirm && hasPreviousYellow) {
+                        autoRed = true;
+                        extraInfo.is_second_yellow = true;
+                    }
                 }
             }
         }
 
         // Card Ban Logic: Check if player already has a yellow card
-        if (!bypassConfirm && finalEventType === 'yellow_card' && finalPlayerId && finalPlayerId !== 'unknown') {
-            const previousYellows = existingEvents.filter(e =>
-                e.player_id === finalPlayerId &&
-                (e.event_type === 'yellow_card' || (e.event_type === 'foul' && e.extra_info && (e.extra_info as Record<string, unknown>).card_type === 'yellow'))
-            );
-
-            if (previousYellows.length >= 1) {
+        if (finalEventType === 'yellow_card' && finalPlayerId && finalPlayerId !== 'unknown') {
+            if (!bypassConfirm && hasPreviousYellow) {
                 setShowConfirm(true);
                 return;
             }
-        }
-
-        if (finalEventType === 'yellow_card' && finalPlayerId && finalPlayerId !== 'unknown' && bypassConfirm) {
-            autoRed = true;
-            extraInfo.is_second_yellow = true;
+            if (bypassConfirm && hasPreviousYellow) {
+                autoRed = true;
+                extraInfo.is_second_yellow = true;
+            }
         }
 
         if (eventType === 'goal' && !isOwnGoal && assistPlayerId && assistPlayerId !== 'none') {
@@ -485,6 +494,13 @@ export function MatchEventDialog({
                                     </SelectContent>
                                 </Select>
                             </div>
+
+                            {playerId !== 'unknown' && selectedCardType === 'yellow' && checkPlayerHasYellow(playerId, players.find(p => p.id === playerId)?.name, existingEvents) && (
+                                <div className="flex items-center gap-2 p-2 bg-amber-500/10 border border-amber-500/30 rounded text-amber-600 dark:text-amber-400 text-xs font-semibold">
+                                    <span className="w-2.5 h-3.5 bg-amber-400 rounded-xs inline-block shrink-0 shadow-xs" />
+                                    <span>{t("second_yellow_hint")}</span>
+                                </div>
+                            )}
                         </div>
                     ) : (
                         /* Standard Player Selection for other events */

@@ -161,6 +161,8 @@ export function TeamRosterDialog({
             return false;
         });
 
+        const matchPlayerYellows = new Map<string, number>();
+
         relevantEvents.forEach(e => {
             const pName = e.player_name || (e.extra_info as Record<string, unknown> | null)?.player_name as string;
             if (!e.player_id && !pName) return;
@@ -177,9 +179,27 @@ export function TeamRosterDialog({
                 totalPoints: 0
             };
 
+            const isExplicitSecondYellow = Boolean(
+                (e.extra_info as Record<string, unknown> | null)?.is_second_yellow ||
+                (e.detail as Record<string, unknown> | null)?.is_second_yellow
+            );
+
             if (e.event_type === 'goal') stat.goals += 1;
-            if (e.event_type === 'yellow_card') stat.yellowCards += 1;
-            if (e.event_type === 'red_card') stat.redCards += 1;
+            if (e.event_type === 'yellow_card') {
+                stat.yellowCards += 1;
+                const matchKey = `${e.match_id}-${key}`;
+                const count = (matchPlayerYellows.get(matchKey) || 0) + 1;
+                matchPlayerYellows.set(matchKey, count);
+                if (isExplicitSecondYellow || count >= 2) {
+                    stat.redCards += 1;
+                }
+            }
+            if (e.event_type === 'red_card') {
+                stat.redCards += 1;
+                if (isExplicitSecondYellow) {
+                    stat.yellowCards += 1;
+                }
+            }
             if (e.event_type === 'ace') { stat.aces += 1; stat.totalPoints += 1; }
             if (e.event_type === 'spike') { stat.spikes += 1; stat.totalPoints += 1; }
             if (e.event_type === 'block') { stat.blocks += 1; stat.totalPoints += 1; }

@@ -463,7 +463,17 @@ export function PublicTournamentShell({
             return existing;
         };
 
-        events.forEach(event => {
+        const matchPlayerYellows = new Map<string, number>();
+
+        // Sort events chronologically to properly detect match-specific card sequences
+        const sortedEvents = [...events].sort((a, b) => {
+            const timeA = new Date(a.created_at || 0).getTime();
+            const timeB = new Date(b.created_at || 0).getTime();
+            if (a.minute !== b.minute) return a.minute - b.minute;
+            return timeA - timeB;
+        });
+
+        sortedEvents.forEach(event => {
             const rawPlayerId = event.player_id || (event.extra_info?.player_id as string) || (event.detail?.player_id as string);
             const extraName = (event.extra_info?.player_name as string) || (event.detail?.player_name as string) || (event as any).player_name;
             const matchedPlayer = rawPlayerId ? initialPlayers.find(p => p.id === rawPlayerId || p.master_player_id === rawPlayerId) : null;
@@ -513,11 +523,31 @@ export function PublicTournamentShell({
             else if (event.event_type === 'yellow_card') {
                 const player = getOrCreatePlayer(effectivePlayerId, effectivePlayerName, effectiveTeamId, fallbackTeamName, fallbackTeamLogo);
                 player.yellowCards++;
+
+                const isExplicitSecondYellow = Boolean(
+                    (event.extra_info as Record<string, unknown> | null)?.is_second_yellow ||
+                    (event.detail as Record<string, unknown> | null)?.is_second_yellow
+                );
+                const matchKey = `${event.match_id}-${effectivePlayerId}`;
+                const count = (matchPlayerYellows.get(matchKey) || 0) + 1;
+                matchPlayerYellows.set(matchKey, count);
+
+                if (isExplicitSecondYellow || count >= 2) {
+                    player.redCards++;
+                }
             }
             // 3. Process Red Cards
             else if (event.event_type === 'red_card') {
                 const player = getOrCreatePlayer(effectivePlayerId, effectivePlayerName, effectiveTeamId, fallbackTeamName, fallbackTeamLogo);
                 player.redCards++;
+
+                const isExplicitSecondYellow = Boolean(
+                    (event.extra_info as Record<string, unknown> | null)?.is_second_yellow ||
+                    (event.detail as Record<string, unknown> | null)?.is_second_yellow
+                );
+                if (isExplicitSecondYellow) {
+                    player.yellowCards++;
+                }
             }
             // 4. Process Saves
             else if (event.event_type === 'save') {
@@ -553,6 +583,17 @@ export function PublicTournamentShell({
                 const foulCard = ((event.extra_info as Record<string, unknown> | null)?.card_type || (event.detail as Record<string, unknown> | null)?.card_type) as string | undefined;
                 if (foulCard === 'yellow') {
                     player.yellowCards++;
+                    const isExplicitSecondYellow = Boolean(
+                        (event.extra_info as Record<string, unknown> | null)?.is_second_yellow ||
+                        (event.detail as Record<string, unknown> | null)?.is_second_yellow
+                    );
+                    const matchKey = `${event.match_id}-${effectivePlayerId}`;
+                    const count = (matchPlayerYellows.get(matchKey) || 0) + 1;
+                    matchPlayerYellows.set(matchKey, count);
+
+                    if (isExplicitSecondYellow || count >= 2) {
+                        player.redCards++;
+                    }
                 } else if (foulCard === 'red') {
                     player.redCards++;
                 }

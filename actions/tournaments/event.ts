@@ -16,6 +16,7 @@ export async function getMatchEvents(matchId: string): Promise<ActionResponse<Ma
                 ...e,
                 type: eventType,
                 event_type: eventType,
+                player_id: e.player_id || detailObj.player_id || null,
                 detail: detailObj,
                 extra_info: detailObj,
                 player_name: detailObj.player_name || e.player_name || (e.player?.name || "Unknown"),

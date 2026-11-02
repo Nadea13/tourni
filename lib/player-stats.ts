@@ -60,6 +60,8 @@ export function calculatePlayerStats(
     const playerMatchSet = new Map<string, Set<string>>();
 
     // Process events
+    const matchPlayerYellows = new Map<string, number>();
+
     events.forEach(event => {
         if (!event.player_id) return;
 
@@ -86,6 +88,11 @@ export function calculatePlayerStats(
         }
         playerMatchSet.get(event.player_id)!.add(event.match_id);
 
+        const isExplicitSecondYellow = Boolean(
+            (event.extra_info as Record<string, unknown> | null)?.is_second_yellow ||
+            (event.detail as Record<string, unknown> | null)?.is_second_yellow
+        );
+
         switch (event.event_type) {
             case 'goal':
                 stat.goals += 1;
@@ -93,11 +100,21 @@ export function calculatePlayerStats(
             case 'assist':
                 stat.assists += 1;
                 break;
-            case 'yellow_card':
+            case 'yellow_card': {
                 stat.yellowCards += 1;
+                const matchKey = `${event.match_id}-${event.player_id}`;
+                const count = (matchPlayerYellows.get(matchKey) || 0) + 1;
+                matchPlayerYellows.set(matchKey, count);
+                if (isExplicitSecondYellow || count >= 2) {
+                    stat.redCards += 1;
+                }
                 break;
+            }
             case 'red_card':
                 stat.redCards += 1;
+                if (isExplicitSecondYellow) {
+                    stat.yellowCards += 1;
+                }
                 break;
         }
     });

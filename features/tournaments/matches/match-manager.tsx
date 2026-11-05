@@ -13,6 +13,7 @@ interface FixturesManagerProps {
     teams: Team[];
     matches: Match[];
     tournamentId: string;
+    sport?: string;
     format?: string;
     isPro?: boolean;
     hideControls?: boolean;
@@ -29,6 +30,7 @@ export function MatchManager({
     matches,
     teams,
     tournamentId,
+    sport,
     externalFilterStage = "all",
     externalSelectedDate = null,
     isPublic = false,
@@ -185,6 +187,7 @@ export function MatchManager({
                                                                 isPublic={isPublic}
                                                                 teams={teams}
                                                                 canvasData={canvasData}
+                                                                sport={sport}
                                                             />
                                                         </div>
                                                     ))}

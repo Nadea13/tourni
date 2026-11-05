@@ -7,13 +7,13 @@ import { Button } from "@/components/ui/button";
 import { useToast } from "@/hooks/use-toast";
 import { VolleyballScoreboard } from "./console/scoreboard";
 import { VolleyballEventLog } from "./console/log";
-import { VolleyballEventDialog } from "@/features/dialogs";
+import { VolleyballEventDialog, VolleyballEventSaveData, VolleyballActionType } from "@/features/dialogs";
 import { driver } from "driver.js";
 import "driver.js/dist/driver.css";
 import {
     ArrowLeft, Zap, Flame, ShieldCheck, HelpCircle, Cloud, CloudOff, RefreshCw,
-    Undo, Tv, Users, Play, Square, BarChart2, Info,
-    Settings
+    Undo, Tv, Users, Play, Square, BarChart2,
+    Settings, RotateCw, Clock, Hand, Video, Volleyball, CheckCircle2
 } from "lucide-react";
 import { Link } from "@/i18n/routing";
 import { Header } from "@/components/ui/header";
@@ -77,11 +77,13 @@ export function VolleyballConsolePage({
     const isFullWidth = fullWidthScoreboard || readOnly;
 
     // Customizable Actions & Stats
-    const ALL_VOLLEYBALL_ACTIONS = ['ace', 'spike', 'block'];
+    const ALL_VOLLEYBALL_ACTIONS = [
+        'point', 'ace', 'spike', 'block', 'substitution', 'timeout', 'foul', 'challenge', 'sanction'
+    ];
     const DEFAULT_VOLLEYBALL_STATS_KEYS = ['sets_won', 'current_set_points', 'total_points'];
     const ALL_VOLLEYBALL_LOG_EVENT_TYPES = [
         'point', 'ace', 'spike', 'block', 'substitution',
-        'timeout', 'foul', 'yellow_card', 'red_card', 'set_win',
+        'timeout', 'foul', 'challenge', 'sanction', 'yellow_card', 'red_card', 'set_win',
         'full_time', 'match_paused', 'walkover'
     ];
     const [customActionTypes, setCustomActionTypes] = useState<string[]>(() => {
@@ -96,7 +98,9 @@ export function VolleyballConsolePage({
                 const savedCustom = localStorage.getItem("tourni-volleyball-custom-actions");
                 if (savedCustom) {
                     const parsed = JSON.parse(savedCustom);
-                    if (Array.isArray(parsed)) return parsed;
+                    if (Array.isArray(parsed) && (parsed.includes('point') || parsed.includes('substitution'))) {
+                        return parsed;
+                    }
                 }
             } catch (_) {}
         }
@@ -337,7 +341,7 @@ export function VolleyballConsolePage({
     const [statsDialogOpen, setStatsDialogOpen] = useState(false);
     const [teamInfoTarget, setTeamInfoTarget] = useState<'home' | 'away' | null>(null);
     const [actionDialogOpen, setActionDialogOpen] = useState(false);
-    const [actionConfig, setActionConfig] = useState<{ teamSide: 'home' | 'away'; eventType: 'ace' | 'spike' | 'block' | 'point' }>({
+    const [actionConfig, setActionConfig] = useState<{ teamSide: 'home' | 'away'; eventType: VolleyballActionType | null }>({
         teamSide: 'home',
         eventType: 'point'
     });
@@ -375,11 +379,19 @@ export function VolleyballConsolePage({
 
     // Derive set score state from events
     const { homeSets, awaySets, homePoints, awayPoints, setHistory, servingTeam, currentSet } = useMemo(() => {
+        const finishedSetNumbers = new Set<number>();
         const setPointsMap = new Map<number, { home: number; away: number }>();
         if (events && events.length > 0) {
             events.forEach(e => {
-                if (!pointTypes.includes(e.event_type)) return;
+                const extra = (e.extra_info as Record<string, unknown> | null) || (e.detail as Record<string, unknown> | null);
                 const setNum = getSetNumber(e);
+                if (e.event_type === 'set_end' || e.event_type === 'set_win') {
+                    finishedSetNumbers.add(setNum);
+                    if (extra && typeof extra.home_score === 'number' && typeof extra.away_score === 'number') {
+                        setPointsMap.set(setNum, { home: extra.home_score, away: extra.away_score });
+                    }
+                }
+                if (!pointTypes.includes(e.event_type)) return;
                 const current = setPointsMap.get(setNum) || { home: 0, away: 0 };
                 if (isHomeEvent(e)) current.home += 1;
                 if (isAwayEvent(e)) current.away += 1;
@@ -388,7 +400,10 @@ export function VolleyballConsolePage({
         }
 
         const allSetNumbers = Array.from(setPointsMap.keys()).sort((a, b) => a - b);
-        const maxLoggedSet = allSetNumbers.length > 0 ? Math.max(...allSetNumbers) : 1;
+        const maxLoggedSet = Math.max(
+            allSetNumbers.length > 0 ? Math.max(...allSetNumbers) : 1,
+            finishedSetNumbers.size > 0 ? Math.max(...Array.from(finishedSetNumbers)) : 1
+        );
 
         const history: Array<{ set: number; home: number; away: number }> = [];
         let hSets = 0;
@@ -399,8 +414,9 @@ export function VolleyballConsolePage({
             const targetPts = s === maxSets ? 15 : 25;
             const isSetFinishedByScore = (pts.home >= targetPts || pts.away >= targetPts) && Math.abs(pts.home - pts.away) >= 2;
             const isPastSet = s < maxLoggedSet;
+            const isExplicitlyFinished = finishedSetNumbers.has(s);
 
-            if (isPastSet || isSetFinishedByScore) {
+            if (isPastSet || isSetFinishedByScore || isExplicitlyFinished) {
                 history.push({ set: s, home: pts.home, away: pts.away });
                 if (pts.home > pts.away) hSets += 1;
                 else if (pts.away > pts.home) aSets += 1;
@@ -448,11 +464,175 @@ export function VolleyballConsolePage({
         );
     }, [readOnly, match.status, match.home_team_id, match.away_team_id, match.home_team?.name, match.away_team?.name, currentSet, addEvent]);
 
-    const handleTriggerActionEvent = (teamSide: 'home' | 'away', eventType: 'ace' | 'spike' | 'block' | 'point') => {
+    const handleTriggerActionEvent = (teamSide: 'home' | 'away', eventType: VolleyballActionType) => {
         if (readOnly || match.status !== 'live') return;
         setActionConfig({ teamSide, eventType });
         setActionDialogOpen(true);
     };
+
+    const handleTimeout = useCallback(async (teamSide: 'home' | 'away') => {
+        if (readOnly || match.status !== 'live') return;
+        const teamId = teamSide === 'home' ? match.home_team_id : match.away_team_id;
+        const teamName = teamSide === 'home' ? (match.home_team?.name || 'Home') : (match.away_team?.name || 'Away');
+
+        await addEvent(
+            teamId || null,
+            'timeout',
+            currentSet,
+            null,
+            {
+                text: `Set ${currentSet} - Timeout (${teamName})`,
+                set: currentSet,
+                team_side: teamSide,
+            },
+            teamName
+        );
+        toast({
+            title: locale === "th" ? `ขอเวลานอก (${teamName})` : `Timeout called (${teamName})`
+        });
+    }, [readOnly, match.status, match.home_team_id, match.away_team_id, match.home_team?.name, match.away_team?.name, currentSet, addEvent, locale, toast]);
+
+    const handleSaveVolleyballEvent = useCallback(async (data: VolleyballEventSaveData) => {
+        if (!actionConfig.teamSide || !actionConfig.eventType) return;
+        const teamSide = actionConfig.teamSide;
+        const eventType = actionConfig.eventType;
+        const teamId = teamSide === 'home' ? match.home_team_id : match.away_team_id;
+        const teamName = teamSide === 'home' ? (match.home_team?.name || 'Home') : (match.away_team?.name || 'Away');
+        const targetSet = data.set || currentSet;
+
+        if (eventType === 'point' || eventType === 'ace' || eventType === 'spike' || eventType === 'block') {
+            const playerText = data.playerName ? ` (${data.playerName})` : "";
+            await addEvent(
+                teamId || null,
+                eventType,
+                targetSet,
+                data.playerId || null,
+                {
+                    text: `Set ${targetSet} - Point for ${teamName || teamSide} (${eventType.toUpperCase()})${playerText}`,
+                    set: targetSet,
+                    team_side: teamSide,
+                    player_name: data.playerName
+                },
+                data.playerName || teamName || "Team"
+            );
+        } else if (eventType === 'substitution') {
+            const outPlayerId = data.outPlayerId;
+            const outPlayerName = data.outPlayerName;
+            const inPlayerId = data.inPlayerId;
+            const inPlayerName = data.inPlayerName;
+
+            await addEvent(
+                teamId || null,
+                'substitution',
+                targetSet,
+                outPlayerId || null,
+                {
+                    text: `Set ${targetSet} - ${teamName} Substitution: Out ${outPlayerName || ''}, In ${inPlayerName || ''}`,
+                    set: targetSet,
+                    team_side: teamSide,
+                    out_player_id: outPlayerId,
+                    out_player_name: outPlayerName,
+                    in_player_id: inPlayerId,
+                    in_player_name: inPlayerName,
+                },
+                outPlayerName || teamName
+            );
+
+            if (outPlayerId && inPlayerId) {
+                if (teamSide === 'home') {
+                    const newHomeLineup = homeLineup.map(id => id === outPlayerId ? inPlayerId : id);
+                    setHomeLineup(newHomeLineup);
+                    try {
+                        localStorage.setItem(`match-lineup-volleyball-${match.id}`, JSON.stringify({ home: newHomeLineup, away: awayLineup }));
+                    } catch (_) {}
+                } else {
+                    const newAwayLineup = awayLineup.map(id => id === outPlayerId ? inPlayerId : id);
+                    setAwayLineup(newAwayLineup);
+                    try {
+                        localStorage.setItem(`match-lineup-volleyball-${match.id}`, JSON.stringify({ home: homeLineup, away: newAwayLineup }));
+                    } catch (_) {}
+                }
+            }
+            toast({ title: locale === "th" ? "เปลี่ยนตัวผู้เล่นเรียบร้อย" : "Substitution recorded" });
+        } else if (eventType === 'foul') {
+            await addEvent(
+                teamId || null,
+                'foul',
+                targetSet,
+                data.playerId || null,
+                {
+                    text: `Set ${targetSet} - Foul by ${data.playerName || teamName}${data.foulType ? ` (${data.foulType})` : ''}`,
+                    set: targetSet,
+                    team_side: teamSide,
+                    foul_type: data.foulType,
+                    player_name: data.playerName,
+                },
+                data.playerName || teamName
+            );
+
+            if (data.awardOpponentPoint !== false) {
+                const opponentSide: 'home' | 'away' = teamSide === 'home' ? 'away' : 'home';
+                const opponentTeamId = opponentSide === 'home' ? match.home_team_id : match.away_team_id;
+                const opponentTeamName = opponentSide === 'home' ? (match.home_team?.name || 'Home') : (match.away_team?.name || 'Away');
+
+                await addEvent(
+                    opponentTeamId || null,
+                    'point',
+                    targetSet,
+                    null,
+                    {
+                        text: `Set ${targetSet} - Point for ${opponentTeamName} (Foul: ${data.playerName || teamName}${data.foulType ? ` - ${data.foulType}` : ''})`,
+                        set: targetSet,
+                        team_side: opponentSide,
+                        reason: 'opponent_foul',
+                    },
+                    opponentTeamName
+                );
+
+                toast({
+                    title: locale === "th"
+                        ? `บันทึกฟาวล์ (${teamName}) - ${opponentTeamName} ได้ 1 แต้ม`
+                        : `Foul recorded (${teamName}) - 1 point to ${opponentTeamName}`
+                });
+            } else {
+                toast({ title: locale === "th" ? "บันทึกฟาวล์เรียบร้อย" : "Foul recorded" });
+            }
+        } else if (eventType === 'challenge') {
+            await addEvent(
+                teamId || null,
+                'challenge',
+                targetSet,
+                null,
+                {
+                    text: `Set ${targetSet} - Challenge (${teamName}): ${data.challengeReason || ''}${data.challengeResult ? ` [${data.challengeResult}]` : ''}`,
+                    set: targetSet,
+                    team_side: teamSide,
+                    challenge_reason: data.challengeReason,
+                    challenge_result: data.challengeResult,
+                },
+                teamName
+            );
+            toast({ title: locale === "th" ? "บันทึกวิดีโอชาเลนจ์เรียบร้อย" : "Challenge recorded" });
+        } else if (eventType === 'sanction') {
+            const resolvedEventType: EventType = (data.sanctionType === 'red_card' ? 'red_card' : 'yellow_card');
+            await addEvent(
+                teamId || null,
+                resolvedEventType,
+                targetSet,
+                data.playerId || null,
+                {
+                    text: `Set ${targetSet} - ${data.sanctionType === 'red_card' ? 'Red Card' : 'Yellow Card'}: ${data.playerName || teamName}${data.reason ? ` (${data.reason})` : ''}`,
+                    set: targetSet,
+                    team_side: teamSide,
+                    sanction_type: data.sanctionType,
+                    player_name: data.playerName,
+                    reason: data.reason,
+                },
+                data.playerName || teamName
+            );
+            toast({ title: locale === "th" ? "บันทึกการลงโทษเรียบร้อย" : "Sanction recorded" });
+        }
+    }, [actionConfig.teamSide, actionConfig.eventType, match.home_team_id, match.away_team_id, match.home_team?.name, match.away_team?.name, match.id, currentSet, addEvent, homeLineup, awayLineup, locale, toast]);
 
     const handleSaveLineup = (homeActive: string[], awayActive: string[]) => {
         setHomeLineup(homeActive);
@@ -588,11 +768,21 @@ export function VolleyballConsolePage({
         if (homeSets >= setsToWin || awaySets >= setsToWin) {
             queueMicrotask(() => {
                 const winnerId = homeSets >= setsToWin ? match.home_team_id : match.away_team_id;
+                const allSetsData = setHistory.map(h => ({ set: h.set, home: h.home, away: h.away }));
+                if (homePoints > 0 || awayPoints > 0) {
+                    if (!allSetsData.some(s => s.set === currentSet)) {
+                        allSetsData.push({ set: currentSet, home: homePoints, away: awayPoints });
+                    }
+                }
                 queueMatchUpdate({
                     status: 'finished',
                     home_score: homeSets,
                     away_score: awaySets,
-                    winner_id: winnerId
+                    winner_id: winnerId,
+                    score_detail: {
+                        ...(match.score_detail || {}),
+                        sets: allSetsData,
+                    }
                 });
                 const catId = match.category_id || match.tournament_category_id;
                 if (catId) {
@@ -608,6 +798,38 @@ export function VolleyballConsolePage({
         }
     }, [homeSets, awaySets, match.status, match.home_team_id, match.away_team_id, match.home_team?.name, match.away_team?.name, match.category_id, match.tournament_category_id, tournamentId, readOnly, locale, toast, maxSets, queueMatchUpdate]);
 
+    // --- Score Sync to DB (for MatchCard) ---
+    useEffect(() => {
+        if (readOnly || match.status === 'finished') return;
+
+        const dbHomeSets = typeof match.home_score === 'number' ? match.home_score : 0;
+        const dbAwaySets = typeof match.away_score === 'number' ? match.away_score : 0;
+
+        const allSetsData = setHistory.map(h => ({ set: h.set, home: h.home, away: h.away }));
+        if (homePoints > 0 || awayPoints > 0) {
+            if (!allSetsData.some(s => s.set === currentSet)) {
+                allSetsData.push({ set: currentSet, home: homePoints, away: awayPoints });
+            }
+        }
+
+        const scoreDetailSetsStr = JSON.stringify((match.score_detail as Record<string, unknown> | null)?.sets || []);
+        const currentSetsStr = JSON.stringify(allSetsData);
+
+        if (homeSets !== dbHomeSets || awaySets !== dbAwaySets || scoreDetailSetsStr !== currentSetsStr) {
+            const syncScore = setTimeout(() => {
+                queueMatchUpdate({
+                    home_score: homeSets,
+                    away_score: awaySets,
+                    score_detail: {
+                        ...(match.score_detail || {}),
+                        sets: allSetsData,
+                    }
+                });
+            }, 600);
+            return () => clearTimeout(syncScore);
+        }
+    }, [homeSets, awaySets, match.home_score, match.away_score, homePoints, awayPoints, currentSet, setHistory, match.score_detail, readOnly, match.status, queueMatchUpdate]);
+
     const handleUndo = async () => {
         if (readOnly) return;
         if (events.length === 0) {
@@ -622,8 +844,12 @@ export function VolleyballConsolePage({
             const remainingEvents = events.slice(1);
             let hSets = 0;
             let aSets = 0;
+            const finishedSetNumbers = new Set<number>();
             const setPointsMap = new Map<number, { home: number; away: number }>();
             remainingEvents.forEach(e => {
+                if (e.event_type === 'set_end' || e.event_type === 'set_win') {
+                    finishedSetNumbers.add(getSetNumber(e));
+                }
                 if (!pointTypes.includes(e.event_type)) return;
                 const setNum = getSetNumber(e);
                 const current = setPointsMap.get(setNum) || { home: 0, away: 0 };
@@ -633,15 +859,19 @@ export function VolleyballConsolePage({
             });
 
             const allSetNumbers = Array.from(setPointsMap.keys()).sort((a, b) => a - b);
-            const maxLoggedSet = allSetNumbers.length > 0 ? Math.max(...allSetNumbers) : 1;
+            const maxLoggedSet = Math.max(
+                allSetNumbers.length > 0 ? Math.max(...allSetNumbers) : 1,
+                finishedSetNumbers.size > 0 ? Math.max(...Array.from(finishedSetNumbers)) : 1
+            );
 
             for (let s = 1; s <= maxLoggedSet; s++) {
                 const pts = setPointsMap.get(s) || { home: 0, away: 0 };
                 const targetPts = s === maxSets ? 15 : 25;
                 const isSetFinishedByScore = (pts.home >= targetPts || pts.away >= targetPts) && Math.abs(pts.home - pts.away) >= 2;
                 const isPastSet = s < maxLoggedSet;
+                const isExplicitlyFinished = finishedSetNumbers.has(s);
 
-                if (isPastSet || isSetFinishedByScore) {
+                if (isPastSet || isSetFinishedByScore || isExplicitlyFinished) {
                     if (pts.home > pts.away) hSets += 1;
                     else if (pts.away > pts.home) aSets += 1;
                 }
@@ -728,50 +958,156 @@ export function VolleyballConsolePage({
         }
     };
 
+    const handleEndSet = useCallback(() => {
+        if (readOnly || match.status !== 'live') return;
+
+        if (homePoints === awayPoints) {
+            toast({
+                title: locale === "th" ? "ไม่สามารถจบเซตได้เนื่องจากคะแนนเท่ากัน" : "Cannot end set while scores are tied",
+                description: locale === "th" ? "กรุณาบันทึกแต้มตัดสินก่อนตัดจบเซต" : "Please record a deciding point before ending set",
+                variant: "destructive"
+            });
+            return;
+        }
+
+        const winnerSide = homePoints > awayPoints ? 'home' : 'away';
+        const winnerId = winnerSide === 'home' ? match.home_team_id : match.away_team_id;
+        const winnerName = winnerSide === 'home' ? (match.home_team?.name || 'Home') : (match.away_team?.name || 'Away');
+        const higherScore = Math.max(homePoints, awayPoints);
+        const lowerScore = Math.min(homePoints, awayPoints);
+
+        setConfirmConfig({
+            open: true,
+            title: locale === "th" ? `ยืนยันการจบเซตที่ ${currentSet}?` : `Finish Set ${currentSet}?`,
+            description: locale === "th"
+                ? `ทีม ${winnerName} (${higherScore} - ${lowerScore}) จะชนะในเซตนี้ และจะเริ่มนับคะแนนในเซตถัดไป`
+                : `${winnerName} (${higherScore} - ${lowerScore}) will win this set, and the next set will begin.`,
+            actionLabel: locale === "th" ? "จบเซต" : "End Set",
+            cancelLabel: locale === "th" ? "ยกเลิก" : "Cancel",
+            onConfirm: async () => {
+                await addEvent(
+                    winnerId || null,
+                    'set_end',
+                    currentSet,
+                    null,
+                    {
+                        text: `Set ${currentSet} Ended - ${winnerName} Won Set (${higherScore} - ${lowerScore})`,
+                        set: currentSet,
+                        home_score: homePoints,
+                        away_score: awayPoints,
+                        winner_side: winnerSide,
+                        winner_id: winnerId,
+                        winner_name: winnerName
+                    },
+                    winnerName
+                );
+                toast({
+                    title: locale === "th"
+                        ? `จบเซตที่ ${currentSet} เรียบร้อย (${winnerName} ชนะเซต ${higherScore}-${lowerScore})`
+                        : `Set ${currentSet} Finished (${winnerName} won ${higherScore}-${lowerScore})`
+                });
+            }
+        });
+    }, [readOnly, match.status, match.home_team_id, match.away_team_id, match.home_team?.name, match.away_team?.name, currentSet, homePoints, awayPoints, addEvent, locale, toast]);
+
     const matchControlsBox = readOnly ? null : (
         <div className="bg-card border p-2 lg:p-4 relative overflow-hidden group rounded-sm" id="vball-status-control">
             <div className="relative z-10 space-y-2 lg:space-y-4">
-                <div className="grid grid-cols-2 lg:grid-cols-1 gap-1 lg:gap-2 w-full">
+                <div className="flex flex-col gap-1 lg:gap-2 w-full">
+                    {match.status !== 'live' && match.status !== 'finished' ? (
                         <Button
                             variant="outline"
                             onClick={async () => {
                                 await queueMatchUpdate({ status: 'live' });
                                 toast({ title: locale === "th" ? "เริ่มต้นการแข่งขันเรียบร้อย" : "Match started" });
                             }}
-                            disabled={match.status === 'finished' || match.status === 'canceled'}
-                            className="w-full justify-center lg:justify-start px-2 bg-foreground/5 border-foreground/5 hover:bg-foreground/10 hover:border-foreground/20 transition-all group"
+                            disabled={match.status === 'canceled'}
+                            className="w-full justify-center lg:justify-start px-2 bg-primary/10 border-primary/20 hover:bg-primary/20 hover:border-primary/40 transition-all group active:scale-[0.98]"
                         >
-                            <div className="flex items-center gap-1 lg:gap-2">
+                            <div className="flex items-center gap-1.5 lg:gap-2">
                                 <Play className="h-4 w-4 fill-primary text-primary" />
-                                <span className="hidden lg:inline text-xs font-bold tracking-widest text-foreground">
+                                <span className="text-xs font-bold tracking-widest text-foreground">
                                     {locale === "th" ? "เริ่มการแข่งขัน" : "Start Match"}
                                 </span>
                             </div>
                         </Button>
+                    ) : match.status === 'live' ? (
+                        <>
+                            <Button
+                                variant="outline"
+                                onClick={handleEndSet}
+                                className="w-full justify-center lg:justify-start px-2 bg-amber-500/10 border-amber-500/20 hover:bg-amber-500/20 hover:border-amber-500/40 transition-all group active:scale-[0.98]"
+                            >
+                                <div className="flex items-center gap-1.5 lg:gap-2">
+                                    <CheckCircle2 className="h-4 w-4 text-amber-500" />
+                                    <span className="text-xs font-bold tracking-widest text-foreground">
+                                        {locale === "th" ? `จบเซต (Set ${currentSet})` : `End Set (Set ${currentSet})`}
+                                    </span>
+                                </div>
+                            </Button>
 
+                            <Button
+                                variant="outline"
+                                onClick={() => {
+                                    setConfirmConfig({
+                                        open: true,
+                                        title: locale === "th" ? "คุณแน่ใจหรือไม่ที่จะจบการแข่งขัน?" : "End Match?",
+                                        description: locale === "th" ? "คุณแน่ใจหรือไม่ว่าต้องการจบการแข่งขันและบันทึกผลการแข่งขันสุดท้าย?" : "Are you sure you want to finish this match?",
+                                        actionLabel: locale === "th" ? "จบการแข่งขัน" : "Finish Match",
+                                        cancelLabel: locale === "th" ? "ยกเลิก" : "Cancel",
+                                        onConfirm: async () => {
+                                            const winnerId = homeSets >= awaySets ? match.home_team_id : match.away_team_id;
+                                            const allSetsData = setHistory.map(h => ({ set: h.set, home: h.home, away: h.away }));
+                                            if (homePoints > 0 || awayPoints > 0) {
+                                                if (!allSetsData.some(s => s.set === currentSet)) {
+                                                    allSetsData.push({ set: currentSet, home: homePoints, away: awayPoints });
+                                                }
+                                            }
+                                            await queueMatchUpdate({
+                                                status: 'finished',
+                                                home_score: homeSets,
+                                                away_score: awaySets,
+                                                winner_id: winnerId,
+                                                score_detail: {
+                                                    ...(match.score_detail || {}),
+                                                    sets: allSetsData,
+                                                }
+                                            });
+                                            const catId = match.category_id || match.tournament_category_id;
+                                            if (catId) {
+                                                syncCategoryBracket(tournamentId, catId).catch(e => {
+                                                    console.error("Failed to auto-sync bracket after volleyball match finished:", e);
+                                                });
+                                            }
+                                            toast({ title: locale === "th" ? "จบการแข่งขันเรียบร้อย" : "Match finished" });
+                                        }
+                                    });
+                                }}
+                                className="w-full justify-center lg:justify-start px-2 bg-destructive/10 border-destructive/20 hover:bg-destructive/20 hover:border-destructive/40 transition-all group active:scale-[0.98]"
+                            >
+                                <div className="flex items-center gap-1.5 lg:gap-2">
+                                    <Square className="h-4 w-4 fill-destructive text-destructive" />
+                                    <span className="text-xs font-bold tracking-widest text-foreground">
+                                        {locale === "th" ? "จบการแข่งขัน" : "Finish Match"}
+                                    </span>
+                                </div>
+                            </Button>
+                        </>
+                    ) : (
                         <Button
                             variant="outline"
-                            onClick={async () => {
-                                const winnerId = homeSets >= awaySets ? match.home_team_id : match.away_team_id;
-                                await queueMatchUpdate({
-                                    status: 'finished',
-                                    home_score: homeSets,
-                                    away_score: awaySets,
-                                    winner_id: winnerId
-                                });
-                                toast({ title: locale === "th" ? "จบการแข่งขันเรียบร้อย" : "Match finished" });
-                            }}
-                            disabled={match.status === 'finished'}
-                            className="w-full justify-center lg:justify-start px-2 bg-foreground/5 border-foreground/5 hover:bg-foreground/10 hover:border-foreground/20 transition-all group"
+                            disabled
+                            className="w-full justify-center lg:justify-start px-2 bg-foreground/5 border-foreground/10 opacity-50 cursor-not-allowed"
                         >
-                            <div className="flex items-center gap-1 lg:gap-2">
-                                <Square className="h-4 w-4 fill-destructive text-destructive" />
-                                <span className="hidden lg:inline text-xs font-bold tracking-widest text-foreground">
-                                    {locale === "th" ? "จบการแข่งขัน" : "Finish Match"}
+                            <div className="flex items-center gap-1.5 lg:gap-2">
+                                <Square className="h-4 w-4 fill-destructive text-destructive opacity-50" />
+                                <span className="text-xs font-bold tracking-widest text-muted-foreground">
+                                    {locale === "th" ? "จบการแข่งขันแล้ว" : "Match Finished"}
                                 </span>
                             </div>
                         </Button>
-                    </div>
+                    )}
+                </div>
             </div>
         </div>
     );
@@ -985,10 +1321,10 @@ export function VolleyballConsolePage({
                             servingTeam={servingTeam}
                             currentSetNumber={currentSet}
                             maxSets={maxSets}
-                            onTeamClick={(tId) => {
-                                if (tId === match.home_team_id || tId === match.home_team?.id) {
+                            onTeamClick={(tId, side) => {
+                                if (side === 'home' || (tId && (tId === match.home_team_id || tId === match.home_team?.id))) {
                                     setTeamInfoTarget('home');
-                                } else if (tId === match.away_team_id || tId === match.away_team?.id) {
+                                } else if (side === 'away' || (tId && (tId === match.away_team_id || tId === match.away_team?.id))) {
                                     setTeamInfoTarget('away');
                                 }
                             }}
@@ -1060,10 +1396,10 @@ export function VolleyballConsolePage({
                                     servingTeam={servingTeam}
                                     currentSetNumber={currentSet}
                                     maxSets={maxSets}
-                                    onTeamClick={(tId) => {
-                                        if (tId === match.home_team_id || tId === match.home_team?.id) {
+                                    onTeamClick={(tId, side) => {
+                                        if (side === 'home' || (tId && (tId === match.home_team_id || tId === match.home_team?.id))) {
                                             setTeamInfoTarget('home');
-                                        } else if (tId === match.away_team_id || tId === match.away_team?.id) {
+                                        } else if (side === 'away' || (tId && (tId === match.away_team_id || tId === match.away_team?.id))) {
                                             setTeamInfoTarget('away');
                                         }
                                     }}
@@ -1074,9 +1410,52 @@ export function VolleyballConsolePage({
                                     {quickActionsBox}
                                 </div>
 
-                                {/* Point Controls Section (Split into Home & Away Cards) */}
+                                 {/* Point Controls Section (Split into Home & Away Cards) */}
                                 {!readOnly && (() => {
-                                    const isActionDisabled = readOnly || match.status !== 'live';
+                                    const renderTeamActionButtons = (teamSide: 'home' | 'away') => {
+                                        const isActionDisabled = readOnly || match.status !== 'live';
+
+                                        const actions = [
+                                            { type: 'point', label: locale === 'th' ? "ได้แต้ม" : "Point", icon: Volleyball, iconColor: 'text-amber-500' },
+                                            { type: 'ace', label: locale === 'th' ? "เสิร์ฟเอซ" : "Serve", icon: Zap, iconColor: 'text-yellow-400' },
+                                            { type: 'spike', label: locale === 'th' ? "ตบทำแต้ม" : "Attack", icon: Flame, iconColor: 'text-red-500' },
+                                            { type: 'block', label: locale === 'th' ? "บล็อก" : "Block", icon: ShieldCheck, iconColor: 'text-blue-500' },
+                                            { type: 'substitution', label: locale === 'th' ? "เปลี่ยนตัว" : "Sub", icon: RotateCw, iconColor: 'text-emerald-500' },
+                                            { type: 'timeout', label: locale === 'th' ? "ขอเวลานอก" : "Timeout", icon: Clock, iconColor: 'text-purple-500' },
+                                            { type: 'foul', label: locale === 'th' ? "ฟาวล์" : "Foul", icon: Hand, iconColor: 'text-orange-500' },
+                                            { type: 'challenge', label: locale === 'th' ? "ชาเลนจ์" : "Challenge", icon: Video, iconColor: 'text-cyan-500' },
+                                            { type: 'sanction', label: locale === 'th' ? "คาดโทษ" : "Sanctions", icon: Square, iconColor: 'text-amber-500 fill-amber-500' },
+                                        ];
+
+                                        const filteredActions = actions.filter(action => customActionTypes.includes(action.type));
+
+                                        return (
+                                            <div className="grid grid-cols-2 sm:grid-cols-3 gap-1.5 lg:gap-2">
+                                                {filteredActions.map(action => (
+                                                    <Button
+                                                        key={action.type}
+                                                        variant="outline"
+                                                        disabled={isActionDisabled}
+                                                        onClick={() => {
+                                                            if (action.type === 'timeout') {
+                                                                handleTimeout(teamSide);
+                                                            } else {
+                                                                handleTriggerActionEvent(teamSide, action.type as VolleyballActionType);
+                                                            }
+                                                        }}
+                                                        className={cn(
+                                                            "h-9 px-2.5 rounded-sm font-medium border-border/80 hover:border-primary/50 hover:bg-muted/40 transition-colors shadow-none",
+                                                            action.type === 'point' && "col-span-2 sm:col-span-3 h-10 font-bold"
+                                                        )}
+                                                    >
+                                                        <action.icon className={cn("h-4 w-4 transition-transform shrink-0", action.iconColor)} />
+                                                        <span className="text-xs font-semibold truncate cursor-pointer tracking-normal">{action.label}</span>
+                                                    </Button>
+                                                ))}
+                                            </div>
+                                        );
+                                    };
+
                                     return (
                                         <div className="flex flex-col gap-2 lg:gap-4">
                                             {match.status !== 'finished' ? (
@@ -1084,71 +1463,29 @@ export function VolleyballConsolePage({
                                                     {/* Home Team Control Card */}
                                                     <div className="bg-card border rounded-sm p-2 lg:p-4 relative overflow-hidden group space-y-3">
                                                         <div className="space-y-1">
-                                                            <h3
-                                                                className="text-xl lg:text-2xl font-black tracking-tighter truncate cursor-pointer hover:text-primary transition-colors flex items-center gap-2 group/title"
-                                                                onClick={() => setTeamInfoTarget('home')}
-                                                                title={locale === "th" ? "ดูข้อมูลทีมและผู้เล่น" : "View team & roster info"}
-                                                            >
-                                                                <span>{match.home_team?.name || "Home"}</span>
-                                                                <Info className="h-4 w-4 text-muted-foreground group-hover/title:text-primary transition-colors shrink-0" />
-                                                            </h3>
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="w-2 h-2 rounded-full bg-primary" />
+                                                                <h3 className="text-lg lg:text-xl font-black tracking-tight truncate">
+                                                                    {match.home_team?.name || "Home"}
+                                                                </h3>
+                                                            </div>
                                                         </div>
 
-                                                        <div className="grid grid-cols-3 gap-1 lg:gap-2">
-                                                            {customActionTypes.includes('ace') && (
-                                                                <Button variant="outline" disabled={isActionDisabled} onClick={() => handleTriggerActionEvent('home', 'ace')}>
-                                                                    <Zap className="h-4 w-4 text-yellow-500" />
-                                                                    <span>Serve</span>
-                                                                </Button>
-                                                            )}
-                                                            {customActionTypes.includes('spike') && (
-                                                                <Button variant="outline" disabled={isActionDisabled} onClick={() => handleTriggerActionEvent('home', 'spike')}>
-                                                                    <Flame className="h-4 w-4 text-red-500" />
-                                                                    <span>Attack</span>
-                                                                </Button>
-                                                            )}
-                                                            {customActionTypes.includes('block') && (
-                                                                <Button variant="outline" disabled={isActionDisabled} onClick={() => handleTriggerActionEvent('home', 'block')}>
-                                                                    <ShieldCheck className="h-4 w-4 text-blue-500" />
-                                                                    <span>Block</span>
-                                                                </Button>
-                                                            )}
-                                                        </div>
+                                                        {renderTeamActionButtons('home')}
                                                     </div>
 
                                                     {/* Away Team Control Card */}
                                                     <div className="bg-card border rounded-sm p-2 lg:p-4 relative overflow-hidden group space-y-3">
                                                         <div className="space-y-1">
-                                                            <h3
-                                                                className="text-xl lg:text-2xl font-black tracking-tighter truncate cursor-pointer hover:text-primary transition-colors flex items-center gap-2 group/title"
-                                                                onClick={() => setTeamInfoTarget('away')}
-                                                                title={locale === "th" ? "ดูข้อมูลทีมและผู้เล่น" : "View team & roster info"}
-                                                            >
-                                                                <span>{match.away_team?.name || "Away"}</span>
-                                                                <Info className="h-4 w-4 text-muted-foreground group-hover/title:text-primary transition-colors shrink-0" />
-                                                            </h3>
+                                                            <div className="flex items-center gap-2">
+                                                                <span className="w-2 h-2 rounded-full bg-primary/60" />
+                                                                <h3 className="text-lg lg:text-xl font-black tracking-tight truncate">
+                                                                    {match.away_team?.name || "Away"}
+                                                                </h3>
+                                                            </div>
                                                         </div>
 
-                                                        <div className="grid grid-cols-3 gap-1 lg:gap-2">
-                                                            {customActionTypes.includes('ace') && (
-                                                                <Button variant="outline" disabled={isActionDisabled} onClick={() => handleTriggerActionEvent('away', 'ace')}>
-                                                                    <Zap className="h-4 w-4 text-yellow-500" />
-                                                                    <span>Serve</span>
-                                                                </Button>
-                                                            )}
-                                                            {customActionTypes.includes('spike') && (
-                                                                <Button variant="outline" disabled={isActionDisabled} onClick={() => handleTriggerActionEvent('away', 'spike')}>
-                                                                    <Flame className="h-4 w-4 text-red-500" />
-                                                                    <span>Attack</span>
-                                                                </Button>
-                                                            )}
-                                                            {customActionTypes.includes('block') && (
-                                                                <Button variant="outline" disabled={isActionDisabled} onClick={() => handleTriggerActionEvent('away', 'block')}>
-                                                                    <ShieldCheck className="h-4 w-4 text-blue-500" />
-                                                                    <span>Block</span>
-                                                                </Button>
-                                                            )}
-                                                        </div>
+                                                        {renderTeamActionButtons('away')}
                                                     </div>
                                                 </div>
                                             ) : (
@@ -1175,6 +1512,7 @@ export function VolleyballConsolePage({
                                 match={match}
                                 homeTeamId={match.home_team_id || undefined}
                                 awayTeamId={match.away_team_id || undefined}
+                                players={[...homePlayers, ...awayPlayers]}
                                 readOnly={readOnly}
                                 onDeleteEvent={(id) => deleteEvent(id)}
                                 visibleLogs={visibleLogs}
@@ -1191,11 +1529,11 @@ export function VolleyballConsolePage({
                 teamSide={actionConfig.teamSide}
                 teamName={actionConfig.teamSide === 'home' ? match.home_team?.name : match.away_team?.name}
                 eventType={actionConfig.eventType}
+                initialSet={currentSet}
                 players={actionConfig.teamSide === 'home' ? homePlayers : awayPlayers}
+                opponentPlayers={actionConfig.teamSide === 'home' ? awayPlayers : homePlayers}
                 activeLineupIds={actionConfig.teamSide === 'home' ? homeLineup : awayLineup}
-                onSave={({ playerId, playerName }) => {
-                    addPoint(actionConfig.teamSide, actionConfig.eventType, playerId, playerName);
-                }}
+                onSave={handleSaveVolleyballEvent}
             />
             <RosterSelectionDialog
                 open={rosterDialogOpen}

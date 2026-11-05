@@ -644,7 +644,14 @@
     "sets_won": "Sets Won",
     "current_set_points": "Current Set Points",
     "total_points": "Total Points",
-    "other_points": "Other Points"
+    "other_points": "Other Points",
+    "delete": "Delete",
+    "challenge": "Video Challenge",
+    "sanction": "Sanction (Warning / Card)",
+    "set_start": "Set Start",
+    "set_end": "Set End",
+    "match_end": "Match End",
+    "danger_zone_desc": "These actions directly affect the match outcome. Please proceed with caution."
   },
   "Team": {
     "dashboard": "Dashboard",
@@ -1696,6 +1703,7 @@
         "Create up to 1 tournament",
         "Create up to 1 tournament category",
         "Limit up to 12 teams per tournament",
+        "Tournament duration up to 30 days (Ideal for weekend cups / short tournaments)",
         "Registration payment system via QR Code",
         "Real-time match events / scorers / fouls recording",
         "Live score display for streaming (OBS Overlay)"
@@ -1704,6 +1712,7 @@
         "Create up to 1 tournament",
         "Create up to 3 categories per tournament",
         "Limit up to 32 teams per tournament",
+        "Tournament duration up to 90 days (3 months)",
         "Real-time match events / scorers / fouls recording",
         "Add up to 3 co-staff to manage matches",
         "Registration system with PromptPay payment",
@@ -1714,6 +1723,7 @@
         "Create up to 1 tournament per month",
         "Create up to 3 categories per tournament",
         "Limit up to 32 teams per tournament",
+        "Tournament duration up to 90 days (3 months)",
         "Real-time match events / scorers / fouls recording",
         "Add up to 3 co-staff to manage matches",
         "Registration system with PromptPay payment",
@@ -1723,6 +1733,7 @@
         "Create up to 3 tournaments",
         "Create up to 7 divisions per tournament",
         "Up to 128 teams per division",
+        "Long league duration 3 - 6 months (Supports long-running seasons)",
         "Real-time live match events / scorers / fouls",
         "Up to 7 staff members per tournament",
         "Team registration with QR code and transfer slip",

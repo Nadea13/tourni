@@ -22,6 +22,7 @@ import {
     Hand,
     RotateCw,
     Square,
+    Video,
 } from "lucide-react";
 import { Match } from "@/types";
 
@@ -65,9 +66,15 @@ export function VolleyballSettingsDialog({
     const [isStatsExpanded, setIsStatsExpanded] = useState(false);
 
     const allActionItems = [
-        { type: 'ace', label: 'Ace (เสิร์ฟเอซ)', icon: Zap },
-        { type: 'spike', label: 'Attack / Spike (ตบทำแต้ม)', icon: Flame },
-        { type: 'block', label: 'Block (บล็อกทำแต้ม)', icon: ShieldCheck },
+        { type: 'point', label: locale === "th" ? "Point (ได้แต้ม)" : "Point", icon: Volleyball },
+        { type: 'ace', label: locale === "th" ? "Ace (เสิร์ฟเอซ)" : "Ace (Serve)", icon: Zap },
+        { type: 'spike', label: locale === "th" ? "Attack / Spike (ตบทำแต้ม)" : "Attack / Spike", icon: Flame },
+        { type: 'block', label: locale === "th" ? "Block (บล็อกทำแต้ม)" : "Block", icon: ShieldCheck },
+        { type: 'substitution', label: locale === "th" ? "Substitution (เปลี่ยนตัว)" : "Substitution", icon: RotateCw },
+        { type: 'timeout', label: locale === "th" ? "Timeout (ขอเวลานอก)" : "Timeout", icon: Clock },
+        { type: 'foul', label: locale === "th" ? "Foul (ฟาวล์)" : "Foul", icon: Hand },
+        { type: 'challenge', label: locale === "th" ? "Challenge (วิดีโอชาเลนจ์)" : "Challenge", icon: Video },
+        { type: 'sanction', label: locale === "th" ? "Sanctions (การลงโทษ / ใบเตือน)" : "Sanctions", icon: Square },
     ];
 
     const allLogItems = [
@@ -78,11 +85,11 @@ export function VolleyballSettingsDialog({
         { key: 'substitution', label: tConsole("substitution") || "เปลี่ยนตัว", icon: RotateCw },
         { key: 'timeout', label: tConsole("timeout") || "ขอเวลานอก", icon: Clock },
         { key: 'foul', label: tConsole("foul") || "ฟาวล์", icon: Hand },
-        { key: 'challenge', label: tConsole("challenge") || "Challenge (วิดีโอชาเลนจ์)", icon: Hand },
-        { key: 'sanction', label: tConsole("sanction") || "การลงโทษ (ใบเตือน/ทำฟาวล์)", icon: Square },
-        { key: 'set_start', label: tConsole("set_start") || "เริ่มเซต", icon: Clock },
-        { key: 'set_end', label: tConsole("set_end") || "จบเซต", icon: Trophy },
-        { key: 'match_end', label: tConsole("match_end") || "จบการแข่งขัน", icon: Trophy },
+        { key: 'challenge', label: locale === "th" ? "Challenge (วิดีโอชาเลนจ์)" : "Challenge", icon: Hand },
+        { key: 'sanction', label: locale === "th" ? "การลงโทษ (ใบเตือน/ทำฟาวล์)" : "Sanctions", icon: Square },
+        { key: 'set_start', label: locale === "th" ? "เริ่มเซต" : "Set Start", icon: Clock },
+        { key: 'set_end', label: locale === "th" ? "จบเซต" : "Set End", icon: Trophy },
+        { key: 'match_end', label: locale === "th" ? "จบการแข่งขัน" : "Match End", icon: Trophy },
     ];
 
     const allStatItems = [
@@ -139,25 +146,6 @@ export function VolleyballSettingsDialog({
                     <section id="settings-section-actions" className="space-y-2">
                         <Header level={6}>{tConsole("tab_buttons") || "ปุ่มเหตุการณ์"}</Header>
                         <div className="space-y-1">
-                            {/* Point indicator (Permanent) */}
-                            <div className="flex items-center justify-between">
-                                <div className="flex items-center gap-2 px-4 py-2">
-                                    <div className="size-8 rounded-sm bg-muted-foreground/10 flex items-center justify-center">
-                                        <Volleyball className="size-4 text-muted-foreground" />
-                                    </div>
-                                    <div className="space-y-1">
-                                        <Label>{tConsole("point") || "ได้แต้ม"}</Label>
-                                    </div>
-                                </div>
-                                <div className="flex items-center">
-                                    <Switch
-                                        checked={true}
-                                        disabled={true}
-                                        className="shrink-0 opacity-60"
-                                    />
-                                </div>
-                            </div>
-
                             {/* Customizable Action Buttons */}
                             {displayedActions.map((item) => {
                                 const isSelected = customActionTypes.includes(item.type);
@@ -360,7 +348,7 @@ export function VolleyballSettingsDialog({
                             {tConsole("danger_zone") || (locale === "th" ? "โซนอันตราย" : "Danger Zone")}
                         </Header>
                         <p className="text-xs text-muted-foreground">
-                            {tConsole("danger_zone_desc") || (locale === "th" ? "การดำเนินการเหล่านี้จะส่งผลกระทบต่อผลการแข่งขันหรือสถานะแมตช์โดยตรง โปรดใช้ความระมัดระวัง" : "These actions will affect match results directly.")}
+                            {locale === "th" ? "การดำเนินการเหล่านี้จะส่งผลกระทบต่อผลการแข่งขันหรือสถานะแมตช์โดยตรง โปรดใช้ความระมัดระวัง" : "These actions will affect match results directly."}
                         </p>
 
                         {/* จบการแข่งขันก่อนเวลา (Walkover / Early Finish) */}

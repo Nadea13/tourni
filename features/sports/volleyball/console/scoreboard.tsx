@@ -3,6 +3,7 @@
 import { Match, MatchEvent } from "@/types";
 import Image from "next/image";
 import { Volleyball } from "lucide-react";
+import { useLocale } from "next-intl";
 
 const getInitials = (name: string) => {
     if (!name) return "";
@@ -23,7 +24,7 @@ interface ScoreboardProps {
     setScoresHistory?: Array<{ set: number; home: number; away: number }>;
     servingTeam?: 'home' | 'away' | null;
     currentSetNumber?: number;
-    onTeamClick?: (teamId: string) => void;
+    onTeamClick?: (teamId: string, side?: 'home' | 'away') => void;
     maxSets?: number;
 }
 
@@ -40,6 +41,8 @@ export function VolleyballScoreboard({
     onTeamClick,
     maxSets = 3
 }: ScoreboardProps) {
+    const locale = useLocale();
+    const isTh = locale === "th";
     const formatTeamName = (name: string | undefined) => {
         return name || "";
     };
@@ -85,11 +88,19 @@ export function VolleyballScoreboard({
         return typeof extraSet === 'number' ? extraSet : (e.minute || 1);
     };
 
+    const finishedSetNumbers = new Set<number>();
     const setPointsMap = new Map<number, { home: number; away: number }>();
     if (events && events.length > 0) {
         events.forEach(e => {
-            if (!pointTypes.includes(e.event_type)) return;
+            const extra = (e.extra_info as Record<string, unknown> | null) || (e.detail as Record<string, unknown> | null);
             const setNum = getSetNumber(e);
+            if (e.event_type === 'set_end' || e.event_type === 'set_win') {
+                finishedSetNumbers.add(setNum);
+                if (extra && typeof extra.home_score === 'number' && typeof extra.away_score === 'number') {
+                    setPointsMap.set(setNum, { home: extra.home_score, away: extra.away_score });
+                }
+            }
+            if (!pointTypes.includes(e.event_type)) return;
             const current = setPointsMap.get(setNum) || { home: 0, away: 0 };
             if (isHomeEvent(e)) current.home += 1;
             if (isAwayEvent(e)) current.away += 1;
@@ -98,7 +109,10 @@ export function VolleyballScoreboard({
     }
 
     const allSetNumbers = Array.from(setPointsMap.keys()).sort((a, b) => a - b);
-    const maxLoggedSet = allSetNumbers.length > 0 ? Math.max(...allSetNumbers) : (currentSetNumber || 1);
+    const maxLoggedSet = Math.max(
+        allSetNumbers.length > 0 ? Math.max(...allSetNumbers) : (currentSetNumber || 1),
+        finishedSetNumbers.size > 0 ? Math.max(...Array.from(finishedSetNumbers)) : 1
+    );
 
     const derivedHistory: Array<{ set: number; home: number; away: number }> = [];
     let derivedHomeSets = 0;
@@ -109,8 +123,9 @@ export function VolleyballScoreboard({
         const targetPts = s === maxSets ? 15 : 25;
         const isSetFinishedByScore = (pts.home >= targetPts || pts.away >= targetPts) && Math.abs(pts.home - pts.away) >= 2;
         const isPastSet = s < maxLoggedSet;
+        const isExplicitlyFinished = finishedSetNumbers.has(s);
 
-        if (isPastSet || isSetFinishedByScore) {
+        if (isPastSet || isSetFinishedByScore || isExplicitlyFinished) {
             derivedHistory.push({ set: s, home: pts.home, away: pts.away });
             if (pts.home > pts.away) derivedHomeSets += 1;
             else if (pts.away > pts.home) derivedAwaySets += 1;
@@ -145,7 +160,8 @@ export function VolleyballScoreboard({
                     {/* Home Team */}
                     <div
                         className="flex-1 flex flex-row-reverse items-center justify-start gap-2 lg:flex-col lg:items-center lg:gap-4 cursor-pointer group/home min-w-0"
-                        onClick={() => onTeamClick?.(match.home_team_id || "")}
+                        onClick={() => onTeamClick?.(match.home_team_id || match.home_team?.id || "", 'home')}
+                        title={isTh ? "ดูรายชื่อตัวจริง - สำรอง" : "View Lineup"}
                     >
                         <div className="inline-flex items-center justify-center w-12 h-12 lg:w-24 lg:h-24 rounded-full border border-foreground/10 p-1 lg:p-2 relative group/logo shrink-0">
                             {match.home_team?.logo_url ? (
@@ -202,7 +218,8 @@ export function VolleyballScoreboard({
                     {/* Away Team */}
                     <div
                         className="flex-1 flex flex-row items-center justify-start gap-2 lg:flex-col lg:items-center lg:gap-4 cursor-pointer group/away min-w-0"
-                        onClick={() => onTeamClick?.(match.away_team_id || "")}
+                        onClick={() => onTeamClick?.(match.away_team_id || match.away_team?.id || "", 'away')}
+                        title={isTh ? "ดูรายชื่อตัวจริง - สำรอง" : "View Lineup"}
                     >
                         <div className="inline-flex items-center justify-center w-12 h-12 lg:w-24 lg:h-24 rounded-full border p-1 lg:p-2 relative group/logo shrink-0">
                             {match.away_team?.logo_url ? (

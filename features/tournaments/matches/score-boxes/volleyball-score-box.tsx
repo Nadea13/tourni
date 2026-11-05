@@ -19,25 +19,68 @@ export function VolleyballScoreBox({
     const homeSetsWon = getScore(match.home_score);
     const awaySetsWon = getScore(match.away_score);
 
-    // Volleyball Set Scores Breakdown from Match Events
+    // Volleyball Set Scores Breakdown from Match Events & score_detail
     const pointTypes = ['point', 'ace', 'spike', 'block'];
     const setPointsMap = new Map<number, { home: number; away: number }>();
 
+    // 1. Process from Match Events if available
     if (events && events.length > 0) {
         events.forEach(e => {
-            if (!pointTypes.includes(e.event_type)) return;
-            const extraSet = (e.extra_info as Record<string, unknown> | null)?.set;
+            const evtType = e.event_type || (e as any).type;
+            const rawExtra = e.extra_info || (e as any).detail;
+            let extra: Record<string, unknown> = {};
+            if (typeof rawExtra === 'string') {
+                try {
+                    extra = JSON.parse(rawExtra);
+                } catch (_) {}
+            } else if (rawExtra && typeof rawExtra === 'object') {
+                extra = rawExtra as Record<string, unknown>;
+            }
+
+            const extraSet = extra.set;
             const setNum = typeof extraSet === 'number' ? extraSet : (e.minute || 1);
+
+            // Handle set_end / set_win event scores directly
+            if (evtType === 'set_end' || evtType === 'set_win') {
+                const sHome = typeof extra.home_score === 'number' ? extra.home_score : (typeof extra.home === 'number' ? extra.home : undefined);
+                const sAway = typeof extra.away_score === 'number' ? extra.away_score : (typeof extra.away === 'number' ? extra.away : undefined);
+                if (sHome !== undefined && sAway !== undefined) {
+                    setPointsMap.set(setNum, { home: sHome, away: sAway });
+                }
+            }
+
+            if (!evtType || !pointTypes.includes(evtType)) return;
             const current = setPointsMap.get(setNum) || { home: 0, away: 0 };
 
-            const extra = e.extra_info as Record<string, unknown> | null;
-            const isHome = extra?.team_side === 'home' ||
-                (e.team_id && (e.team_id === match.home_team_id || e.team_id === match.home_team?.id)) ||
-                ((extra?.text as string) || "").includes("Point for home");
+            const isHome = extra.team_side === 'home' ||
+                (Boolean(e.team_id) && Boolean(match.home_team_id) && (e.team_id === match.home_team_id || e.team_id === match.home_team?.id)) ||
+                ((extra.text as string) || "").includes("Point for home") ||
+                (Boolean(match.home_team?.name) && ((extra.text as string) || "").includes(`Point for ${match.home_team?.name}`));
 
             if (isHome) current.home += 1;
             else current.away += 1;
             setPointsMap.set(setNum, current);
+        });
+    }
+
+    // 2. Augment / Fallback from match.score_detail (sets / set_scores / set_history)
+    let scoreDetail = match.score_detail as Record<string, unknown> | null | undefined;
+    if (typeof scoreDetail === 'string') {
+        try {
+            scoreDetail = JSON.parse(scoreDetail);
+        } catch (_) {}
+    }
+    const detailSets = (scoreDetail?.sets || scoreDetail?.set_scores || scoreDetail?.set_history) as Array<{ set?: number; home?: number; away?: number; home_score?: number; away_score?: number }> | undefined;
+    if (detailSets && Array.isArray(detailSets) && detailSets.length > 0) {
+        detailSets.forEach((item, idx) => {
+            const setNum = typeof item.set === 'number' ? item.set : (idx + 1);
+            const existing = setPointsMap.get(setNum);
+            const hVal = Number(item.home ?? item.home_score) || 0;
+            const aVal = Number(item.away ?? item.away_score) || 0;
+            // If events did not produce points for this set, fill from score_detail
+            if (!existing || (existing.home === 0 && existing.away === 0)) {
+                setPointsMap.set(setNum, { home: hVal, away: aVal });
+            }
         });
     }
 
@@ -92,9 +135,9 @@ export function VolleyballScoreBox({
                             })}
                         </div>
                     </div>
-                ) : isFinished ? (
-                    /* Finished Mode: Show Main Sets Score (e.g. 3-1) as Main Score, and All Set Scores History below */
-                    <div className="flex flex-col min-w-[4rem] items-center leading-none gap-0.5">
+                ) : (isFinished || match.status === 'completed' || homeSetsWon > 0 || awaySetsWon > 0) ? (
+                    /* Finished / Scored Mode: Show Main Sets Score (e.g. 2-0) as Main Score, and All Set Scores History below */
+                    <div className="flex flex-col min-w-[4rem] items-center leading-none">
                         <div className="flex items-center gap-1 md:gap-2">
                             <span className="text-base md:text-lg font-black text-foreground tracking-tighter">
                                 {homeSetsWon}
@@ -108,12 +151,12 @@ export function VolleyballScoreBox({
                         </div>
 
                         {setNumbers.length > 0 && (
-                            <div className="flex items-center gap-1 flex-wrap justify-center text-[9px] font-bold text-muted-foreground/80 mt-0.5">
+                            <div className="flex items-center gap-1 flex-wrap justify-center text-xs font-semibold text-muted-foreground mt-1">
                                 {setNumbers.map((s) => {
                                     const pts = setPointsMap.get(s)!;
                                     return (
-                                        <span key={s} className="px-1 py-0.5 rounded bg-muted/40">
-                                            {pts.home}-{pts.away}
+                                        <span key={s} className="text-[10px] tracking-tight text-muted-foreground/90 font-medium">
+                                            ({pts.home}-{pts.away})
                                         </span>
                                     );
                                 })}

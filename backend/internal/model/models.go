@@ -107,6 +107,7 @@ type Tournament struct {
 	DocumentDeadline   *time.Time             `json:"-"`
 	IsPublic           bool                   `json:"is_public"`
 	SportName          string                 `json:"sport_name,omitempty"`
+	Sport              string                 `json:"sport,omitempty"`
 	TeamsCount         int                    `json:"teams_count"`
 	MaxTeams           int                    `json:"max_teams"`
 	DocDeadlineStr     *string                `json:"document_deadline,omitempty"`
@@ -348,6 +349,11 @@ type Match struct {
 	TournamentCategoryID *uuid.UUID             `json:"tournament_category_id,omitempty"`
 	MatchIndex           int                    `json:"match_index,omitempty"`
 	WinnerToNodeID       *string                `json:"winner_to_node_id,omitempty"`
+	WinnerID             *uuid.UUID             `json:"winner_id,omitempty"`
+	HomePenaltyScore     *int                   `json:"home_penalty_score,omitempty"`
+	AwayPenaltyScore     *int                   `json:"away_penalty_score,omitempty"`
+	PenaltyHomeScore     *int                   `json:"penalty_home_score,omitempty"`
+	PenaltyAwayScore     *int                   `json:"penalty_away_score,omitempty"`
 	PlaceholderHome      *string                `json:"placeholder_home,omitempty"`
 	PlaceholderAway      *string                `json:"placeholder_away,omitempty"`
 	PlaceholderA         *string                `json:"placeholder_a,omitempty"`

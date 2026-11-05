@@ -82,6 +82,16 @@ func RunMigrations(pool *pgxpool.Pool) error {
 		log.Printf("⚠️ Self-healing tournament document_deadline schema: %v", err)
 	}
 
+	ensureTournamentsSportSQL := `
+	ALTER TABLE tournaments ADD COLUMN IF NOT EXISTS sport_id INTEGER REFERENCES sports(id) ON DELETE SET NULL;
+	UPDATE tournaments 
+	SET sport_id = (settings->>'sport_id')::integer 
+	WHERE sport_id IS NULL AND settings->>'sport_id' IS NOT NULL AND settings->>'sport_id' ~ '^\d+$';
+	`
+	if _, err := pool.Exec(ctx, ensureTournamentsSportSQL); err != nil {
+		log.Printf("Self-healing tournament sport_id schema: %v", err)
+	}
+
 	// 2. Discover migrations directory reliably (supports Docker /app, relative, and local)
 	candidates := []string{
 		"/app/migrations",

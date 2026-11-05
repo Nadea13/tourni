@@ -26,7 +26,32 @@ func (r *TournamentRepository) List(ctx context.Context, status string, organize
 		SELECT 
 			t.id, t.organizer_id, t.name, t.slug, t.description, t.format, 
 			CASE
-				WHEN t.status = 'ongoing' AND t.end_date IS NOT NULL AND CURRENT_DATE > t.end_date THEN 'completed'::tournament_status
+				WHEN t.status = 'ongoing' AND (t.settings->>'status_unlocked' IS NULL OR t.settings->>'status_unlocked' != 'true') AND (
+					-- Case 1: แข่งจบครบทุกคู่แล้วจริง ๆ 100%% (ต้องไม่มีคู่ค้างอยู่เลย)
+					(
+						EXISTS (
+							SELECT 1 FROM matches m 
+							JOIN tournament_categories tc ON m.category_id = tc.id 
+							WHERE tc.tournament_id = t.id AND m.deleted_at IS NULL
+						)
+						AND NOT EXISTS (
+							SELECT 1 FROM matches m 
+							JOIN tournament_categories tc ON m.category_id = tc.id 
+							WHERE tc.tournament_id = t.id AND m.deleted_at IS NULL 
+							  AND m.status::text NOT IN ('finished', 'completed', 'canceled', 'cancelled')
+						)
+					)
+					-- Case 2: ไม่มีการสร้างแมตช์ในระบบเลย และเลยกำหนดวันแข่ง + เผื่อเวลา 1 วัน
+					OR (
+						NOT EXISTS (
+							SELECT 1 FROM matches m 
+							JOIN tournament_categories tc ON m.category_id = tc.id 
+							WHERE tc.tournament_id = t.id AND m.deleted_at IS NULL
+						)
+						AND t.end_date IS NOT NULL 
+						AND CURRENT_DATE > (t.end_date + INTERVAL '1 day')
+					)
+				) THEN 'completed'::tournament_status
 				ELSE t.status
 			END as status,
 			t.start_date::text, t.end_date::text, t.location, t.banner_url, t.logo_url, t.rules, t.settings, 
@@ -46,7 +71,32 @@ func (r *TournamentRepository) List(ctx context.Context, status string, organize
 	if status != "" {
 		query += fmt.Sprintf(` AND (
 			CASE
-				WHEN t.status = 'ongoing' AND t.end_date IS NOT NULL AND CURRENT_DATE > t.end_date THEN 'completed'
+				WHEN t.status = 'ongoing' AND (t.settings->>'status_unlocked' IS NULL OR t.settings->>'status_unlocked' != 'true') AND (
+					-- Case 1: แข่งจบครบทุกคู่แล้วจริง ๆ 100%% (ต้องไม่มีคู่ค้างอยู่เลย)
+					(
+						EXISTS (
+							SELECT 1 FROM matches m 
+							JOIN tournament_categories tc ON m.category_id = tc.id 
+							WHERE tc.tournament_id = t.id AND m.deleted_at IS NULL
+						)
+						AND NOT EXISTS (
+							SELECT 1 FROM matches m 
+							JOIN tournament_categories tc ON m.category_id = tc.id 
+							WHERE tc.tournament_id = t.id AND m.deleted_at IS NULL 
+							  AND m.status::text NOT IN ('finished', 'completed', 'canceled', 'cancelled')
+						)
+					)
+					-- Case 2: ไม่มีการสร้างแมตช์ในระบบเลย และเลยกำหนดวันแข่ง + เผื่อเวลา 1 วัน
+					OR (
+						NOT EXISTS (
+							SELECT 1 FROM matches m 
+							JOIN tournament_categories tc ON m.category_id = tc.id 
+							WHERE tc.tournament_id = t.id AND m.deleted_at IS NULL
+						)
+						AND t.end_date IS NOT NULL 
+						AND CURRENT_DATE > (t.end_date + INTERVAL '1 day')
+					)
+				) THEN 'completed'
 				ELSE t.status::text
 			END = $%d
 		)`, argIdx)
@@ -94,12 +144,16 @@ func (r *TournamentRepository) List(ctx context.Context, status string, organize
 		}
 		t.SportID = sportID
 		t.SportName = sportName
+		t.Sport = sportName
 		t.TeamsCount = teamsCount
 		t.MaxTeams = maxTeams
 		t.DocDeadlineStr = docDeadline
 		delete(t.Settings, "document_deadline")
 		if sportName != "" {
 			t.Settings["sport_name"] = sportName
+		}
+		if sportID != nil {
+			t.Settings["sport_id"] = *sportID
 		}
 		t.Settings["teams_count"] = teamsCount
 		t.Settings["max_teams"] = maxTeams
@@ -114,7 +168,32 @@ func (r *TournamentRepository) GetByID(ctx context.Context, id uuid.UUID) (*mode
 		SELECT 
 			t.id, t.organizer_id, t.name, t.slug, t.description, t.format, 
 			CASE
-				WHEN t.status = 'ongoing' AND t.end_date IS NOT NULL AND CURRENT_DATE > t.end_date THEN 'completed'::tournament_status
+				WHEN t.status = 'ongoing' AND (t.settings->>'status_unlocked' IS NULL OR t.settings->>'status_unlocked' != 'true') AND (
+					-- Case 1: แข่งจบครบทุกคู่แล้วจริง ๆ 100%% (ต้องไม่มีคู่ค้างอยู่เลย)
+					(
+						EXISTS (
+							SELECT 1 FROM matches m 
+							JOIN tournament_categories tc ON m.category_id = tc.id 
+							WHERE tc.tournament_id = t.id AND m.deleted_at IS NULL
+						)
+						AND NOT EXISTS (
+							SELECT 1 FROM matches m 
+							JOIN tournament_categories tc ON m.category_id = tc.id 
+							WHERE tc.tournament_id = t.id AND m.deleted_at IS NULL 
+							  AND m.status::text NOT IN ('finished', 'completed', 'canceled', 'cancelled')
+						)
+					)
+					-- Case 2: ไม่มีการสร้างแมตช์ในระบบเลย และเลยกำหนดวันแข่ง + เผื่อเวลา 1 วัน
+					OR (
+						NOT EXISTS (
+							SELECT 1 FROM matches m 
+							JOIN tournament_categories tc ON m.category_id = tc.id 
+							WHERE tc.tournament_id = t.id AND m.deleted_at IS NULL
+						)
+						AND t.end_date IS NOT NULL 
+						AND CURRENT_DATE > (t.end_date + INTERVAL '1 day')
+					)
+				) THEN 'completed'::tournament_status
 				ELSE t.status
 			END as status,
 			t.start_date::text, t.end_date::text, t.location, t.banner_url, t.logo_url, t.rules, t.settings, t.created_at, t.updated_at,
@@ -158,12 +237,16 @@ func (r *TournamentRepository) GetByID(ctx context.Context, id uuid.UUID) (*mode
 	}
 	t.SportID = sportID
 	t.SportName = sportName
+	t.Sport = sportName
 	t.TeamsCount = teamsCount
 	t.MaxTeams = maxTeams
 	t.DocDeadlineStr = docDeadline
 	delete(t.Settings, "document_deadline")
 	if sportName != "" {
 		t.Settings["sport_name"] = sportName
+	}
+	if sportID != nil {
+		t.Settings["sport_id"] = *sportID
 	}
 	t.Settings["teams_count"] = teamsCount
 	t.Settings["max_teams"] = maxTeams
@@ -181,20 +264,33 @@ func (r *TournamentRepository) GetByID(ctx context.Context, id uuid.UUID) (*mode
 
 func (r *TournamentRepository) Create(ctx context.Context, t *model.Tournament) error {
 	query := `
-		INSERT INTO tournaments (organizer_id, name, slug, description, format, status, start_date, end_date, location, banner_url, logo_url, rules, settings, document_deadline)
-		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, CASE WHEN $14::text = '' OR $14::text IS NULL THEN NULL ELSE $14::date END)
+		INSERT INTO tournaments (organizer_id, sport_id, name, slug, description, format, status, start_date, end_date, location, banner_url, logo_url, rules, settings, document_deadline)
+		VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, CASE WHEN $15::text = '' OR $15::text IS NULL THEN NULL ELSE $15::date END)
 		RETURNING id, created_at, updated_at
 	`
 	delete(t.Settings, "document_deadline")
 	settingsJSON, _ := json.Marshal(t.Settings)
 	err := r.db.QueryRow(
 		ctx, query,
-		t.OrganizerID, t.Name, t.Slug, t.Description, t.Format, t.Status,
+		t.OrganizerID, t.SportID, t.Name, t.Slug, t.Description, t.Format, t.Status,
 		t.StartDate, t.EndDate, t.Location, t.BannerURL, t.LogoURL, t.Rules, settingsJSON, t.DocDeadlineStr,
 	).Scan(&t.ID, &t.CreatedAt, &t.UpdatedAt)
 
 	if err != nil {
 		return fmt.Errorf("failed to create tournament: %w", err)
+	}
+
+	if t.SportID != nil {
+		var sName string
+		_ = r.db.QueryRow(ctx, `SELECT sport_name FROM sports WHERE id = $1`, *t.SportID).Scan(&sName)
+		if sName != "" {
+			t.SportName = sName
+			t.Sport = sName
+			if t.Settings != nil {
+				t.Settings["sport_name"] = sName
+				t.Settings["sport_id"] = *t.SportID
+			}
+		}
 	}
 	return nil
 }
@@ -238,6 +334,9 @@ func (r *TournamentRepository) Update(ctx context.Context, t *model.Tournament) 
 	if t.DocDeadlineStr == nil {
 		t.DocDeadlineStr = existing.DocDeadlineStr
 	}
+	if t.SportID == nil {
+		t.SportID = existing.SportID
+	}
 	if t.Settings == nil {
 		t.Settings = existing.Settings
 	} else {
@@ -262,14 +361,15 @@ func (r *TournamentRepository) Update(ctx context.Context, t *model.Tournament) 
 		    start_date = $5, end_date = $6, location = $7, banner_url = $8,
 		    logo_url = $9, rules = $10, settings = $11,
 		    document_deadline = CASE WHEN $12::text = '' OR $12::text IS NULL THEN NULL ELSE $12::date END,
+		    sport_id = $13,
 		    updated_at = NOW()
-		WHERE id = $13
+		WHERE id = $14
 	`
 	settingsJSON, _ := json.Marshal(t.Settings)
 	_, err = r.db.Exec(ctx, query,
 		t.Name, t.Description, t.Format, t.Status,
 		t.StartDate, t.EndDate, t.Location, t.BannerURL,
-		t.LogoURL, t.Rules, settingsJSON, t.DocDeadlineStr, t.ID,
+		t.LogoURL, t.Rules, settingsJSON, t.DocDeadlineStr, t.SportID, t.ID,
 	)
 	return err
 }

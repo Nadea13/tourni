@@ -122,6 +122,32 @@ func scanMatchRow(scanner interface {
 
 	if len(scoreDetailBytes) > 0 {
 		_ = json.Unmarshal(scoreDetailBytes, &m.ScoreDetail)
+		if m.ScoreDetail != nil {
+			if v, ok := m.ScoreDetail["penalty_home_score"].(float64); ok {
+				val := int(v)
+				m.PenaltyHomeScore = &val
+				m.HomePenaltyScore = &val
+			} else if v, ok := m.ScoreDetail["home_penalty_score"].(float64); ok {
+				val := int(v)
+				m.PenaltyHomeScore = &val
+				m.HomePenaltyScore = &val
+			}
+			if v, ok := m.ScoreDetail["penalty_away_score"].(float64); ok {
+				val := int(v)
+				m.PenaltyAwayScore = &val
+				m.AwayPenaltyScore = &val
+			} else if v, ok := m.ScoreDetail["away_penalty_score"].(float64); ok {
+				val := int(v)
+				m.PenaltyAwayScore = &val
+				m.AwayPenaltyScore = &val
+			}
+			if v, ok := m.ScoreDetail["winner_id"].(string); ok && v != "" {
+				if parsed, err := uuid.Parse(v); err == nil {
+					m.WinnerID = &parsed
+					m.WinnerToNodeID = &v
+				}
+			}
+		}
 	}
 
 	if htID != nil {
@@ -450,13 +476,35 @@ func (r *MatchRepository) SyncCategoryMatches(ctx context.Context, categoryID uu
 		if existing == nil {
 			return
 		}
-		m.Status = existing.Status
-		m.HomeScore = existing.HomeScore
-		m.AwayScore = existing.AwayScore
-		m.TimerStatus = existing.TimerStatus
-		m.ElapsedSeconds = existing.ElapsedSeconds
-		m.Minute = existing.Minute
-		m.ScoreDetail = existing.ScoreDetail
+		if m.Status == "" || (m.Status == "scheduled" && existing.Status != "") {
+			m.Status = existing.Status
+		}
+		if m.Status == "finished" || m.Status == "completed" {
+			m.TimerStatus = "stopped"
+		} else if m.TimerStatus == "" {
+			m.TimerStatus = existing.TimerStatus
+		}
+		if m.HomeScore == 0 && existing.HomeScore > 0 {
+			m.HomeScore = existing.HomeScore
+		}
+		if m.AwayScore == 0 && existing.AwayScore > 0 {
+			m.AwayScore = existing.AwayScore
+		}
+		if m.ElapsedSeconds == 0 && existing.ElapsedSeconds > 0 {
+			m.ElapsedSeconds = existing.ElapsedSeconds
+		}
+		if m.Minute == nil && existing.Minute != nil {
+			m.Minute = existing.Minute
+		}
+		if m.ScoreDetail == nil && existing.ScoreDetail != nil {
+			m.ScoreDetail = existing.ScoreDetail
+		}
+		if m.NextNodeID == nil && existing.NextNodeID != nil {
+			m.NextNodeID = existing.NextNodeID
+		}
+		if m.WinnerToNodeID == nil && existing.WinnerToNodeID != nil {
+			m.WinnerToNodeID = existing.WinnerToNodeID
+		}
 
 		isEndedOrLive := existing.Status == "finished" || existing.Status == "completed" || existing.Status == "live" || existing.Status == "first_half" || existing.Status == "second_half" || existing.Status == "half_time" || existing.Status == "extra_time" || existing.Status == "penalties"
 		hasResult := isEndedOrLive || existing.HomeScore > 0 || existing.AwayScore > 0

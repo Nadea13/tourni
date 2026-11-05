@@ -23,7 +23,7 @@ func NewExtraRepository(db *pgxpool.Pool) *ExtraRepository {
 // ================= Sports & Age Categories =================
 
 func (r *ExtraRepository) ListSports(ctx context.Context) ([]*model.Sport, error) {
-	query := `SELECT id, sport_name, sport_type, created_at, updated_at FROM sports WHERE deleted_at IS NULL AND LOWER(sport_name) IN ('football', 'volleyball') ORDER BY id ASC`
+	query := `SELECT id, sport_name, sport_type, created_at, updated_at FROM sports WHERE deleted_at IS NULL AND LOWER(sport_name) IN ('football', 'volleyball', 'futsal') ORDER BY id ASC`
 	rows, err := r.db.Query(ctx, query)
 	if err != nil {
 		return nil, err

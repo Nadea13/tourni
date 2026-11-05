@@ -82,6 +82,34 @@ func (h *MatchHandler) Update(c *fiber.Ctx) error {
 				m.ElapsedSeconds = existing.ElapsedSeconds
 				m.ElapsedBeforePause = existing.ElapsedBeforePause
 			}
+
+			if m.ScoreDetail == nil {
+				if existing.ScoreDetail != nil {
+					m.ScoreDetail = make(map[string]interface{})
+					for k, v := range existing.ScoreDetail {
+						m.ScoreDetail[k] = v
+					}
+				} else {
+					m.ScoreDetail = make(map[string]interface{})
+				}
+			}
+			if ph, ok := rawMap["penalty_home_score"]; ok {
+				m.ScoreDetail["penalty_home_score"] = ph
+				m.ScoreDetail["home_penalty_score"] = ph
+			} else if ph, ok := rawMap["home_penalty_score"]; ok {
+				m.ScoreDetail["penalty_home_score"] = ph
+				m.ScoreDetail["home_penalty_score"] = ph
+			}
+			if pa, ok := rawMap["penalty_away_score"]; ok {
+				m.ScoreDetail["penalty_away_score"] = pa
+				m.ScoreDetail["away_penalty_score"] = pa
+			} else if pa, ok := rawMap["away_penalty_score"]; ok {
+				m.ScoreDetail["penalty_away_score"] = pa
+				m.ScoreDetail["away_penalty_score"] = pa
+			}
+			if wid, ok := rawMap["winner_id"]; ok && wid != nil {
+				m.ScoreDetail["winner_id"] = wid
+			}
 		}
 	}
 

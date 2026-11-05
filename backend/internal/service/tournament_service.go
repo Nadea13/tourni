@@ -3,6 +3,7 @@ package service
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 
 	"github.com/google/uuid"
@@ -21,6 +22,7 @@ func NewTournamentService(repo *repository.TournamentRepository) *TournamentServ
 
 type CreateTournamentInput struct {
 	Name             string                 `json:"name"`
+	SportID          interface{}            `json:"sport_id,omitempty"`
 	Description      *string                `json:"description,omitempty"`
 	Format           model.TournamentFormat `json:"format"`
 	StartDate        string                 `json:"start_date"`
@@ -32,6 +34,29 @@ type CreateTournamentInput struct {
 	Rules            *string                `json:"rules,omitempty"`
 	Settings         map[string]interface{} `json:"settings"`
 	Categories       []CreateCategoryInput  `json:"categories,omitempty"`
+}
+
+func parseSportID(raw interface{}) *int {
+	if raw == nil {
+		return nil
+	}
+	switch v := raw.(type) {
+	case float64:
+		i := int(v)
+		if i > 0 {
+			return &i
+		}
+	case int:
+		if v > 0 {
+			return &v
+		}
+	case string:
+		str := strings.TrimSpace(v)
+		if i, err := strconv.Atoi(str); err == nil && i > 0 {
+			return &i
+		}
+	}
+	return nil
 }
 
 type CreateCategoryInput struct {
@@ -85,8 +110,16 @@ func (s *TournamentService) Create(ctx context.Context, organizerID uuid.UUID, i
 	}
 	delete(input.Settings, "document_deadline")
 
+	var sportID *int
+	if input.SportID != nil {
+		sportID = parseSportID(input.SportID)
+	} else if val, ok := input.Settings["sport_id"]; ok && val != nil {
+		sportID = parseSportID(val)
+	}
+
 	tournament := &model.Tournament{
 		OrganizerID:    organizerID,
+		SportID:        sportID,
 		Name:           input.Name,
 		Slug:           slug,
 		Description:    input.Description,

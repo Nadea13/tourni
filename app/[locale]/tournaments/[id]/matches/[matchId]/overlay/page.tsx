@@ -285,7 +285,14 @@ function BroadcastOverlayContent() {
     const match = useDelayedValue(realMatch, delay) || realMatch;
     const events = useDelayedValue(realEvents || [], delay);
 
-    const { time } = useMatchTimer(match || ({} as Match), id, events, delay);
+    const isFutsal = Boolean(
+        (match as any)?.sport === 'futsal' ||
+        (match as any)?.sport?.includes('futsal') ||
+        (match as any)?.sport?.includes('ฟุตซอล') ||
+        (match as any)?.sport_name?.toLowerCase().includes('futsal') ||
+        (match as any)?.sport_name?.includes('ฟุตซอล')
+    );
+    const { time } = useMatchTimer(match || ({} as Match), id, events, delay, isFutsal);
 
     // Live Notification Ticker System
     const [activeNotification, setActiveNotification] = useState<OverlayNotification | null>(null);

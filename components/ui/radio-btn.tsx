@@ -50,7 +50,7 @@ export function RadioBtn({
 }: RadioBtnProps) {
     let items = options || sports || [];
     if (sports && sports.length > 0) {
-        const allowed = ['football', 'volleyball'];
+        const allowed = ['football', 'volleyball', 'futsal'];
         items = items.filter((item) => {
             const name = getOptionDisplayName(item).toLowerCase();
             return allowed.includes(name);

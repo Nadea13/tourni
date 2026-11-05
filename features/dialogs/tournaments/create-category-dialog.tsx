@@ -16,6 +16,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/dropdown";
+import { RadioBtn } from "@/components/ui/radio-btn";
 import {
     Loader2,
     Users,
@@ -478,15 +479,15 @@ export function CreateCategoryForm({
                                     </div>
                                 </div>
                                 <div className="sm:w-1/2 w-full">
-                                    <Select value={maxSets} onValueChange={setMaxSets} disabled={isPending}>
-                                        <SelectTrigger size="sm" className="w-full">
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            <SelectItem value="3">{isThai ? "ชนะ 2 ใน 3 เซ็ต (Best of 3)" : "Best of 3 Sets"}</SelectItem>
-                                            <SelectItem value="5">{isThai ? "ชนะ 3 ใน 5 เซ็ต (Best of 5)" : "Best of 5 Sets"}</SelectItem>
-                                        </SelectContent>
-                                    </Select>
+                                    <RadioBtn
+                                        value={maxSets}
+                                        onChange={setMaxSets}
+                                        disabled={isPending}
+                                        options={[
+                                            { id: "3", label: isThai ? "3 เซ็ต" : "3 Sets", icon: <span className="font-bold w-4 h-4 flex items-center justify-center leading-none">3</span> },
+                                            { id: "5", label: isThai ? "5 Sets" : "5 Sets", icon: <span className="font-bold w-4 h-4 flex items-center justify-center leading-none">5</span> },
+                                        ]}
+                                    />
                                 </div>
                             </div>
                         )}

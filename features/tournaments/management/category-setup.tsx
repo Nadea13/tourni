@@ -14,6 +14,7 @@ import {
     SelectTrigger,
     SelectValue,
 } from "@/components/ui/dropdown";
+import { RadioBtn } from "@/components/ui/radio-btn";
 import { ActionResponse } from "@/types/index";
 import {
     Loader2,
@@ -23,6 +24,7 @@ import {
     CreditCard,
     QrCode,
     Building2,
+    Layers,
     UserCheck,
 } from "lucide-react";
 
@@ -30,6 +32,7 @@ interface CategorySetupProps {
     tournamentId: string;
     ageCategories: { id: number; category_name: string }[];
     tournamentName: string;
+    sport?: string;
 }
 
 const defaultAgeCategories = [
@@ -47,7 +50,7 @@ const initialState: ActionResponse = {
     error: undefined,
 };
 
-export function CategorySetup({ tournamentId, ageCategories, tournamentName }: CategorySetupProps) {
+export function CategorySetup({ tournamentId, ageCategories, tournamentName, sport }: CategorySetupProps) {
     const t = useTranslations("CategorySetup");
     const locale = useLocale();
     const isThai = locale === "th";
@@ -64,6 +67,8 @@ export function CategorySetup({ tournamentId, ageCategories, tournamentName }: C
     const [bankName, setBankName] = useState<string>("PromptPay");
     const [bankAccountNumber, setBankAccountNumber] = useState<string>("");
     const [bankAccountName, setBankAccountName] = useState<string>("");
+    const [maxSets, setMaxSets] = useState<string>("3");
+    const isVolleyball = sport === "volleyball" || sport?.includes("volleyball") || sport?.includes("วอลเลย์บอล");
 
     const [state, formAction, isPending] = useActionState(
         async (_prevState: ActionResponse, _formData: FormData) => {
@@ -117,13 +122,14 @@ export function CategorySetup({ tournamentId, ageCategories, tournamentName }: C
                   }
                 : null;
 
+            const rulesConfig = isVolleyball ? { max_sets: parseInt(maxSets) || 3 } : null;
             return createTournamentCategory(
                 tournamentId,
                 ageCatRes.id,
                 genderType,
                 parseInt(maxTeams),
                 parseFloat(registrationFee) || 0,
-                null,
+                rulesConfig,
                 bankDetails
             );
         },
@@ -295,6 +301,37 @@ export function CategorySetup({ tournamentId, ageCategories, tournamentName }: C
                                 />
                             </div>
                         </div>
+
+                        
+                        {/* 4.1 Match Sets (Volleyball only) */}
+                        {isVolleyball && (
+                            <div className="flex flex-col sm:flex-row sm:items-center justify-between px-4 py-2">
+                                <div className="flex items-start gap-3 sm:gap-4 sm:w-1/2">
+                                    <div className="size-9 rounded-sm bg-muted-foreground/10 flex items-center justify-center shrink-0">
+                                        <Layers className="size-4 text-muted-foreground" />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <Header level={6}>
+                                            {isThai ? "จำนวนเซ็ตการแข่งขัน" : "Match Sets"}
+                                        </Header>
+                                        <p className="text-xs text-muted-foreground">
+                                            {isThai ? "รูปแบบการตัดสินจำนวนเซ็ตของกีฬาวอลเลย์บอล" : "Set format for volleyball matches"}
+                                        </p>
+                                    </div>
+                                </div>
+                                <div className="sm:w-1/2 w-full">
+                                    <RadioBtn
+                                        value={maxSets}
+                                        onChange={setMaxSets}
+                                        disabled={isPending}
+                                        options={[
+                                            { id: "3", label: isThai ? "3 เซ็ต" : "3 Sets", icon: <span className="font-bold w-4 h-4 flex items-center justify-center leading-none">3</span> },
+                                            { id: "5", label: isThai ? "5 Sets" : "5 Sets", icon: <span className="font-bold w-4 h-4 flex items-center justify-center leading-none">5</span> },
+                                        ]}
+                                    />
+                                </div>
+                            </div>
+                        )}
 
                         {/* 5. Bank Details Section (แบบ profile form) */}
                         <div className="-mx-4 border-t border-border my-4" />

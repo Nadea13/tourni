@@ -38,6 +38,14 @@ export default async function TournamentPage({ params }: { params: Promise<{ id:
     const userRole = roleRes.success && roleRes.data ? roleRes.data.role : null;
     const isOwner = roleRes.success && roleRes.data ? roleRes.data.isOwner : false;
 
+    const rawSport = (typeof tournamentData.sport === 'object' && tournamentData.sport !== null ? tournamentData.sport.sport_name || tournamentData.sport.name : null) ||
+                     tournamentData.sport_name ||
+                     (typeof tournamentData.sport === 'string' ? tournamentData.sport : null) ||
+                     (tournamentData.sport_id === 2 ? 'volleyball' : tournamentData.sport_id === 4 ? 'futsal' : tournamentData.sport_id === 1 ? 'football' : '') ||
+                     (tournamentData.settings?.sport_id === 2 || tournamentData.settings?.sport_id === "2" ? 'volleyball' : tournamentData.settings?.sport_id === 4 || tournamentData.settings?.sport_id === "4" ? 'futsal' : '') ||
+                     (tournamentData.name?.toLowerCase().includes("volleyball") || tournamentData.name?.includes("วอลเลย์บอล") ? "volleyball" : tournamentData.name?.toLowerCase().includes("futsal") || tournamentData.name?.includes("ฟุตซอล") ? "futsal" : 'football');
+    const sportName = rawSport.toLowerCase();
+
     const category = categories && categories.length > 0 ? categories[0] : null;
     if (!category) {
         if (userRole === "admin" || userRole === "editor" || isOwner) {
@@ -56,6 +64,7 @@ export default async function TournamentPage({ params }: { params: Promise<{ id:
                     tournamentId={id}
                     ageCategories={ageCategories}
                     tournamentName={tournamentData.name}
+                    sport={sportName}
                 />
             );
         } else {
@@ -78,9 +87,7 @@ export default async function TournamentPage({ params }: { params: Promise<{ id:
     const canvasData = category ? category.canvas_data : null;
     const maxTeams = category ? category.max_teams : 8;
 
-    const sportsObj = tournamentData.sports as unknown as { sport_name: string } | { sport_name: string }[] | null;
-    const sportsList = Array.isArray(sportsObj) ? sportsObj : (sportsObj ? [sportsObj] : []);
-    const sportName = (sportsList[0]?.sport_name?.toLowerCase() || 'football') as 'football';
+    
 
     const tournament = {
         ...tournamentData,
@@ -150,8 +157,21 @@ export default async function TournamentPage({ params }: { params: Promise<{ id:
     });
 
     const matches = (allMatches || []).map((m: any) => {
+        const penalty_home_score = m.penalty_home_score ??
+            m.home_penalty_score ??
+            m.score_detail?.penalty_home_score ??
+            m.score_detail?.home_penalty_score;
+        const penalty_away_score = m.penalty_away_score ??
+            m.away_penalty_score ??
+            m.score_detail?.penalty_away_score ??
+            m.score_detail?.away_penalty_score;
+        const winner_id = m.winner_id || m.winner_to_node_id || m.score_detail?.winner_id;
+
         return {
             ...m,
+            penalty_home_score,
+            penalty_away_score,
+            winner_id,
             home_team: m.home_team ? { id: m.home_team_id, name: m.home_team.name, logo_url: m.home_team.logo_url || m.home_team.logo_img } : null,
             away_team: m.away_team ? { id: m.away_team_id, name: m.away_team.name, logo_url: m.away_team.logo_url || m.away_team.logo_img } : null,
             home_score: m.home_score || 0,

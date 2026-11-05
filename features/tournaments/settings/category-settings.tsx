@@ -20,6 +20,7 @@ import {
     SelectTrigger,
     SelectValue
 } from "@/components/ui/dropdown";
+import { RadioBtn } from "@/components/ui/radio-btn";
 import {
     Loader2,
     Trophy,
@@ -111,6 +112,14 @@ export function CategorySettings({
     const [deleteConfirmText, setDeleteConfirmText] = useState("");
     const deleteScrollRef = useRef<HTMLDivElement>(null);
 
+    useEffect(() => {
+        if (initialSport) {
+            setSport(initialSport.toLowerCase());
+        } else if (storeSport) {
+            setSport(storeSport.toLowerCase());
+        }
+    }, [initialSport, storeSport]);
+
     const loadData = useCallback(async () => {
         setIsLoading(true);
         try {
@@ -122,9 +131,15 @@ export function CategorySettings({
                 const catData = data.categories || [];
 
                 if (tournamentData) {
-                    const rawSport = tournamentData.settings?.sport_id ||
-                                     (tournamentData.name?.toLowerCase().includes("volleyball") || tournamentData.name?.includes("วอลเลย์บอล") ? "volleyball" : "football");
-                    setSport(rawSport.toLowerCase());
+                    const rawSport = (typeof tournamentData.sport === 'object' && tournamentData.sport !== null ? tournamentData.sport.sport_name || tournamentData.sport.name : null) ||
+                                     tournamentData.sport_name ||
+                                     (typeof tournamentData.sport === 'string' ? tournamentData.sport : null) ||
+                                     (tournamentData.sport_id === 2 || tournamentData.settings?.sport_id === "2" || tournamentData.settings?.sport_id === 2 ? "volleyball" : "") ||
+                                     (tournamentData.sport_id === 4 || tournamentData.settings?.sport_id === "4" || tournamentData.settings?.sport_id === 4 ? "futsal" : "") ||
+                                     (tournamentData.sport_id === 1 || tournamentData.settings?.sport_id === "1" || tournamentData.settings?.sport_id === 1 ? "football" : "") ||
+                                     tournamentData.settings?.sport_id ||
+                                     (tournamentData.name?.toLowerCase().includes("volleyball") || tournamentData.name?.includes("วอลเลย์บอล") ? "volleyball" : tournamentData.name?.toLowerCase().includes("futsal") || tournamentData.name?.includes("ฟุตซอล") ? "futsal" : "football");
+                    setSport(String(rawSport || "football").toLowerCase());
                 }
 
                 if (catData) {
@@ -677,22 +692,18 @@ export function CategorySettings({
                             </div>
                         </div>
                         <div className="sm:w-2/3 space-y-1">
-                            <Select
+                            <RadioBtn
                                 value={maxSets}
-                                onValueChange={(val) => {
+                                onChange={(val) => {
                                     setMaxSets(val);
                                     setLastModifiedField('maxSets');
                                 }}
                                 disabled={isSaving || isDeleting}
-                            >
-                                <SelectTrigger size="sm" className="w-full">
-                                    <SelectValue />
-                                </SelectTrigger>
-                                <SelectContent>
-                                    <SelectItem value="3">{isThai ? "ชนะ 2 ใน 3 เซ็ต (Best of 3)" : "Best of 3 Sets"}</SelectItem>
-                                    <SelectItem value="5">{isThai ? "ชนะ 3 ใน 5 เซ็ต (Best of 5)" : "Best of 5 Sets"}</SelectItem>
-                                </SelectContent>
-                            </Select>
+                                options={[
+                                    { id: "3", label: isThai ? "3 เซ็ต" : "3 Sets", icon: <span className="font-bold w-4 h-4 flex items-center justify-center leading-none">3</span> },
+                                    { id: "5", label: isThai ? "5 Sets" : "5 Sets", icon: <span className="font-bold w-4 h-4 flex items-center justify-center leading-none">5</span> },
+                                ]}
+                            />
                             {activeActionField === 'maxSets' && renderActionButtons()}
                         </div>
                     </div>

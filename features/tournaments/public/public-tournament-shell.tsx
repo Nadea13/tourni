@@ -140,14 +140,29 @@ export function PublicTournamentShell({
         },
         onMatchUpdate: ({ match }) => {
             if (!match?.id) return;
+            const penalty_home_score = match.penalty_home_score ??
+                match.home_penalty_score ??
+                match.score_detail?.penalty_home_score ??
+                match.score_detail?.home_penalty_score;
+            const penalty_away_score = match.penalty_away_score ??
+                match.away_penalty_score ??
+                match.score_detail?.penalty_away_score ??
+                match.score_detail?.away_penalty_score;
+            const winner_id = match.winner_id || match.winner_to_node_id || match.score_detail?.winner_id;
+            const normalizedMatch = {
+                ...match,
+                penalty_home_score,
+                penalty_away_score,
+                winner_id
+            };
             setMatches(prev => {
                 const idx = prev.findIndex(m => m.id === match.id);
                 if (idx >= 0) {
                     const updated = [...prev];
-                    updated[idx] = { ...updated[idx], ...match };
+                    updated[idx] = { ...updated[idx], ...normalizedMatch };
                     return updated;
                 }
-                return [...prev, match];
+                return [...prev, normalizedMatch];
             });
         },
         onStandingsSync: () => {
@@ -1159,6 +1174,7 @@ export function PublicTournamentShell({
                         matches={filteredMatchesForDisplay}
                         teams={initialTeams}
                         tournamentId={tournament.id}
+                        sport={tournament.sport}
                         format={tournament.format}
                         startDate={tournament.start_date}
                         endDate={tournament.end_date}

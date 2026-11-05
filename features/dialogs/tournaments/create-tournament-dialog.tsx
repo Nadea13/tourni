@@ -194,6 +194,32 @@ export function TournamentCreate({ iconOnlyMobile = false, isDisabled = false }:
             return;
         }
 
+        const startObj = new Date(startDate);
+        const endObj = new Date(endDate);
+        const diffDays = Math.ceil((endObj.getTime() - startObj.getTime()) / (1000 * 60 * 60 * 24));
+        const effectivePlan = selectedPlan || "free";
+        const isFreePlan = effectivePlan === "free" || effectivePlan === "match" || effectivePlan === "starter";
+        if (isFreePlan && diffDays > 30) {
+            toast({
+                title: isThai ? "เกินระยะเวลาที่กำหนด" : "Duration Exceeded",
+                description: isThai
+                    ? "แพ็กเกจฟรี (Match) รองรับระยะเวลาทัวร์นาเมนต์สูงสุดไม่เกิน 30 วัน (เหมาะกับทัวร์สุดสัปดาห์/ทัวร์สั้น) หากต้องการจัดลีกยาว 2-6 เดือน กรุณาเลือกแพ็กเกจ Event หรือ Tournament"
+                    : "Free plan (Match) supports up to 30 days. For longer leagues (2-6 months), please upgrade to Event or Tournament plan.",
+                variant: "destructive",
+            });
+            return;
+        }
+        if (!isFreePlan && diffDays > 185) {
+            toast({
+                title: isThai ? "เกินระยะเวลาที่กำหนด" : "Duration Exceeded",
+                description: isThai
+                    ? "ระยะเวลาทัวร์นาเมนต์สูงสุดไม่เกิน 6 เดือน (180 วัน)"
+                    : "Maximum tournament duration cannot exceed 6 months (180 days).",
+                variant: "destructive",
+            });
+            return;
+        }
+
         startTransition(async () => {
             const formData = new FormData();
             formData.append("name", name.trim());
@@ -466,6 +492,13 @@ export function TournamentCreate({ iconOnlyMobile = false, isDisabled = false }:
                                     disabled={isPending}
                                     className="w-full"
                                 />
+                                <p className="text-[11px] text-muted-foreground mt-1.5">
+                                    {selectedPlan === "tournament" || selectedPlan === "cup"
+                                        ? (isThai ? "• แพ็กเกจ Tournament รองรับการจัดลีกยาวสูงสุด 6 เดือน (180 วัน)" : "• Tournament plan supports long seasons up to 6 months")
+                                        : selectedPlan === "event" || selectedPlan === "pro"
+                                        ? (isThai ? "• แพ็กเกจ Event รองรับการแข่งขันสูงสุด 3 เดือน (90 วัน)" : "• Event plan supports tournaments up to 3 months")
+                                        : (isThai ? "• แพ็กเกจฟรี (Match) รองรับระยะเวลาแข่งขันสูงสุด 30 วัน (เหมาะกับทัวร์สุดสัปดาห์/ทัวร์สั้น)" : "• Free plan (Match) supports up to 30 days")}
+                                </p>
                             </div>
                         </div>
 

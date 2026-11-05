@@ -113,6 +113,7 @@ export async function getSports(): Promise<ActionResponse<Sport[]>> {
         const defaultSports: Sport[] = [
             { id: 1, sport_name: "Football", created_at: new Date().toISOString() },
             { id: 2, sport_name: "Volleyball", created_at: new Date().toISOString() },
+            { id: 4, sport_name: "Futsal", created_at: new Date().toISOString() },
         ];
 
         try {
@@ -120,7 +121,7 @@ export async function getSports(): Promise<ActionResponse<Sport[]>> {
             if (res.ok) {
                 const data = await res.json();
                 if (Array.isArray(data) && data.length > 0) {
-                    const allowed = ['football', 'volleyball'];
+                    const allowed = ['football', 'volleyball', 'futsal'];
                     const filtered = data.filter((s: any) =>
                         allowed.includes((s.sport_name || s.name || "").toLowerCase())
                     );

@@ -487,6 +487,7 @@ export function PublicTournamentCard({ tournament, href }: PublicTournamentCardP
                                             matches={filteredMatchesByCategory}
                                             teams={allTeams}
                                             tournamentId={tournament.id}
+                                            sport={tournament.sport}
                                             format={tournament.format}
                                             startDate={tournament.start_date}
                                             endDate={tournament.end_date}

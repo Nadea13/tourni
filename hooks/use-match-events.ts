@@ -284,7 +284,7 @@ export function useMatchEvents(matchId: string, tournamentId: string, initialDat
         extraInfo: Record<string, unknown> = {},
         playerName: string = "Unknown"
     ): Promise<{ success: boolean; error?: string }> => {
-        const tempId = `temp-${Date.now()}`;
+        const tempId = `temp-${Date.now()}-${Math.random().toString(36).substring(2, 7)}`;
         const finalPlayerName = playerName && playerName !== "Unknown" ? playerName : (extraInfo?.player_name as string) || "Unknown";
         const enrichedExtraInfo: Record<string, unknown> = {
             ...extraInfo,

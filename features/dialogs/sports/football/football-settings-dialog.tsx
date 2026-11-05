@@ -39,6 +39,7 @@ export interface FootballSettingsDialogProps {
     onOpenChange: (open: boolean) => void;
     match: Match;
     readOnly?: boolean;
+    isFutsal?: boolean;
     showScoreboardPossession: boolean;
     onToggleScoreboardPossession: (enabled: boolean) => void;
     customActionTypes: string[];
@@ -57,6 +58,7 @@ export function FootballSettingsDialog({
     onOpenChange,
     match,
     readOnly,
+    isFutsal,
     showScoreboardPossession,
     onToggleScoreboardPossession,
     customActionTypes,
@@ -71,6 +73,15 @@ export function FootballSettingsDialog({
 }: FootballSettingsDialogProps) {
     const t = useTranslations("Console");
     const locale = useLocale();
+
+    const isFutsalSport = Boolean(
+        isFutsal ||
+        (match as any).sport === 'futsal' ||
+        (match as any).sport?.includes('futsal') ||
+        (match as any).sport?.includes('ฟุตซอล') ||
+        (match as any).sport_name?.toLowerCase().includes('futsal') ||
+        (match as any).sport_name?.includes('ฟุตซอล')
+    );
 
     const [isActionsExpanded, setIsActionsExpanded] = useState(false);
     const [isLogsExpanded, setIsLogsExpanded] = useState(false);
@@ -88,7 +99,7 @@ export function FootballSettingsDialog({
         { type: 'bad_pass', label: t("bad_pass") || "ออกข้าง", icon: ArrowUpRight },
         { type: 'cross', label: t("cross") || "ครอสบอล", icon: CornerUpRight },
         { type: 'possession', label: t("possession_action") || "การครองบอล (ตัดบอล)", icon: Scissors },
-        { type: 'offside', label: t("offside") || "ล้ำหน้า", icon: FlagTriangleRight },
+        ...(isFutsalSport ? [] : [{ type: 'offside', label: t("offside") || "ล้ำหน้า", icon: FlagTriangleRight }]),
     ];
 
     const allLogItems = [
@@ -100,7 +111,7 @@ export function FootballSettingsDialog({
         { key: 'foul', label: t("foul") || "ฟาวล์", icon: Activity },
         { key: 'corner', label: t("corner") || "เตะมุม", icon: Flag },
         { key: 'save', label: t("save") || "เซฟ", icon: Shield },
-        { key: 'offside', label: t("offside") || "ล้ำหน้า", icon: FlagTriangleRight },
+        ...(isFutsalSport ? [] : [{ key: 'offside', label: t("offside") || "ล้ำหน้า", icon: FlagTriangleRight }]),
         { key: 'missed_shot', label: t("missed_shot") || "ยิงพลาด", icon: Crosshair },
         { key: 'pass', label: t("pass") || "จ่ายบอล", icon: MoveRight },
         { key: 'bad_pass', label: t("bad_pass") || "ออกข้าง / จ่ายเสีย", icon: ArrowUpRight },
@@ -109,8 +120,7 @@ export function FootballSettingsDialog({
         { key: 'injury', label: t("injury") || "บาดเจ็บ", icon: Stethoscope },
         { key: 'var', label: t("var") || "VAR", icon: MonitorPlay },
         { key: 'period_lifecycle', label: t("match_period") || "ช่วงเวลาการแข่งขัน (เริ่มเกม, พักครึ่ง, จบเกม)", icon: Clock },
-        { key: 'add_time', label: t("add_time") || "ทดเวลาบาดเจ็บ", icon: Clock },
-        { key: 'match_paused', label: t("match_paused") || "หยุด/เริ่มเกมชั่วคราว", icon: Ban },
+        ...(isFutsalSport ? [] : [{ key: 'add_time', label: t("add_time") || "ทดเวลาบาดเจ็บ", icon: Clock }]),
         { key: 'walkover', label: t("walkover") || "ชนะบาย / จบการแข่งขันก่อนเวลา", icon: Ban },
     ];
 
@@ -128,7 +138,7 @@ export function FootballSettingsDialog({
         { key: 'penalty', label: t("penalty") || "จุดโทษ", icon: Target },
         { key: 'yellow_card', label: t("yellow_card") || "ใบเหลือง", icon: Square },
         { key: 'red_card', label: t("red_card") || "ใบแดง", icon: Square },
-        { key: 'offside', label: t("offside") || "ล้ำหน้า", icon: FlagTriangleRight },
+        ...(isFutsalSport ? [] : [{ key: 'offside', label: t("offside") || "ล้ำหน้า", icon: FlagTriangleRight }]),
     ];
 
     // Actions list calculation

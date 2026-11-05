@@ -113,7 +113,13 @@ export default async function AdminMatchConsole(props: {
             : Number(rawMatch.away_score) || 0,
     };
 
-    const sportName = (tournamentData?.sport_name || tournamentData?.sports?.sport_name || 'football').toLowerCase();
+    const sportName = (
+        tournamentData?.sport ||
+        tournamentData?.sport_name ||
+        tournamentData?.sports?.sport_name ||
+        tournamentData?.rules_config?.sport ||
+        'football'
+    ).toLowerCase();
 
     const formattedEvents: MatchEvent[] = (rawEvents || []).map((e: any) => {
         const detailObj = e.detail || e.extra_info || {};
@@ -173,6 +179,7 @@ export default async function AdminMatchConsole(props: {
             initialEvents={formattedEvents}
             backUrl={backUrl}
             rulesConfig={rulesConfig}
+            sport={sportName}
         />
     );
 }

@@ -4,10 +4,12 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/dropdown";
+import { Switch } from "@/components/ui/switch";
 import { EVENT_TYPES } from "@/features/sports/football/console/constants";
 import { EventType, Player, MatchEvent } from "@/types";
 import { useTranslations } from "next-intl";
 import { X } from "lucide-react";
+import { cn } from "@/lib/utils";
 import {
     AlertDialog,
     AlertDialogAction,
@@ -30,6 +32,10 @@ interface MatchEventDialogProps {
     existingEvents: MatchEvent[]; // To check for previous cards
     activeLineupIds?: string[]; // To highlight starting vs bench players
     onSave: (data: { minute: number; playerId: string; extraInfo: Record<string, unknown>; autoRed?: boolean; overrideEventType?: EventType }) => void;
+    isFutsal?: boolean;
+    currentFouls?: number;
+    canReturnToFullStrength?: boolean;
+    penaltyReturnReason?: string;
 }
 
 export function MatchEventDialog({
@@ -42,7 +48,11 @@ export function MatchEventDialog({
     opponentPlayers = [],
     existingEvents,
     activeLineupIds,
-    onSave
+    onSave,
+    isFutsal = false,
+    currentFouls = 0,
+    canReturnToFullStrength = false,
+    penaltyReturnReason = ""
 }: MatchEventDialogProps) {
     const t = useTranslations("Console");
     const tCommon = useTranslations("Common");
@@ -58,6 +68,7 @@ export function MatchEventDialog({
     const [foulCardType, setFoulCardType] = useState<"none" | "yellow" | "red">("none");
     const [selectedCardType, setSelectedCardType] = useState<"yellow" | "red">("yellow");
     const [showConfirm, setShowConfirm] = useState(false);
+    const [isPenaltyReturn, setIsPenaltyReturn] = useState<boolean>(false);
 
     useEffect(() => {
         if (open) {
@@ -69,22 +80,35 @@ export function MatchEventDialog({
                 setIsOwnGoal(false);
                 setOwnGoalPlayerId("");
                 setFouledPlayerId("none");
-                setIsPenalty(false);
+                const isFutsalSecondPen = isFutsal && eventType === 'foul' && (((currentFouls || 0) % 6) + 1 === 6);
+                setIsPenalty(isFutsalSecondPen);
                 setFoulCardType("none");
                 setSelectedCardType(eventType === 'red_card' ? 'red' : 'yellow');
                 setShowConfirm(false);
+                setIsPenaltyReturn(Boolean(isFutsal && canReturnToFullStrength && eventType === 'substitution'));
             }, 0);
             return () => clearTimeout(timer);
         }
-    }, [open, initialMinute, eventType]);
+    }, [open, initialMinute, eventType, isFutsal, currentFouls, canReturnToFullStrength]);
+
+    const bannedPlayerIds = new Set(
+        (existingEvents || [])
+            .filter(e => {
+                const type = e.event_type || e.type;
+                const extra = (e.extra_info || e.detail) as Record<string, unknown> | null;
+                return type === 'red_card' || extra?.card_type === 'red';
+            })
+            .map(e => e.player_id || (e.extra_info as Record<string, unknown> | null)?.player_id || (e.detail as Record<string, unknown> | null)?.player_id)
+            .filter(Boolean) as string[]
+    );
 
     const startingPlayers = activeLineupIds && activeLineupIds.length > 0
         ? players.filter(p => activeLineupIds.includes(p.id))
         : players;
 
     const substitutePlayers = activeLineupIds && activeLineupIds.length > 0
-        ? players.filter(p => !activeLineupIds.includes(p.id))
-        : players;
+        ? players.filter(p => !activeLineupIds.includes(p.id) && !bannedPlayerIds.has(p.id))
+        : players.filter(p => !bannedPlayerIds.has(p.id));
 
     const getPlayerLabel = (player: Player) => {
         const numPart = player.number ? `#${player.number} ` : "";
@@ -178,12 +202,22 @@ export function MatchEventDialog({
             }
         }
         if (eventType === 'substitution') {
-            extraInfo.out_player_id = finalPlayerId;
-            extraInfo.in_player_id = subInPlayerId;
-            const outPlayer = players.find(p => p.id === finalPlayerId);
-            const inPlayer = players.find(p => p.id === subInPlayerId);
-            extraInfo.out_player_name = outPlayer?.name || "Unknown";
-            extraInfo.in_player_name = inPlayer?.name || "Unknown";
+            if (isPenaltyReturn) {
+                extraInfo.is_penalty_return = true;
+                extraInfo.in_player_id = subInPlayerId;
+                const inPlayer = players.find(p => p.id === subInPlayerId);
+                extraInfo.in_player_name = inPlayer?.name || "Unknown";
+                extraInfo.out_player_id = null;
+                extraInfo.out_player_name = "-";
+                finalPlayerId = "none";
+            } else {
+                extraInfo.out_player_id = finalPlayerId;
+                extraInfo.in_player_id = subInPlayerId;
+                const outPlayer = players.find(p => p.id === finalPlayerId);
+                const inPlayer = players.find(p => p.id === subInPlayerId);
+                extraInfo.out_player_name = outPlayer?.name || "Unknown";
+                extraInfo.in_player_name = inPlayer?.name || "Unknown";
+            }
         }
         onSave({
             minute: min,
@@ -319,8 +353,32 @@ export function MatchEventDialog({
                     ) : eventType === 'foul' ? (
                         /* Foul Event Layout (styled like Goal layout) */
                         <div className="space-y-1 lg:space-y-2 p-2 border rounded-sm">
+                            {isFutsal && (() => {
+                                const step = ((currentFouls || 0) % 6) + 1;
+                                const isSecondPen = step === 6;
+                                return (
+                                    <div className={cn(
+                                        "p-2.5 rounded-sm border flex items-center justify-between text-xs",
+                                        isSecondPen
+                                            ? "bg-destructive/10 border-destructive/30 text-destructive font-black animate-pulse"
+                                            : step === 5
+                                                ? "bg-amber-500/10 border-amber-500/30 text-amber-500 font-bold"
+                                                : "bg-muted/50 border-border text-foreground font-semibold"
+                                    )}>
+                                        <span>
+                                            {isSecondPen
+                                                ? "🚨 ฟาวล์สะสมครบ 5 ครั้งแล้ว! ครั้งนี้ลงโทษเป็น จุดโทษระยะ 2 (10 ม.)"
+                                                : `ฟาวล์สะสมในครึ่งนี้: ครั้งที่ ${step}/5`}
+                                        </span>
+                                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-background/80 border font-bold">
+                                            {isSecondPen ? "จุดโทษระยะ 2" : `${step}/5`}
+                                        </span>
+                                    </div>
+                                );
+                            })()}
+
                             <div className="flex items-center justify-between">
-                                <Label>{t("is_penalty")}</Label>
+                                <Label>{isFutsal && (((currentFouls || 0) % 6) + 1 === 6) ? "จุดโทษระยะ 2 (10 เมตร)" : t("is_penalty")}</Label>
                                 <div className="flex items-center gap-2">
                                     <button
                                         type="button"
@@ -410,27 +468,59 @@ export function MatchEventDialog({
                             </div>
                         </div>
                     ) : eventType === 'substitution' ? (
-                        /* Substitution Layout (styled like Goal layout) */
-                        <div className="space-y-1 lg:space-y-2 p-2 border rounded-sm">
+                        /* Substitution Layout */
+                        <div className="space-y-2 p-2 border rounded-sm">
+                            {canReturnToFullStrength && (
+                                <div className="p-2.5 rounded-sm bg-emerald-500/10 border border-emerald-500/30 flex items-center justify-between gap-2">
+                                    <div className="space-y-0.5">
+                                        <div className="text-xs font-bold text-emerald-500 flex items-center gap-1.5">
+                                            <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse" />
+                                            สิทธิ์เติมผู้เล่นลงสนาม (พ้นโทษใบแดง)
+                                        </div>
+                                        <p className="text-[11px] text-muted-foreground">
+                                            {penaltyReturnReason || "ผ่านไป 2 นาที หรือเสียประตู สามารถส่งผู้เล่นเข้าได้โดยไม่ต้องเลือกผู้เล่นออก"}
+                                        </p>
+                                    </div>
+                                    <div className="flex items-center gap-2">
+                                        <Switch
+                                            checked={isPenaltyReturn}
+                                            onCheckedChange={setIsPenaltyReturn}
+                                        />
+                                    </div>
+                                </div>
+                            )}
+
+                            {isFutsal && !canReturnToFullStrength && penaltyReturnReason && (
+                                <div className="p-2 rounded-sm bg-amber-500/10 border border-amber-500/30 text-[11px] text-amber-500 font-medium">
+                                    ⚠️ {penaltyReturnReason} - การเปลี่ยนตัวต้องมีทั้งผู้เล่นออกและเข้าตามปกติ
+                                </div>
+                            )}
+
                             <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
                                 {/* Player Out */}
                                 <div className="space-y-1">
-                                    <Label>{t("player_out")}</Label>
-                                    <Select value={playerId} onValueChange={setPlayerId}>
-                                        <SelectTrigger className="w-full">
-                                            <SelectValue placeholder={t("player_name")} />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {startingPlayers.map((player) => (
-                                                <SelectItem key={player.id} value={player.id}>
-                                                    {getPlayerLabel(player)}
+                                    <Label className={cn(isPenaltyReturn && "text-muted-foreground")}>{t("player_out")}</Label>
+                                    {isPenaltyReturn ? (
+                                        <div className="h-9 px-3 border border-dashed rounded-md bg-muted/40 flex items-center text-xs text-muted-foreground font-medium">
+                                            (ไม่ต้องมีผู้เล่นออก - เติมผู้เล่นกลับสู่สนาม)
+                                        </div>
+                                    ) : (
+                                        <Select value={playerId} onValueChange={setPlayerId}>
+                                            <SelectTrigger className="w-full">
+                                                <SelectValue placeholder={t("player_name")} />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {startingPlayers.map((player) => (
+                                                    <SelectItem key={player.id} value={player.id}>
+                                                        {getPlayerLabel(player)}
+                                                    </SelectItem>
+                                                ))}
+                                                <SelectItem value="unknown">
+                                                    {t("unknown_player")}
                                                 </SelectItem>
-                                            ))}
-                                            <SelectItem value="unknown">
-                                                {t("unknown_player")}
-                                            </SelectItem>
-                                        </SelectContent>
-                                    </Select>
+                                            </SelectContent>
+                                        </Select>
+                                    )}
                                 </div>
 
                                 {/* Player In */}
@@ -531,7 +621,11 @@ export function MatchEventDialog({
                     <Button
                         type="button"
                         onClick={() => handleSave(false)}
-                        disabled={!isNoPlayerRequired && (isOwnGoal ? !ownGoalPlayerId : !playerId)}
+                        disabled={
+                            eventType === 'substitution'
+                                ? (isPenaltyReturn ? !subInPlayerId : (!playerId || !subInPlayerId || playerId === 'unknown'))
+                                : (!isNoPlayerRequired && (isOwnGoal ? !ownGoalPlayerId : !playerId))
+                        }
                         className="w-full"
                     >
                         {tCommon("save")}

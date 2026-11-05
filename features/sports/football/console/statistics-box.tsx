@@ -286,6 +286,18 @@ export function MatchStatisticsBox({ match, events, homeScore, awayScore, visibl
         )).length;
     };
 
+    const isFutsal = Boolean(
+        (match as any).sport === 'futsal' ||
+        (match as any).sport?.includes('futsal') ||
+        (match as any).sport?.includes('ฟุตซอล') ||
+        (match as any).sport_name?.toLowerCase().includes('futsal') ||
+        (match as any).sport_name?.includes('ฟุตซอล') ||
+        (match as any).tournaments?.sport === 'futsal' ||
+        (match as any).tournaments?.sport?.includes('ฟุตซอล') ||
+        (match as any).tournament?.sport === 'futsal' ||
+        (match as any).tournament?.sport?.includes('ฟุตซอล')
+    );
+
     const allStatsList: {
         key: string;
         label: string;
@@ -308,7 +320,7 @@ export function MatchStatisticsBox({ match, events, homeScore, awayScore, visibl
             { key: 'penalty', label: t("penalty") || "จุดโทษ", home: countPenalties(homeId), away: countPenalties(awayId), statType: 'default' },
             { key: 'yellow_card', label: t("yellow_card") || "ใบเหลือง", home: countYellowCards(homeId), away: countYellowCards(awayId), statType: 'yellow' },
             { key: 'red_card', label: t("red_card") || "ใบแดง", home: countRedCards(homeId), away: countRedCards(awayId), statType: 'red' },
-            { key: 'offside', label: t("offside") || "ล้ำหน้า", home: countEvent(homeId, 'offside'), away: countEvent(awayId, 'offside'), statType: 'default' },
+            ...(isFutsal ? [] : [{ key: 'offside', label: t("offside") || "ล้ำหน้า", home: countEvent(homeId, 'offside'), away: countEvent(awayId, 'offside'), statType: 'default' as const }]),
         ];
 
     const statsList = visibleStats

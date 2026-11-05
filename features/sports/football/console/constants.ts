@@ -31,6 +31,7 @@ export const EVENT_TYPES: { type: EventType; label: string; icon: React.ElementT
     { type: 'red_card', label: 'red_card', icon: Square, color: 'text-red-600' },
     { type: 'substitution', label: 'substitution', icon: RotateCw, color: 'text-blue-500' },
     { type: 'foul', label: 'foul', icon: Hand, color: 'text-orange-600' },
+    { type: 'timeout', label: 'timeout', icon: Clock, color: 'text-purple-500' },
     { type: 'penalty', label: 'penalty', icon: ShieldAlert, color: 'text-indigo-600' },
     { type: 'save', label: 'save', icon: Shield, color: 'text-teal-600' },
     { type: 'var', label: 'var', icon: MonitorPlay, color: 'text-purple-600' },

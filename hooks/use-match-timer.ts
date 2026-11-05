@@ -1,11 +1,28 @@
 import { useState, useRef, useEffect } from "react";
 import { Match, MatchEvent } from "@/types";
 
-export function useMatchTimer(match: Match, tournamentId: string, events: MatchEvent[], delaySeconds: number = 0) {
-    const getElapsedBase = (m?: Match) => m?.elapsed_before_pause ?? m?.elapsed_seconds ?? 0;
+export function useMatchTimer(
+    match: Match,
+    tournamentId: string,
+    events: MatchEvent[],
+    delaySeconds: number = 0,
+    isCountdown: boolean = false,
+    defaultCountdownSeconds: number = 20 * 60
+) {
+    const getElapsedBase = (m?: Match) => {
+        const val = m?.elapsed_before_pause ?? m?.elapsed_seconds;
+        if (val !== undefined && val !== null) return val;
+        return isCountdown ? defaultCountdownSeconds : 0;
+    };
 
     // Initialize time with strict trust in elapsed_before_pause or elapsed_seconds
-    const [time, setTime] = useState(() => getElapsedBase(match));
+    const [time, setTime] = useState(() => {
+        const base = getElapsedBase(match);
+        if (isCountdown && (match.status === 'scheduled' || (!match.status && base === 0))) {
+            return defaultCountdownSeconds;
+        }
+        return base;
+    });
     const [isRunning, setIsRunning] = useState(match.timer_status === 'playing');
 
     // Sync isRunning with server state
@@ -34,18 +51,50 @@ export function useMatchTimer(match: Match, tournamentId: string, events: MatchE
 
             if (!isRunning) {
                 // When paused, don't overwrite a positive local time with 0 if match state hasn't updated yet
-                setTime(prev => (prev > 0 && elapsedBase === 0 ? prev : elapsedBase));
+                if (isCountdown) {
+                    setTime(prev => (prev > 0 && elapsedBase === 0 && match.status !== 'finished' ? prev : elapsedBase));
+                } else {
+                    setTime(prev => (prev > 0 && elapsedBase === 0 ? prev : elapsedBase));
+                }
                 return;
             }
 
-            // 1. Try to find the latest marker event (first_half, second_half, extra_time, kick_off or match_resumed)
+            // 1. High precision local timer (running in active client)
+            if (localStartRef.current) {
+                const now = Date.now();
+                const diffSeconds = Math.max(0, Math.floor((now - localStartRef.current) / 1000));
+                const finalTime = isCountdown
+                    ? Math.max(0, elapsedBase - diffSeconds)
+                    : elapsedBase + diffSeconds;
+                setTime(prev => prev !== finalTime ? finalTime : prev);
+                if (isCountdown && finalTime <= 0) {
+                    setIsRunning(false);
+                }
+                return;
+            }
+
+            // 2. Server sync: check updated_at timestamp from match update
+            if (match?.updated_at && !isNaN(new Date(match.updated_at).getTime())) {
+                const now = Date.now() - (delaySeconds * 1000);
+                const updatedTime = new Date(match.updated_at).getTime();
+                const diffSeconds = Math.max(0, Math.floor((now - updatedTime) / 1000));
+                const finalTime = isCountdown
+                    ? Math.max(0, elapsedBase - diffSeconds)
+                    : elapsedBase + diffSeconds;
+                setTime(prev => prev !== finalTime ? finalTime : prev);
+                if (isCountdown && finalTime <= 0) {
+                    setIsRunning(false);
+                }
+                return;
+            }
+
+            // 3. Fallback: marker events (first_half, second_half, extra_time)
             const markers = events.filter(e =>
                 e.event_type === 'first_half' ||
                 e.event_type === 'second_half' ||
                 e.event_type === 'extra_time' ||
                 e.event_type === 'extra_time_second_half' ||
-                e.event_type === 'kick_off' ||
-                e.event_type === 'match_resumed'
+                e.event_type === 'kick_off'
             );
             const latestMarker = markers.length > 0 
                 ? [...markers].sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime())[0]
@@ -55,23 +104,13 @@ export function useMatchTimer(match: Match, tournamentId: string, events: MatchE
                 const now = Date.now() - (delaySeconds * 1000);
                 const markerTimestamp = (latestMarker.extra_info?.start_timestamp as number) || new Date(latestMarker.created_at).getTime();
                 const diffSeconds = Math.max(0, Math.floor((now - markerTimestamp) / 1000));
-                const finalTime = elapsedBase + diffSeconds;
-                
+                const finalTime = isCountdown
+                    ? Math.max(0, elapsedBase - diffSeconds)
+                    : elapsedBase + diffSeconds;
                 setTime(prev => prev !== finalTime ? finalTime : prev);
-            } else if (match?.updated_at && !isNaN(new Date(match.updated_at).getTime())) {
-                const now = Date.now() - (delaySeconds * 1000);
-                const updatedTime = new Date(match.updated_at).getTime();
-                const diffSeconds = Math.max(0, Math.floor((now - updatedTime) / 1000));
-                const finalTime = elapsedBase + diffSeconds;
-                
-                setTime(prev => prev !== finalTime ? finalTime : prev);
-            } else if (localStartRef.current) {
-                // 2. Fallback to local start time (optimistic UI)
-                const now = Date.now();
-                const diffSeconds = Math.max(0, Math.floor((now - localStartRef.current) / 1000));
-                const finalTime = elapsedBase + diffSeconds;
-                
-                setTime(prev => prev !== finalTime ? finalTime : prev);
+                if (isCountdown && finalTime <= 0) {
+                    setIsRunning(false);
+                }
             }
         };
 

@@ -68,7 +68,26 @@ export function MatchCard({
     // Live Timer Logic
     const isLiveStatus = match.status === 'live';
     const { events } = useMatchEvents(match.id, tournamentId, undefined, true);
-    const { time: liveTime } = useMatchTimer(match, tournamentId, events);
+
+
+
+
+    const isFutsal = Boolean(
+        propSport === 'futsal' ||
+        propSport?.includes('futsal') ||
+        propSport?.includes('ฟุตซอล') ||
+        (match as any).sport === 'futsal' ||
+        (match as any).sport?.includes('futsal') ||
+        (match as any).sport?.includes('ฟุตซอล') ||
+        (match as any).sport_name?.toLowerCase().includes('futsal') ||
+        (match as any).sport_name?.includes('ฟุตซอล') ||
+        (match as any).tournaments?.sport === 'futsal' ||
+        (match as any).tournaments?.sport?.includes('ฟุตซอล') ||
+        (match as any).tournament?.sport === 'futsal' ||
+        (match as any).tournament?.sport?.includes('ฟุตซอล')
+    );
+
+    const { time: liveTime } = useMatchTimer(match, tournamentId, events, 0, isFutsal);
 
     const formatSeconds = (totalSeconds: number) => {
         const mins = Math.floor(totalSeconds / 60);
@@ -122,11 +141,21 @@ export function MatchCard({
     const status = match.status?.toLowerCase() || 'scheduled';
     const isLive = status === 'live';
     const isFinished = status === 'finished';
+    const pEvents = (events || []).filter((e: any) => e.event_type === "penalty_shot" || e.type === "penalty_shot");
+    const hasPenalty = Boolean(
+        (match.penalty_home_score !== undefined && match.penalty_home_score !== null) ||
+        (match.home_penalty_score !== undefined && match.home_penalty_score !== null) ||
+        (match.score_detail?.penalty_home_score !== undefined && match.score_detail?.penalty_home_score !== null) ||
+        (match.score_detail?.home_penalty_score !== undefined && match.score_detail?.home_penalty_score !== null) ||
+        pEvents.length > 0
+    );
 
     const storeSport = useBracketStore((state) => state.sport);
     const resolvedSport = propSport ||
         (match as unknown as { sport?: string })?.sport ||
         (match as unknown as { tournaments?: { sport?: string } })?.tournaments?.sport ||
+        (match as unknown as { tournament?: { sport?: string } })?.tournament?.sport ||
+        (match as unknown as { sport_name?: string })?.sport_name ||
         teams[0]?.sport ||
         storeSport ||
         "football";
@@ -184,7 +213,7 @@ export function MatchCard({
                             !match.away_team_id && "text-muted-foreground"
                         )}
                     >
-                        {isFinished ? t("ft") : (!match.away_team_id ? t("scheduled") : (
+                        {isFinished ? (hasPenalty ? (_locale === "th" ? "จบ" : "FT") : t("ft")) : (!match.away_team_id ? t("scheduled") : (
                             isLive ? (
                                 <span className="flex items-center gap-1.5">
                                     <span className="relative flex h-2 w-2">

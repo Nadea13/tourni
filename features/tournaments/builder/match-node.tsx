@@ -615,10 +615,10 @@ export const MatchNode = memo(function MatchNode({
             const isCanceled = dbM?.status === 'canceled' || dbM?.status === 'cancelled';
             return (
                 <span className={cn(
-                    "text-[10px] font-black px-1.5 py-0.5 rounded border uppercase",
+                    "text-xs font-bold uppercase",
                     isCanceled
-                        ? (inHeader ? "text-red-200 bg-black/25 border-red-300/30" : "text-destructive bg-destructive/10 border-destructive/20")
-                        : (inHeader ? "text-white/90 bg-black/20 border-white/20" : "text-muted-foreground bg-muted/50 border-border")
+                        ? (inHeader ? "text-destructive" : "text-destructive")
+                        : ""
                 )}>
                     {isCanceled ? 'Canceled' : 'FT'}
                 </span>
@@ -645,18 +645,12 @@ export const MatchNode = memo(function MatchNode({
             const formattedTime = matchTime ? matchTime.slice(0, 5) : "";
 
             return (
-                <span className={cn(
-                    "text-[10px] font-semibold flex items-center gap-1",
-                    inHeader ? "text-white/90" : "text-muted-foreground"
-                )}>
+                <span className="text-[10px] font-bold flex items-center gap-1">
                     {formattedDate && <span>{formattedDate}</span>}
                     {formattedDate && formattedTime && <span className={cn(inHeader ? "text-white/60" : "text-muted-foreground/60")}>|</span>}
                     {formattedTime && <span>{formattedTime}</span>}
                     {courtName && (
-                        <span className={cn(
-                            "px-1 py-0.2 rounded text-[9px] font-bold border",
-                            inHeader ? "bg-black/20 border-white/20 text-white" : "bg-muted border-border text-foreground"
-                        )}>
+                        <span className="text-[10px] font-bold">
                             {courtName}
                         </span>
                     )}
@@ -717,524 +711,540 @@ export const MatchNode = memo(function MatchNode({
             )}
 
             <div className="overflow-hidden rounded-[inherit]">
-            {/* ── Header ── */}
-            <div className="flex items-center justify-between px-4 py-2 border-b bg-node-2 border-node-2/50">
-                <div className="flex items-center gap-2 truncate min-w-0">
-                    <div className="rounded flex items-center justify-center shrink-0">
-                        <span className="font-bold">VS</span>
+                {/* ── Header ── */}
+                <div className="flex items-center justify-between px-4 py-2 border-b bg-node-2 border-node-2/50">
+                    <div className="flex items-center gap-2 truncate min-w-0">
+                        <div className="rounded flex items-center justify-center shrink-0">
+                            <span className="font-bold">VS</span>
+                        </div>
+                        <span className="text-xs font-bold tracking-wide shrink-0">
+                            {isRound ? "Round" : "Match"}
+                        </span>
+                        <span className="text-xs font-bold tracking-wide truncate">
+                            {data.label}
+                        </span>
                     </div>
-                    <span className="text-xs font-bold tracking-wide shrink-0">
-                        {isRound ? "Round" : "Match"}
-                    </span>
-                    <span className="text-xs font-bold tracking-wide truncate">
-                        {data.label}
-                    </span>
+
+                    {/* Right side of Header: Date & Time or Live Status for single match */}
+                    {matches.length === 1 && (
+                        <div className="flex items-center shrink-0 ml-auto">
+                            {renderMatchStatus(singleMatch, singleDbMatch, true)}
+                        </div>
+                    )}
                 </div>
 
-                {/* Right side of Header: Date & Time or Live Status for single match */}
-                {matches.length === 1 && (
-                    <div className="flex items-center shrink-0 ml-auto">
-                        {renderMatchStatus(singleMatch, singleDbMatch, true)}
-                    </div>
-                )}
-            </div>
+                {/* ── Match List ── */}
+                <div className="flex flex-col divide-y divide-border">
+                    {matches.length === 0 ? (
+                        <div className="p-4 text-center flex flex-col items-center gap-2">
+                            <p className="text-xs text-center text-muted-foreground">
+                                {locale === "th" ? "ยังไม่มีแมตช์ในโหนดนี้" : "No matches in this round"}
+                            </p>
+                            <Button
+                                type="button"
+                                variant="outline"
+                                size="sm"
+                                className="border-node-2/50 text-node-2 hover:bg-node-2/10"
+                                onClick={handleAddMatch}
+                            >
+                                <Plus className="h-4 w-4" />
+                                {locale === "th" ? "เพิ่มแมตช์" : "Add Match"}
+                            </Button>
+                        </div>
+                    ) : (
+                        <div>
+                            {matches
+                                .slice()
+                                .sort((a, b) => {
+                                    const dateA = a.match_date || "9999-12-31";
+                                    const timeA = a.match_time || "23:59";
+                                    const dateB = b.match_date || "9999-12-31";
+                                    const timeB = b.match_time || "23:59";
+                                    if (dateA !== dateB) return dateA.localeCompare(dateB);
+                                    return timeA.localeCompare(timeB);
+                                })
+                                .map((match, index) => {
+                                    const dbMatch = findDbMatch(match, index);
 
-            {/* ── Match List ── */}
-            <div className="flex flex-col divide-y divide-border">
-                {matches.length === 0 ? (
-                    <div className="p-4 text-center flex flex-col items-center gap-2">
-                        <p className="text-xs text-center text-muted-foreground">
-                            {locale === "th" ? "ยังไม่มีแมตช์ในโหนดนี้" : "No matches in this round"}
-                        </p>
-                        <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="border-node-2/50 text-node-2 hover:bg-node-2/10"
-                            onClick={handleAddMatch}
-                        >
-                            <Plus className="h-4 w-4" />
-                            {locale === "th" ? "เพิ่มแมตช์" : "Add Match"}
-                        </Button>
-                    </div>
-                ) : (
-                    <div>
-                        {matches
-                            .slice()
-                            .sort((a, b) => {
-                                const dateA = a.match_date || "9999-12-31";
-                                const timeA = a.match_time || "23:59";
-                                const dateB = b.match_date || "9999-12-31";
-                                const timeB = b.match_time || "23:59";
-                                if (dateA !== dateB) return dateA.localeCompare(dateB);
-                                return timeA.localeCompare(timeB);
-                            })
-                            .map((match, index) => {
-                                const dbMatch = findDbMatch(match, index);
+                                    // Resolve live teams from edges or database assignments
+                                    const getResolvedTeam = (slot: 'a' | 'b') => {
+                                        const placeholder = (slot === 'a' ? match.placeholderA : match.placeholderB)?.trim() || "";
+                                        const isExplicitTBD = !placeholder || placeholder === "TBD" || placeholder.startsWith("Seed #");
+                                        const hasResult = hasMatchResult(dbMatch);
+                                        const handleId = `slot-${slot}-${index}`;
+                                        let edge = edges.find(e => e.target === id && e.targetHandle === handleId);
 
-                                // Resolve live teams from edges or database assignments
-                                const getResolvedTeam = (slot: 'a' | 'b') => {
-                                    const placeholder = (slot === 'a' ? match.placeholderA : match.placeholderB)?.trim() || "";
-                                    const isExplicitTBD = !placeholder || placeholder === "TBD" || placeholder.startsWith("Seed #");
-                                    const hasResult = hasMatchResult(dbMatch);
-                                    const handleId = `slot-${slot}-${index}`;
-                                    let edge = edges.find(e => e.target === id && e.targetHandle === handleId);
+                                        let isFromRound = false;
+                                        let roundPairIdx = 0;
 
-                                    let isFromRound = false;
-                                    let roundPairIdx = 0;
-
-                                    if (!edge) {
-                                        const roundEdge = edges.find(e => {
-                                            if (e.target !== id) return false;
-                                            const sNode = nodes.find(n => n.id === e.source);
-                                            if (!sNode || sNode.type !== 'matchNode') return false;
-                                            return (Array.isArray(sNode.data.matches) && sNode.data.matches.length > 1) || e.sourceHandle === 'round-out' || Boolean(sNode.data.isRound);
-                                        });
-                                        if (roundEdge) {
-                                            edge = roundEdge;
-                                            isFromRound = true;
-                                            const allRoundEdges = edges
-                                                .filter(e => e.source === roundEdge.source)
-                                                .sort((eA, eB) => {
-                                                    const nA = nodes.find(n => n.id === eA.target);
-                                                    const nB = nodes.find(n => n.id === eB.target);
-                                                    return (nA?.position?.y ?? 0) - (nB?.position?.y ?? 0);
-                                                });
-                                            roundPairIdx = Math.max(0, allRoundEdges.findIndex(e => e.target === id));
-                                        }
-                                    } else {
-                                        const sNode = nodes.find(n => n.id === edge?.source);
-                                        if (sNode && sNode.type === 'matchNode' && ((Array.isArray(sNode.data.matches) && sNode.data.matches.length > 1) || edge.sourceHandle === 'round-out' || Boolean(sNode.data.isRound))) {
-                                            isFromRound = true;
-                                            const allRoundEdges = edges
-                                                .filter(e => e.source === sNode.id)
-                                                .sort((eA, eB) => {
-                                                    const nA = nodes.find(n => n.id === eA.target);
-                                                    const nB = nodes.find(n => n.id === eB.target);
-                                                    return (nA?.position?.y ?? 0) - (nB?.position?.y ?? 0);
-                                                });
-                                            roundPairIdx = Math.max(0, allRoundEdges.findIndex(e => e.target === id));
-                                        }
-                                    }
-
-                                    // When match has no results and no incoming edge, use the node's placeholder directly so edits/swaps reflect in real time
-                                    if (!hasResult && !edge) {
-                                        if (isExplicitTBD) return null;
-                                        return placeholder;
-                                    }
-
-                                    // 1. If we have a database match with a team ID assigned, use it UNLESS explicitly cleared to TBD and match has no results
-                                    if (dbMatch && (hasResult || !edge)) {
-                                        if (!hasResult && isExplicitTBD) {
-                                            return null;
-                                        }
-                                        const teamId = slot === 'a' ? dbMatch.home_team_id : dbMatch.away_team_id;
-                                        if (teamId) {
-                                            const team = storeTeams.find(t => String(t.team_id || t.id) === String(teamId));
-                                            if (team?.name) return team.name;
-                                        }
-                                        if (slot === 'a' && dbMatch.home_team?.name) return dbMatch.home_team.name;
-                                        if (slot === 'b' && dbMatch.away_team?.name) return dbMatch.away_team.name;
-                                    }
-
-                                    // 2. Fall back to resolved placeholder/ranking/label from edge connections
-                                    if (!edge) return null;
-
-                                    const sourceNode = nodes.find(n => n.id === edge.source);
-                                    if (!sourceNode) return null;
-
-                                    // Handle StandingNode/GroupNode propagation
-                                    if (sourceNode.type === 'standingNode' || sourceNode.type === 'groupNode') {
-                                        const rankMatch = edge.sourceHandle?.match(/rank-(\d+)/);
-                                        if (rankMatch) {
-                                            const rankIndex = parseInt(rankMatch[1], 10);
-                                            const rankings = (sourceNode.data as { rankings?: string[] }).rankings || [];
-                                            if (rankings[rankIndex]) return rankings[rankIndex];
-
-                                            const rankSuffix = rankIndex === 0 ? "1st" : rankIndex === 1 ? "2nd" : rankIndex === 2 ? "3rd" : `${rankIndex + 1}th`;
-                                            return `${rankSuffix} Place (${sourceNode.data.label})`;
-                                        }
-                                    }
-
-                                    // Handle MatchNode propagation (Winner / Loser)
-                                    if (sourceNode.type === 'matchNode') {
-                                        let matchIdx = -1;
-                                        let isWinnerHandle = true;
-
-                                        if (isFromRound) {
-                                            matchIdx = isRound ? (index * 2 + (slot === 'a' ? 0 : 1)) : (roundPairIdx * 2 + (slot === 'a' ? 0 : 1));
-                                            isWinnerHandle = true;
+                                        if (!edge) {
+                                            const roundEdge = edges.find(e => {
+                                                if (e.target !== id) return false;
+                                                const sNode = nodes.find(n => n.id === e.source);
+                                                if (!sNode || sNode.type !== 'matchNode') return false;
+                                                return (Array.isArray(sNode.data.matches) && sNode.data.matches.length > 1) || e.sourceHandle === 'round-out' || Boolean(sNode.data.isRound);
+                                            });
+                                            if (roundEdge) {
+                                                edge = roundEdge;
+                                                isFromRound = true;
+                                                const allRoundEdges = edges
+                                                    .filter(e => e.source === roundEdge.source)
+                                                    .sort((eA, eB) => {
+                                                        const nA = nodes.find(n => n.id === eA.target);
+                                                        const nB = nodes.find(n => n.id === eB.target);
+                                                        return (nA?.position?.y ?? 0) - (nB?.position?.y ?? 0);
+                                                    });
+                                                roundPairIdx = Math.max(0, allRoundEdges.findIndex(e => e.target === id));
+                                            }
                                         } else {
-                                            const winnerMatch = edge.sourceHandle?.match(/winner-(\d+)/);
-                                            const loserMatch = edge.sourceHandle?.match(/loser-(\d+)/);
-                                            isWinnerHandle = !loserMatch;
-                                            matchIdx = winnerMatch ? parseInt(winnerMatch[1], 10) : loserMatch ? parseInt(loserMatch[1], 10) : -1;
+                                            const sNode = nodes.find(n => n.id === edge?.source);
+                                            if (sNode && sNode.type === 'matchNode' && ((Array.isArray(sNode.data.matches) && sNode.data.matches.length > 1) || edge.sourceHandle === 'round-out' || Boolean(sNode.data.isRound))) {
+                                                isFromRound = true;
+                                                const allRoundEdges = edges
+                                                    .filter(e => e.source === sNode.id)
+                                                    .sort((eA, eB) => {
+                                                        const nA = nodes.find(n => n.id === eA.target);
+                                                        const nB = nodes.find(n => n.id === eB.target);
+                                                        return (nA?.position?.y ?? 0) - (nB?.position?.y ?? 0);
+                                                    });
+                                                roundPairIdx = Math.max(0, allRoundEdges.findIndex(e => e.target === id));
+                                            }
                                         }
 
-                                        if (matchIdx !== -1) {
-                                            const sourceMatches = Array.isArray(sourceNode.data.matches) ? (sourceNode.data.matches as any[]) : [];
-                                            if (isFromRound && matchIdx >= sourceMatches.length) {
-                                                return "Bye";
+                                        // When match has no results and no incoming edge, use the node's placeholder directly so edits/swaps reflect in real time
+                                        if (!hasResult && !edge) {
+                                            if (isExplicitTBD) return null;
+                                            return placeholder;
+                                        }
+
+                                        // 1. If we have a database match with a team ID assigned, use it UNLESS explicitly cleared to TBD and match has no results
+                                        if (dbMatch && (hasResult || !edge)) {
+                                            if (!hasResult && isExplicitTBD) {
+                                                return null;
                                             }
-                                            const sourceMatchItem = sourceMatches[matchIdx];
-
-                                            const sourceDbMatch = storeMatches.find(m =>
-                                                (sourceMatchItem?.dbId && m.id === sourceMatchItem.dbId) ||
-                                                (sourceMatchItem?.matchId && m.id === sourceMatchItem.matchId) ||
-                                                (m.node_id === sourceNode.id && ((m.idx_match ?? m.match_index) === (matchIdx + 1))) ||
-                                                (sourceMatchItem && m.placeholder_a === sourceMatchItem.placeholderA && m.placeholder_b === sourceMatchItem.placeholderB) ||
-                                                (sourceMatchItem && m.ph_home === sourceMatchItem.placeholderA && m.ph_away === sourceMatchItem.placeholderB)
-                                            );
-
-                                            const isSourceEnded = isMatchEnded(sourceDbMatch?.status);
-
-                                            if (isSourceEnded && sourceDbMatch) {
-                                                let winnerTeamId: string | null = sourceDbMatch.winner_id || null;
-                                                let loserTeamId: string | null = null;
-
-                                                const getScoreNum = (score: unknown) => {
-                                                    if (typeof score === 'object' && score !== null && 'total' in score) {
-                                                        return Number((score as { total?: number }).total) || 0;
-                                                    }
-                                                    return Number(score ?? 0);
-                                                };
-                                                const homeScore = getScoreNum(sourceDbMatch.home_score);
-                                                const awayScore = getScoreNum(sourceDbMatch.away_score);
-
-                                                if (!winnerTeamId) {
-                                                    if (homeScore > awayScore) {
-                                                        winnerTeamId = sourceDbMatch.home_team_id;
-                                                        loserTeamId = sourceDbMatch.away_team_id;
-                                                    } else if (awayScore > homeScore) {
-                                                        winnerTeamId = sourceDbMatch.away_team_id;
-                                                        loserTeamId = sourceDbMatch.home_team_id;
-                                                    }
-                                                } else {
-                                                    loserTeamId = winnerTeamId === sourceDbMatch.home_team_id
-                                                        ? sourceDbMatch.away_team_id
-                                                        : sourceDbMatch.home_team_id;
-                                                }
-
-                                                const targetTeamId = isWinnerHandle ? winnerTeamId : loserTeamId;
-
-                                                if (targetTeamId) {
-                                                    const team = storeTeams.find(t => String(t.team_id || t.id) === String(targetTeamId));
-                                                    if (team?.name) return team.name;
-
-                                                    if (String(sourceDbMatch.home_team_id) === String(targetTeamId) && sourceDbMatch.home_team?.name) {
-                                                        return sourceDbMatch.home_team.name;
-                                                    }
-                                                    if (String(sourceDbMatch.away_team_id) === String(targetTeamId) && sourceDbMatch.away_team?.name) {
-                                                        return sourceDbMatch.away_team.name;
-                                                    }
-                                                }
-
-                                                if (!targetTeamId && homeScore !== awayScore) {
-                                                    const isHomeWinner = homeScore > awayScore;
-                                                    const wantHome = isWinnerHandle ? isHomeWinner : !isHomeWinner;
-                                                    const chosen = wantHome ? sourceMatchItem?.placeholderA : sourceMatchItem?.placeholderB;
-                                                    if (chosen && chosen !== 'TBD') return chosen;
-                                                }
+                                            const teamId = slot === 'a' ? dbMatch.home_team_id : dbMatch.away_team_id;
+                                            if (teamId) {
+                                                const team = storeTeams.find(t => String(t.team_id || t.id) === String(teamId));
+                                                if (team?.name) return team.name;
                                             }
+                                            if (slot === 'a' && dbMatch.home_team?.name) return dbMatch.home_team.name;
+                                            if (slot === 'b' && dbMatch.away_team?.name) return dbMatch.away_team.name;
+                                        }
 
-                                            const isMultiMatch = sourceMatches.length > 1;
-                                            const labelBase = isFromRound ? `Match ${matchIdx + 1}` : (isMultiMatch ? `Match ${matchIdx + 1}` : (sourceNode.data.label ? `${sourceNode.data.label}` : `Match ${matchIdx + 1}`));
-                                            if (isWinnerHandle) {
-                                                return `Winner (${labelBase})`;
+                                        // 2. Fall back to resolved placeholder/ranking/label from edge connections
+                                        if (!edge) return null;
+
+                                        const sourceNode = nodes.find(n => n.id === edge.source);
+                                        if (!sourceNode) return null;
+
+                                        // Handle StandingNode/GroupNode propagation
+                                        if (sourceNode.type === 'standingNode' || sourceNode.type === 'groupNode') {
+                                            const rankMatch = edge.sourceHandle?.match(/rank-(\d+)/);
+                                            if (rankMatch) {
+                                                const rankIndex = parseInt(rankMatch[1], 10);
+                                                const rankings = (sourceNode.data as { rankings?: string[] }).rankings || [];
+                                                if (rankings[rankIndex]) return rankings[rankIndex];
+
+                                                const rankSuffix = rankIndex === 0 ? "1st" : rankIndex === 1 ? "2nd" : rankIndex === 2 ? "3rd" : `${rankIndex + 1}th`;
+                                                return `${rankSuffix} Place (${sourceNode.data.label})`;
+                                            }
+                                        }
+
+                                        // Handle MatchNode propagation (Winner / Loser)
+                                        if (sourceNode.type === 'matchNode') {
+                                            let matchIdx = -1;
+                                            let isWinnerHandle = true;
+
+                                            if (isFromRound) {
+                                                matchIdx = isRound ? (index * 2 + (slot === 'a' ? 0 : 1)) : (roundPairIdx * 2 + (slot === 'a' ? 0 : 1));
+                                                isWinnerHandle = true;
                                             } else {
-                                                return `Loser (${labelBase})`;
+                                                const winnerMatch = edge.sourceHandle?.match(/winner-(\d+)/);
+                                                const loserMatch = edge.sourceHandle?.match(/loser-(\d+)/);
+                                                isWinnerHandle = !loserMatch;
+                                                matchIdx = winnerMatch ? parseInt(winnerMatch[1], 10) : loserMatch ? parseInt(loserMatch[1], 10) : -1;
+                                            }
+
+                                            if (matchIdx !== -1) {
+                                                const sourceMatches = Array.isArray(sourceNode.data.matches) ? (sourceNode.data.matches as any[]) : [];
+                                                if (isFromRound && matchIdx >= sourceMatches.length) {
+                                                    return "Bye";
+                                                }
+                                                const sourceMatchItem = sourceMatches[matchIdx];
+
+                                                const sourceDbMatch = storeMatches.find(m =>
+                                                    (sourceMatchItem?.dbId && m.id === sourceMatchItem.dbId) ||
+                                                    (sourceMatchItem?.matchId && m.id === sourceMatchItem.matchId) ||
+                                                    (m.node_id === sourceNode.id && ((m.idx_match ?? m.match_index) === (matchIdx + 1))) ||
+                                                    (sourceMatchItem && m.placeholder_a === sourceMatchItem.placeholderA && m.placeholder_b === sourceMatchItem.placeholderB) ||
+                                                    (sourceMatchItem && m.ph_home === sourceMatchItem.placeholderA && m.ph_away === sourceMatchItem.placeholderB)
+                                                );
+
+                                                const isSourceEnded = isMatchEnded(sourceDbMatch?.status);
+
+                                                if (isSourceEnded && sourceDbMatch) {
+                                                    let winnerTeamId: string | null = sourceDbMatch.winner_id || null;
+                                                    let loserTeamId: string | null = null;
+
+                                                    const getScoreNum = (score: unknown) => {
+                                                        if (typeof score === 'object' && score !== null && 'total' in score) {
+                                                            return Number((score as { total?: number }).total) || 0;
+                                                        }
+                                                        return Number(score ?? 0);
+                                                    };
+                                                    const homeScore = getScoreNum(sourceDbMatch.home_score);
+                                                    const awayScore = getScoreNum(sourceDbMatch.away_score);
+
+                                                    if (!winnerTeamId) {
+                                                        if (homeScore > awayScore) {
+                                                            winnerTeamId = sourceDbMatch.home_team_id;
+                                                            loserTeamId = sourceDbMatch.away_team_id;
+                                                        } else if (awayScore > homeScore) {
+                                                            winnerTeamId = sourceDbMatch.away_team_id;
+                                                            loserTeamId = sourceDbMatch.home_team_id;
+                                                        }
+                                                    } else {
+                                                        loserTeamId = winnerTeamId === sourceDbMatch.home_team_id
+                                                            ? sourceDbMatch.away_team_id
+                                                            : sourceDbMatch.home_team_id;
+                                                    }
+
+                                                    const targetTeamId = isWinnerHandle ? winnerTeamId : loserTeamId;
+
+                                                    if (targetTeamId) {
+                                                        const team = storeTeams.find(t => String(t.team_id || t.id) === String(targetTeamId));
+                                                        if (team?.name) return team.name;
+
+                                                        if (String(sourceDbMatch.home_team_id) === String(targetTeamId) && sourceDbMatch.home_team?.name) {
+                                                            return sourceDbMatch.home_team.name;
+                                                        }
+                                                        if (String(sourceDbMatch.away_team_id) === String(targetTeamId) && sourceDbMatch.away_team?.name) {
+                                                            return sourceDbMatch.away_team.name;
+                                                        }
+                                                    }
+
+                                                    if (!targetTeamId && homeScore !== awayScore) {
+                                                        const isHomeWinner = homeScore > awayScore;
+                                                        const wantHome = isWinnerHandle ? isHomeWinner : !isHomeWinner;
+                                                        const chosen = wantHome ? sourceMatchItem?.placeholderA : sourceMatchItem?.placeholderB;
+                                                        if (chosen && chosen !== 'TBD') return chosen;
+                                                    }
+                                                }
+
+                                                const isMultiMatch = sourceMatches.length > 1;
+                                                const labelBase = isFromRound ? `Match ${matchIdx + 1}` : (isMultiMatch ? `Match ${matchIdx + 1}` : (sourceNode.data.label ? `${sourceNode.data.label}` : `Match ${matchIdx + 1}`));
+                                                if (isWinnerHandle) {
+                                                    return `Winner (${labelBase})`;
+                                                } else {
+                                                    return `Loser (${labelBase})`;
+                                                }
                                             }
                                         }
-                                    }
 
-                                    return null;
-                                };
+                                        return null;
+                                    };
 
-                                const liveTeamA = getResolvedTeam('a');
-                                const liveTeamB = getResolvedTeam('b');
+                                    const liveTeamA = getResolvedTeam('a');
+                                    const liveTeamB = getResolvedTeam('b');
 
-                                return (
-                                    <div key={match.id || index} className="relative">
-                                        {/* Sub-header for multi-match round nodes */}
-                                        {matches.length > 1 && (
-                                            <div className="px-4 py-1 flex items-center justify-between gap-2 border-b bg-node-2/10">
-                                                <span className="text-xs font-bold">
-                                                    Match {index + 1}
-                                                </span>
-                                                <div className="flex items-center shrink-0">
-                                                    {renderMatchStatus(match, dbMatch)}
-                                                </div>
-                                            </div>
-                                        )}
-
-                                        <div>
-                                            {(() => {
-                                                const isEnded = isMatchEnded(dbMatch?.status);
-
-                                                const getScoreValue = (score: unknown) => (typeof score === 'object' && score !== null && 'total' in score ? (score as Record<string, unknown>).total : score);
-
-                                                const homeScoreVal = dbMatch?.home_score !== null && dbMatch?.home_score !== undefined ? Number(getScoreValue(dbMatch.home_score)) || 0 : 0;
-                                                const awayScoreVal = dbMatch?.away_score !== null && dbMatch?.away_score !== undefined ? Number(getScoreValue(dbMatch.away_score)) || 0 : 0;
-
-                                                const isHomeWinner = isEnded && (
-                                                    dbMatch?.winner_id
-                                                        ? dbMatch.winner_id === dbMatch?.home_team_id
-                                                        : homeScoreVal > awayScoreVal
-                                                );
-                                                const isAwayWinner = isEnded && (
-                                                    dbMatch?.winner_id
-                                                        ? dbMatch.winner_id === dbMatch?.away_team_id
-                                                        : awayScoreVal > homeScoreVal
-                                                );
-                                                const isHomeLoser = isEnded && !isHomeWinner && (isAwayWinner || (dbMatch?.winner_id ? dbMatch.winner_id === dbMatch?.away_team_id : homeScoreVal < awayScoreVal));
-                                                const isAwayLoser = isEnded && !isAwayWinner && (isHomeWinner || (dbMatch?.winner_id ? dbMatch.winner_id === dbMatch?.home_team_id : awayScoreVal < homeScoreVal));
-
-                                                const hasWinnerEdge = edges.some(
-                                                    (e) => e.source === id && e.sourceHandle === `winner-${index}`
-                                                );
-                                                const hasDirectSlotAEdge = edges.some(
-                                                    (e) => e.target === id && e.targetHandle === `slot-a-${index}`
-                                                );
-                                                const hasDirectSlotBEdge = edges.some(
-                                                    (e) => e.target === id && e.targetHandle === `slot-b-${index}`
-                                                );
-
-                                                // Check if this match receives an incoming connection from a Draw Node or round-level edge
-                                                const isDrawConnected = edges.some((e) => {
-                                                    if (e.target !== id) return false;
-                                                    const sourceNode = nodes.find((n) => n.id === e.source);
-                                                    if (sourceNode?.type !== "drawNode") return false;
-                                                    return (
-                                                        !e.targetHandle ||
-                                                        e.targetHandle === "round-in" ||
-                                                        e.targetHandle === `slot-a-${index}` ||
-                                                        e.targetHandle === `slot-b-${index}`
-                                                    );
-                                                });
-
-                                                const hasIncomingRoundEdge = hasRoundInEdge || edges.some(e => {
-        if (e.target !== id) return false;
-        const sNode = nodes.find(n => n.id === e.source);
-        if (!sNode || sNode.type !== 'matchNode') return false;
-        return (Array.isArray(sNode.data.matches) && sNode.data.matches.length > 1) || e.sourceHandle === 'round-out' || Boolean(sNode.data.isRound);
-    });
-
-                                                const hasSlotAEdge = hasDirectSlotAEdge || isDrawConnected || hasIncomingRoundEdge;
-                                                const hasSlotBEdge = hasDirectSlotBEdge || isDrawConnected || hasIncomingRoundEdge;
-
-                                                return (
-                                                    <div className="relative flex flex-col divide-y divide-border">
-                                                        {/* Only render individual match slot handles in Match mode when not in Round and not receiving round input */}
-                                                        {!isRound && !hasRoundInEdge && (
-                                                            <>
-{/* Target Handles for each match slot */}
-                                                        <Handle
-                                                            type="target"
-                                                            position={Position.Left}
-                                                            id={`slot-a-${index}`}
-                                                            className={cn(
-                                                                "!opacity-0 !bg-transparent !border-0 !w-3 !h-full !transform-none !rounded-none cursor-crosshair",
-                                                                hasSlotAEdge ? "z-10 pointer-events-none" : "z-20 pointer-events-auto"
-                                                            )}
-                                                            style={{ left: "-2px", top: 0, height: "100%", transform: "none" }}
-                                                            title={locale === 'th' ? "ทีม A" : "Team A"}
-                                                        />
-                                                        <Handle
-                                                            type="target"
-                                                            position={Position.Left}
-                                                            id={`slot-b-${index}`}
-                                                            className={cn(
-                                                                "!opacity-0 !bg-transparent !border-0 !w-3 !h-full !transform-none !rounded-none cursor-crosshair",
-                                                                hasSlotBEdge ? "z-10 pointer-events-none" : (hasSlotAEdge ? "z-20 pointer-events-auto" : "z-10 pointer-events-none")
-                                                            )}
-                                                            style={{ left: "-2px", top: 0, height: "100%", transform: "none" }}
-                                                            title={locale === 'th' ? "ทีม B" : "Team B"}
-                                                        />
-
-                                                        {/* Source Handles for each match (Winner / Loser) */}
-                                                        <Handle
-                                                            type="source"
-                                                            position={Position.Right}
-                                                            id={`winner-${index}`}
-                                                            className={cn(
-                                                                "!opacity-0 !bg-transparent !border-0 !w-3 !h-full !transform-none !rounded-none cursor-crosshair",
-                                                                hasWinnerEdge ? "z-10 pointer-events-none" : "z-20 pointer-events-auto"
-                                                            )}
-                                                            style={{ right: "-2px", top: 0, height: "100%", transform: "none" }}
-                                                            title={locale === 'th' ? "ผู้ชนะ (Winner)" : "Winner"}
-                                                        />
-                                                        <Handle
-                                                            type="source"
-                                                            position={Position.Right}
-                                                            id={`loser-${index}`}
-                                                            className={cn(
-                                                                "!opacity-0 !bg-transparent !border-0 !w-3 !h-full !transform-none !rounded-none cursor-crosshair",
-                                                                hasWinnerEdge ? "z-20 pointer-events-auto" : "z-10 pointer-events-none"
-                                                            )}
-                                                            style={{ right: "-2px", top: 0, height: "100%", transform: "none" }}
-                                                            title={locale === 'th' ? "ผู้แพ้ (Loser)" : "Loser"}
-                                                        />
-                                                            </>
-                                                        )}
-                                                        {/* Slot A Row */}
-                                                        <div className="relative group/slot-a">
-                                                            <SlotRow
-                                                                nodeId={id}
-                                                                matchIndex={index}
-                                                                slotKey="a"
-                                                                label={liveTeamA || match.placeholderA}
-                                                                teamId={dbMatch?.home_team_id}
-                                                                logoUrl={dbMatch?.home_team?.logo_url}
-                                                                isResolved={!!liveTeamA}
-                                                                hasIncomingEdge={hasSlotAEdge}
-                                                                score={dbMatch?.home_score}
-                                                                isWinner={isHomeWinner}
-                                                                isLoser={isHomeLoser}
-                                                                status={dbMatch?.status}
-                                                                hasResult={hasMatchResult(dbMatch)}
-                                                                position="top"
-                                                                sport={sport}
-                                                                onClickTeam={() =>
-                                                                    handleOpenTeamDetails(
-                                                                        liveTeamA || match.placeholderA,
-                                                                        dbMatch?.home_team_id,
-                                                                        dbMatch?.home_team?.logo_url
-                                                                    )
-                                                                }
-                                                                onDropTeam={(teamName, teamId, sourceMeta) =>
-                                                                    handleSlotDrop(
-                                                                        index,
-                                                                        "a",
-                                                                        liveTeamA || match.placeholderA,
-                                                                        dbMatch?.home_team_id,
-                                                                        liveTeamB || match.placeholderB,
-                                                                        teamName,
-                                                                        teamId,
-                                                                        sourceMeta
-                                                                    )
-                                                                }
-                                                                onClear={() => {
-                                                                    if (hasMatchResult(dbMatch)) {
-                                                                        toast({
-                                                                            title: locale === 'th' ? "ไม่สามารถลบทีมได้" : "Cannot remove team",
-                                                                            description: locale === 'th' ? "แมตช์นี้มีผลการแข่งขันแล้ว ไม่สามารถลบทีมได้" : "Match already has results and cannot be removed",
-                                                                            variant: "destructive"
-                                                                        });
-                                                                        return;
-                                                                    }
-                                                                    const nextMatches = [...matches];
-                                                                    nextMatches[index] = { ...nextMatches[index], placeholderA: "TBD" };
-                                                                    const handleId = `slot-a-${index}`;
-                                                                    const connectedEdge = edges.find(e => e.target === id && e.targetHandle === handleId);
-                                                                    if (connectedEdge) {
-                                                                        onEdgesChange([{ id: connectedEdge.id, type: 'remove' }]);
-                                                                    }
-
-                                                                    if (dbMatch) {
-                                                                        setStoreMatches((prev: Match[]) => prev.map(m => {
-                                                                            if (m.id === dbMatch.id || (m.node_id === id && (m.idx_match ?? m.match_index) === (index + 1))) {
-                                                                                return {
-                                                                                    ...m,
-                                                                                    home_team_id: null,
-                                                                                    home_team: undefined,
-                                                                                    placeholder_a: "TBD",
-                                                                                    placeholder_home: "TBD",
-                                                                                };
-                                                                            }
-                                                                            return m;
-                                                                        }));
-                                                                    }
-
-                                                                    updateNodeData(id, { matches: nextMatches });
-                                                                    useBracketStore.setState({ isDirty: true });
-                                                                }}
-                                                            />
-                                                        </div>
-
-                                                        {/* Slot B Row */}
-                                                        <div className="relative group/slot-b">
-                                                            <SlotRow
-                                                                nodeId={id}
-                                                                matchIndex={index}
-                                                                slotKey="b"
-                                                                label={liveTeamB || match.placeholderB}
-                                                                teamId={dbMatch?.away_team_id}
-                                                                logoUrl={dbMatch?.away_team?.logo_url}
-                                                                isResolved={!!liveTeamB}
-                                                                hasIncomingEdge={hasSlotBEdge}
-                                                                score={dbMatch?.away_score}
-                                                                isWinner={isAwayWinner}
-                                                                isLoser={isAwayLoser}
-                                                                status={dbMatch?.status}
-                                                                hasResult={hasMatchResult(dbMatch)}
-                                                                position="bottom"
-                                                                sport={sport}
-                                                                onClickTeam={() =>
-                                                                    handleOpenTeamDetails(
-                                                                        liveTeamB || match.placeholderB,
-                                                                        dbMatch?.away_team_id,
-                                                                        dbMatch?.away_team?.logo_url
-                                                                    )
-                                                                }
-                                                                onDropTeam={(teamName, teamId, sourceMeta) =>
-                                                                    handleSlotDrop(
-                                                                        index,
-                                                                        "b",
-                                                                        liveTeamB || match.placeholderB,
-                                                                        dbMatch?.away_team_id,
-                                                                        liveTeamA || match.placeholderA,
-                                                                        teamName,
-                                                                        teamId,
-                                                                        sourceMeta
-                                                                    )
-                                                                }
-                                                                onClear={() => {
-                                                                    if (hasMatchResult(dbMatch)) {
-                                                                        toast({
-                                                                            title: locale === 'th' ? "ไม่สามารถลบทีมได้" : "Cannot remove team",
-                                                                            description: locale === 'th' ? "แมตช์นี้มีผลการแข่งขันแล้ว ไม่สามารถลบทีมได้" : "Match already has results and cannot be removed",
-                                                                            variant: "destructive"
-                                                                        });
-                                                                        return;
-                                                                    }
-                                                                    const nextMatches = [...matches];
-                                                                    nextMatches[index] = { ...nextMatches[index], placeholderB: "TBD" };
-                                                                    const handleId = `slot-b-${index}`;
-                                                                    const connectedEdge = edges.find(e => e.target === id && e.targetHandle === handleId);
-                                                                    if (connectedEdge) {
-                                                                        onEdgesChange([{ id: connectedEdge.id, type: 'remove' }]);
-                                                                    }
-
-                                                                    if (dbMatch) {
-                                                                        setStoreMatches((prev: Match[]) => prev.map(m => {
-                                                                            if (m.id === dbMatch.id || (m.node_id === id && (m.idx_match ?? m.match_index) === (index + 1))) {
-                                                                                return {
-                                                                                    ...m,
-                                                                                    away_team_id: null,
-                                                                                    away_team: undefined,
-                                                                                    placeholder_b: "TBD",
-                                                                                    placeholder_away: "TBD",
-                                                                                };
-                                                                            }
-                                                                            return m;
-                                                                        }));
-                                                                    }
-
-                                                                    updateNodeData(id, { matches: nextMatches });
-                                                                    useBracketStore.setState({ isDirty: true });
-                                                                }}
-                                                            />
-                                                        </div>
+                                    return (
+                                        <div key={match.id || index} className="relative">
+                                            {/* Sub-header for multi-match round nodes */}
+                                            {matches.length > 1 && (
+                                                <div className="px-4 py-1 flex items-center justify-between gap-2 border-b bg-node-2/10">
+                                                    <span className="text-xs font-bold">
+                                                        Match {index + 1}
+                                                    </span>
+                                                    <div className="flex items-center shrink-0">
+                                                        {renderMatchStatus(match, dbMatch)}
                                                     </div>
-                                                );
-                                            })()}
+                                                </div>
+                                            )}
+
+                                            <div>
+                                                {(() => {
+                                                    const isEnded = isMatchEnded(dbMatch?.status);
+
+                                                    const getScoreValue = (score: unknown) => (typeof score === 'object' && score !== null && 'total' in score ? (score as Record<string, unknown>).total : score);
+
+                                                    const homeScoreVal = dbMatch?.home_score !== null && dbMatch?.home_score !== undefined ? Number(getScoreValue(dbMatch.home_score)) || 0 : 0;
+                                                    const awayScoreVal = dbMatch?.away_score !== null && dbMatch?.away_score !== undefined ? Number(getScoreValue(dbMatch.away_score)) || 0 : 0;
+
+                                                    const penaltyHome = dbMatch?.penalty_home_score ??
+                                                        dbMatch?.home_penalty_score ??
+                                                        dbMatch?.score_detail?.penalty_home_score ??
+                                                        dbMatch?.score_detail?.home_penalty_score;
+                                                    const penaltyAway = dbMatch?.penalty_away_score ??
+                                                        dbMatch?.away_penalty_score ??
+                                                        dbMatch?.score_detail?.penalty_away_score ??
+                                                        dbMatch?.score_detail?.away_penalty_score;
+                                                    const hasPenalty = (penaltyHome !== undefined && penaltyHome !== null) ||
+                                                        (penaltyAway !== undefined && penaltyAway !== null);
+                                                    const resolvedWinnerId = dbMatch?.winner_id ||
+                                                        dbMatch?.winner_to_node_id ||
+                                                        dbMatch?.score_detail?.winner_id;
+
+                                                    const isHomeWinner = isEnded && (
+                                                        resolvedWinnerId
+                                                            ? resolvedWinnerId === dbMatch?.home_team_id
+                                                            : homeScoreVal > awayScoreVal
+                                                    );
+                                                    const isAwayWinner = isEnded && (
+                                                        resolvedWinnerId
+                                                            ? resolvedWinnerId === dbMatch?.away_team_id
+                                                            : awayScoreVal > homeScoreVal
+                                                    );
+                                                    const isHomeLoser = isEnded && !isHomeWinner && (isAwayWinner || (resolvedWinnerId ? resolvedWinnerId === dbMatch?.away_team_id : homeScoreVal < awayScoreVal));
+                                                    const isAwayLoser = isEnded && !isAwayWinner && (isHomeWinner || (resolvedWinnerId ? resolvedWinnerId === dbMatch?.home_team_id : awayScoreVal < homeScoreVal));
+
+                                                    const hasWinnerEdge = edges.some(
+                                                        (e) => e.source === id && e.sourceHandle === `winner-${index}`
+                                                    );
+                                                    const hasDirectSlotAEdge = edges.some(
+                                                        (e) => e.target === id && e.targetHandle === `slot-a-${index}`
+                                                    );
+                                                    const hasDirectSlotBEdge = edges.some(
+                                                        (e) => e.target === id && e.targetHandle === `slot-b-${index}`
+                                                    );
+
+                                                    // Check if this match receives an incoming connection from a Draw Node or round-level edge
+                                                    const isDrawConnected = edges.some((e) => {
+                                                        if (e.target !== id) return false;
+                                                        const sourceNode = nodes.find((n) => n.id === e.source);
+                                                        if (sourceNode?.type !== "drawNode") return false;
+                                                        return (
+                                                            !e.targetHandle ||
+                                                            e.targetHandle === "round-in" ||
+                                                            e.targetHandle === `slot-a-${index}` ||
+                                                            e.targetHandle === `slot-b-${index}`
+                                                        );
+                                                    });
+
+                                                    const hasIncomingRoundEdge = hasRoundInEdge || edges.some(e => {
+                                                        if (e.target !== id) return false;
+                                                        const sNode = nodes.find(n => n.id === e.source);
+                                                        if (!sNode || sNode.type !== 'matchNode') return false;
+                                                        return (Array.isArray(sNode.data.matches) && sNode.data.matches.length > 1) || e.sourceHandle === 'round-out' || Boolean(sNode.data.isRound);
+                                                    });
+
+                                                    const hasSlotAEdge = hasDirectSlotAEdge || isDrawConnected || hasIncomingRoundEdge;
+                                                    const hasSlotBEdge = hasDirectSlotBEdge || isDrawConnected || hasIncomingRoundEdge;
+
+                                                    return (
+                                                        <div className="relative flex flex-col divide-y divide-border">
+                                                            {/* Only render individual match slot handles in Match mode when not in Round and not receiving round input */}
+                                                            {!isRound && !hasRoundInEdge && (
+                                                                <>
+                                                                    {/* Target Handles for each match slot */}
+                                                                    <Handle
+                                                                        type="target"
+                                                                        position={Position.Left}
+                                                                        id={`slot-a-${index}`}
+                                                                        className={cn(
+                                                                            "!opacity-0 !bg-transparent !border-0 !w-3 !h-full !transform-none !rounded-none cursor-crosshair",
+                                                                            hasSlotAEdge ? "z-10 pointer-events-none" : "z-20 pointer-events-auto"
+                                                                        )}
+                                                                        style={{ left: "-2px", top: 0, height: "100%", transform: "none" }}
+                                                                        title={locale === 'th' ? "ทีม A" : "Team A"}
+                                                                    />
+                                                                    <Handle
+                                                                        type="target"
+                                                                        position={Position.Left}
+                                                                        id={`slot-b-${index}`}
+                                                                        className={cn(
+                                                                            "!opacity-0 !bg-transparent !border-0 !w-3 !h-full !transform-none !rounded-none cursor-crosshair",
+                                                                            hasSlotBEdge ? "z-10 pointer-events-none" : (hasSlotAEdge ? "z-20 pointer-events-auto" : "z-10 pointer-events-none")
+                                                                        )}
+                                                                        style={{ left: "-2px", top: 0, height: "100%", transform: "none" }}
+                                                                        title={locale === 'th' ? "ทีม B" : "Team B"}
+                                                                    />
+
+                                                                    {/* Source Handles for each match (Winner / Loser) */}
+                                                                    <Handle
+                                                                        type="source"
+                                                                        position={Position.Right}
+                                                                        id={`winner-${index}`}
+                                                                        className={cn(
+                                                                            "!opacity-0 !bg-transparent !border-0 !w-3 !h-full !transform-none !rounded-none cursor-crosshair",
+                                                                            hasWinnerEdge ? "z-10 pointer-events-none" : "z-20 pointer-events-auto"
+                                                                        )}
+                                                                        style={{ right: "-2px", top: 0, height: "100%", transform: "none" }}
+                                                                        title={locale === 'th' ? "ผู้ชนะ (Winner)" : "Winner"}
+                                                                    />
+                                                                    <Handle
+                                                                        type="source"
+                                                                        position={Position.Right}
+                                                                        id={`loser-${index}`}
+                                                                        className={cn(
+                                                                            "!opacity-0 !bg-transparent !border-0 !w-3 !h-full !transform-none !rounded-none cursor-crosshair",
+                                                                            hasWinnerEdge ? "z-20 pointer-events-auto" : "z-10 pointer-events-none"
+                                                                        )}
+                                                                        style={{ right: "-2px", top: 0, height: "100%", transform: "none" }}
+                                                                        title={locale === 'th' ? "ผู้แพ้ (Loser)" : "Loser"}
+                                                                    />
+                                                                </>
+                                                            )}
+                                                            {/* Slot A Row */}
+                                                            <div className="relative group/slot-a">
+                                                                <SlotRow
+                                                                    nodeId={id}
+                                                                    matchIndex={index}
+                                                                    slotKey="a"
+                                                                    label={liveTeamA || match.placeholderA}
+                                                                    teamId={dbMatch?.home_team_id}
+                                                                    logoUrl={dbMatch?.home_team?.logo_url}
+                                                                    isResolved={!!liveTeamA}
+                                                                    hasIncomingEdge={hasSlotAEdge}
+                                                                    score={dbMatch?.home_score}
+                                                                    penaltyScore={hasPenalty ? (penaltyHome ?? 0) : undefined}
+                                                                    isWinner={isHomeWinner}
+                                                                    isLoser={isHomeLoser}
+                                                                    status={dbMatch?.status}
+                                                                    hasResult={hasMatchResult(dbMatch)}
+                                                                    position="top"
+                                                                    sport={sport}
+                                                                    onClickTeam={() =>
+                                                                        handleOpenTeamDetails(
+                                                                            liveTeamA || match.placeholderA,
+                                                                            dbMatch?.home_team_id,
+                                                                            dbMatch?.home_team?.logo_url
+                                                                        )
+                                                                    }
+                                                                    onDropTeam={(teamName, teamId, sourceMeta) =>
+                                                                        handleSlotDrop(
+                                                                            index,
+                                                                            "a",
+                                                                            liveTeamA || match.placeholderA,
+                                                                            dbMatch?.home_team_id,
+                                                                            liveTeamB || match.placeholderB,
+                                                                            teamName,
+                                                                            teamId,
+                                                                            sourceMeta
+                                                                        )
+                                                                    }
+                                                                    onClear={() => {
+                                                                        if (hasMatchResult(dbMatch)) {
+                                                                            toast({
+                                                                                title: locale === 'th' ? "ไม่สามารถลบทีมได้" : "Cannot remove team",
+                                                                                description: locale === 'th' ? "แมตช์นี้มีผลการแข่งขันแล้ว ไม่สามารถลบทีมได้" : "Match already has results and cannot be removed",
+                                                                                variant: "destructive"
+                                                                            });
+                                                                            return;
+                                                                        }
+                                                                        const nextMatches = [...matches];
+                                                                        nextMatches[index] = { ...nextMatches[index], placeholderA: "TBD" };
+                                                                        const handleId = `slot-a-${index}`;
+                                                                        const connectedEdge = edges.find(e => e.target === id && e.targetHandle === handleId);
+                                                                        if (connectedEdge) {
+                                                                            onEdgesChange([{ id: connectedEdge.id, type: 'remove' }]);
+                                                                        }
+
+                                                                        if (dbMatch) {
+                                                                            setStoreMatches((prev: Match[]) => prev.map(m => {
+                                                                                if (m.id === dbMatch.id || (m.node_id === id && (m.idx_match ?? m.match_index) === (index + 1))) {
+                                                                                    return {
+                                                                                        ...m,
+                                                                                        home_team_id: null,
+                                                                                        home_team: undefined,
+                                                                                        placeholder_a: "TBD",
+                                                                                        placeholder_home: "TBD",
+                                                                                    };
+                                                                                }
+                                                                                return m;
+                                                                            }));
+                                                                        }
+
+                                                                        updateNodeData(id, { matches: nextMatches });
+                                                                        useBracketStore.setState({ isDirty: true });
+                                                                    }}
+                                                                />
+                                                            </div>
+
+                                                            {/* Slot B Row */}
+                                                            <div className="relative group/slot-b">
+                                                                <SlotRow
+                                                                    nodeId={id}
+                                                                    matchIndex={index}
+                                                                    slotKey="b"
+                                                                    label={liveTeamB || match.placeholderB}
+                                                                    teamId={dbMatch?.away_team_id}
+                                                                    logoUrl={dbMatch?.away_team?.logo_url}
+                                                                    isResolved={!!liveTeamB}
+                                                                    hasIncomingEdge={hasSlotBEdge}
+                                                                    score={dbMatch?.away_score}
+                                                                    penaltyScore={hasPenalty ? (penaltyAway ?? 0) : undefined}
+                                                                    isWinner={isAwayWinner}
+                                                                    isLoser={isAwayLoser}
+                                                                    status={dbMatch?.status}
+                                                                    hasResult={hasMatchResult(dbMatch)}
+                                                                    position="bottom"
+                                                                    sport={sport}
+                                                                    onClickTeam={() =>
+                                                                        handleOpenTeamDetails(
+                                                                            liveTeamB || match.placeholderB,
+                                                                            dbMatch?.away_team_id,
+                                                                            dbMatch?.away_team?.logo_url
+                                                                        )
+                                                                    }
+                                                                    onDropTeam={(teamName, teamId, sourceMeta) =>
+                                                                        handleSlotDrop(
+                                                                            index,
+                                                                            "b",
+                                                                            liveTeamB || match.placeholderB,
+                                                                            dbMatch?.away_team_id,
+                                                                            liveTeamA || match.placeholderA,
+                                                                            teamName,
+                                                                            teamId,
+                                                                            sourceMeta
+                                                                        )
+                                                                    }
+                                                                    onClear={() => {
+                                                                        if (hasMatchResult(dbMatch)) {
+                                                                            toast({
+                                                                                title: locale === 'th' ? "ไม่สามารถลบทีมได้" : "Cannot remove team",
+                                                                                description: locale === 'th' ? "แมตช์นี้มีผลการแข่งขันแล้ว ไม่สามารถลบทีมได้" : "Match already has results and cannot be removed",
+                                                                                variant: "destructive"
+                                                                            });
+                                                                            return;
+                                                                        }
+                                                                        const nextMatches = [...matches];
+                                                                        nextMatches[index] = { ...nextMatches[index], placeholderB: "TBD" };
+                                                                        const handleId = `slot-b-${index}`;
+                                                                        const connectedEdge = edges.find(e => e.target === id && e.targetHandle === handleId);
+                                                                        if (connectedEdge) {
+                                                                            onEdgesChange([{ id: connectedEdge.id, type: 'remove' }]);
+                                                                        }
+
+                                                                        if (dbMatch) {
+                                                                            setStoreMatches((prev: Match[]) => prev.map(m => {
+                                                                                if (m.id === dbMatch.id || (m.node_id === id && (m.idx_match ?? m.match_index) === (index + 1))) {
+                                                                                    return {
+                                                                                        ...m,
+                                                                                        away_team_id: null,
+                                                                                        away_team: undefined,
+                                                                                        placeholder_b: "TBD",
+                                                                                        placeholder_away: "TBD",
+                                                                                    };
+                                                                                }
+                                                                                return m;
+                                                                            }));
+                                                                        }
+
+                                                                        updateNodeData(id, { matches: nextMatches });
+                                                                        useBracketStore.setState({ isDirty: true });
+                                                                    }}
+                                                                />
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })()}
+                                            </div>
                                         </div>
-                                    </div>
-                                );
-                            })}
-                    </div>
-                )}
-            </div>
+                                    );
+                                })}
+                        </div>
+                    )}
+                </div>
             </div>
 
             <TeamRosterDetailsDialog
@@ -1254,6 +1264,7 @@ function SlotRow({
     teamId,
     logoUrl,
     score,
+    penaltyScore,
     setPoints,
     isWinner,
     isLoser,
@@ -1274,6 +1285,7 @@ function SlotRow({
     teamId?: string | null;
     logoUrl?: string | null;
     score?: unknown;
+    penaltyScore?: unknown;
     setPoints?: number;
     isWinner?: boolean;
     isLoser?: boolean;
@@ -1507,7 +1519,14 @@ function SlotRow({
                             )}
                         </>
                     ) : (
-                        <span className="w-6 h-6 flex items-center justify-center font-black text-xs">{displayScore}</span>
+                        <div className="flex items-center">
+                            {penaltyScore !== undefined && penaltyScore !== null && (
+                                <span className="text-[10px] font-bold text-node-2 leading-none">
+                                    ({String(penaltyScore)})
+                                </span>
+                            )}
+                            <span className="w-6 h-6 flex items-center justify-center font-bold text-xs">{displayScore}</span>
+                        </div>
                     )}
                 </div>
             )}

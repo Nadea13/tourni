@@ -32,8 +32,6 @@ export const DrawNode = memo(({
         swapDrawPairSlots,
         generateNextRoundFromDraw,
         teams: storeTeams = [],
-        setActiveNodeId,
-        selectNode,
     } = useBracketStore();
 
     const [isShuffling, setIsShuffling] = useState(false);
@@ -239,14 +237,6 @@ export const DrawNode = memo(({
 
     return (
         <div
-            onClick={(e) => {
-                const target = e.target as HTMLElement | null;
-                if (target?.closest('button, input, select, [role="combobox"], [data-slot], .nodrag')) {
-                    return;
-                }
-                setActiveNodeId(id);
-                selectNode(id);
-            }}
             className={cn(
                 "relative w-[380px] border bg-card text-card-foreground overflow-hidden transition-all cursor-pointer rounded-sm shadow-md",
                 selected ? "border-node-4" : "border-node-4/50 hover:border-node-4"

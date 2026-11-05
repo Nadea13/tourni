@@ -22,7 +22,7 @@ interface LiveMatchTimerProps {
     className?: string;
 }
 
-export function LiveMatchTimer({ match: initialMatch, tournamentId, inHeader = false, className }: LiveMatchTimerProps) {
+export function LiveMatchTimer({ match: initialMatch, tournamentId, className }: LiveMatchTimerProps) {
     const [match, setMatch] = useState<Match>(initialMatch);
 
     useEffect(() => {
@@ -59,14 +59,20 @@ export function LiveMatchTimer({ match: initialMatch, tournamentId, inHeader = f
         }
     });
 
-    const { time } = useMatchTimer(match, tournamentId, events);
+    const isFutsal = Boolean(
+        (match as any).sport === 'futsal' ||
+        (match as any).sport?.includes('futsal') ||
+        (match as any).sport?.includes('ฟุตซอล') ||
+        (match as any).sport_name?.toLowerCase().includes('futsal') ||
+        (match as any).sport_name?.includes('ฟุตซอล')
+    );
+    const { time } = useMatchTimer(match, tournamentId, events, 0, isFutsal);
     const formatted = formatTimerSeconds(time);
 
     return (
         <span
             className={cn(
                 "text-xs font-bold flex items-center tabular-nums",
-                inHeader ? "text-white" : "text-muted-foreground",
                 className
             )}>
             {formatted}
@@ -170,7 +176,14 @@ function LiveSettingTimer({ match: initialMatch, tournamentId }: { match: Match;
         }
     });
 
-    const { time } = useMatchTimer(match, tournamentId, events);
+    const isFutsal = Boolean(
+        (match as any).sport === 'futsal' ||
+        (match as any).sport?.includes('futsal') ||
+        (match as any).sport?.includes('ฟุตซอล') ||
+        (match as any).sport_name?.toLowerCase().includes('futsal') ||
+        (match as any).sport_name?.includes('ฟุตซอล')
+    );
+    const { time } = useMatchTimer(match, tournamentId, events, 0, isFutsal);
     const formatted = formatTimerSeconds(time);
 
     return (

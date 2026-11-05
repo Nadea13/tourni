@@ -15,7 +15,6 @@ import { useMatchWebSocket } from "@/hooks/use-match-websocket";
 import { ApiClient } from "@/lib/api-client";
 import { Match, TournamentStatus, Registration } from "@/types";
 import { isMatchEnded } from "./match-node";
-import { updateTournamentStatus } from "@/actions/tournaments/general";
 import { Input } from "@/components/ui/input";
 import { Badge } from "@/components/ui/badge";
 import { Header } from "@/components/ui/header";
@@ -1112,29 +1111,7 @@ export function RankingNodeSettings({
         );
     }, [items, searchQuery]);
 
-    // Check if tournament has a determined champion or rank 1 -> auto set status to completed
-    const hasChampion = React.useMemo(() => {
-        return items.some(item => (item.type === 'champion' || item.rank === 1) && !item.isActive);
-    }, [items]);
-
-    React.useEffect(() => {
-        if (!hasChampion || !tournamentId) return;
-        if (currentTournamentStatus === 'completed' || currentTournamentStatus === 'cancelled') return;
-
-        // If status was manually unlocked in Danger Zone, do not auto-override
-        if (typeof window !== 'undefined') {
-            const isManuallyUnlocked = sessionStorage.getItem(`tournament_unlocked_${tournamentId}`) === 'true';
-            if (isManuallyUnlocked) return;
-        }
-
-        updateTournamentStatus(tournamentId, 'completed').then(res => {
-            if (res.success) {
-                onStatusChange?.('completed');
-            }
-        }).catch(err => {
-            console.error("Failed to auto-update tournament status to completed:", err);
-        });
-    }, [hasChampion, tournamentId, currentTournamentStatus, onStatusChange]);
+    // Note: Automatic status completion is handled only when all matches in the tournament are finished or grace period passes
 
     return (
         <div className="flex flex-col h-full min-h-0 overflow-hidden">

@@ -539,12 +539,25 @@ function CanvasInternal({
                         logo_url: (match.away_team as { logo_img?: string | null }).logo_img || match.away_team.logo_url || undefined
                     } : undefined;
 
+                    const penalty_home_score = match.penalty_home_score ??
+                        match.home_penalty_score ??
+                        match.score_detail?.penalty_home_score ??
+                        match.score_detail?.home_penalty_score;
+                    const penalty_away_score = match.penalty_away_score ??
+                        match.away_penalty_score ??
+                        match.score_detail?.penalty_away_score ??
+                        match.score_detail?.away_penalty_score;
+                    const winner_id = match.winner_id || match.winner_to_node_id || match.score_detail?.winner_id;
+
                     return {
                         ...match,
                         match_date,
                         match_time,
                         home_team,
-                        away_team
+                        away_team,
+                        penalty_home_score,
+                        penalty_away_score,
+                        winner_id
                     };
                 });
 
@@ -907,7 +920,7 @@ function CanvasInternal({
     const [currentName, setCurrentName] = useState(tournamentName);
     const [tempName, setTempName] = useState(tournamentName);
     const [currentStatus, setCurrentStatus] = useState<TournamentStatus>(tournament?.status || 'draft');
-    const [isLocked, setIsLocked] = useState(readonly || tournament?.status === 'completed');
+    const [isLocked, setIsLocked] = useState(readonly || tournament?.status === 'completed' || tournament?.status === 'ongoing');
     const [isCategoryLoading, setIsCategoryLoading] = useState(false);
     const [userInvitationRole, setUserInvitationRole] = useState<string | null>(null);
     const [isUpdatingStatus, setIsUpdatingStatus] = useState(false);
@@ -1054,6 +1067,8 @@ function CanvasInternal({
             setIsLocked(readonly);
         }
     }, [readonly, currentStatus]);
+
+    // Note: Settings can be viewed in read-only mode even when canvas is locked
 
     // Warning popup when reloading/closing tab with unsaved changes
     useEffect(() => {
@@ -2215,14 +2230,7 @@ function CanvasInternal({
                                                 </Button>
                                             </ActionMenuTrigger>
                                             <ActionMenuContent align="end" className="w-56 bg-card shadow-2xl rounded-sm p-1">
-                                                <ActionMenuItem
-                                                    onClick={handleOpenAnnouncementSettings}
-                                                    className="cursor-pointer text-xs font-semibold flex items-center gap-2 py-2"
-                                                >
-                                                    <Megaphone className="size-4" />
-                                                    <span>{locale === 'th' ? "ประกาศ" : "Announcement"}</span>
-                                                </ActionMenuItem>
-
+                                                {/* 1. โล่: การจัดการทีม */}
                                                 <ActionMenuItem
                                                     onClick={handleOpenRegistrationSettings}
                                                     className="cursor-pointer text-xs font-semibold flex items-center justify-between py-2"
@@ -2236,14 +2244,7 @@ function CanvasInternal({
                                                     )}
                                                 </ActionMenuItem>
 
-                                                <ActionMenuItem
-                                                    onClick={handleOpenSponsorSettings}
-                                                    className="cursor-pointer text-xs font-semibold flex items-center gap-2 py-2"
-                                                >
-                                                    <Heart className="size-4" />
-                                                    <span>{locale === 'th' ? "ผู้สนับสนุน" : "Sponsors"}</span>
-                                                </ActionMenuItem>
-
+                                                {/* 2. ปฏิทิน: ตารางการแข่งขัน */}
                                                 <ActionMenuItem
                                                     onClick={async () => {
                                                         setActiveNodeId(null);
@@ -2263,21 +2264,34 @@ function CanvasInternal({
                                                     <span>{locale === 'th' ? "ตารางการแข่งขัน" : "Schedule"}</span>
                                                 </ActionMenuItem>
 
-                                                {userInvitationRole !== 'staff' && userInvitationRole !== 'referee' && (
-                                                    <ActionMenuItem
-                                                        onClick={() => {
-                                                            setActiveNodeId(null);
-                                                            selectNode(null);
-                                                            setActiveSidebar('settings');
-                                                            updateUrlParams({ tab: 'settings', subtab: activeSettingsTab || 'general' });
-                                                        }}
-                                                        className="cursor-pointer text-xs font-semibold flex items-center gap-2 py-2"
-                                                    >
-                                                        <Settings className="size-4" />
-                                                        <span>{locale === 'th' ? "ตั้งค่าทัวร์นาเมนต์" : "Settings"}</span>
-                                                    </ActionMenuItem>
-                                                )}
+                                                {/* 3. ถ้วย: อันดับการแข่งขัน */}
+                                                <ActionMenuItem
+                                                    onClick={handleOpenRankingSettings}
+                                                    className="cursor-pointer text-xs font-semibold flex items-center gap-2 py-2"
+                                                >
+                                                    <Trophy className="size-4" />
+                                                    <span>{locale === 'th' ? "อันดับการแข่งขัน" : "Rankings"}</span>
+                                                </ActionMenuItem>
 
+                                                {/* 4. หัวใจ: ผู้สนับสนุน */}
+                                                <ActionMenuItem
+                                                    onClick={handleOpenSponsorSettings}
+                                                    className="cursor-pointer text-xs font-semibold flex items-center gap-2 py-2"
+                                                >
+                                                    <Heart className="size-4" />
+                                                    <span>{locale === 'th' ? "ผู้สนับสนุน" : "Sponsors"}</span>
+                                                </ActionMenuItem>
+
+                                                {/* 5. โทรโข่ง: ประกาศ */}
+                                                <ActionMenuItem
+                                                    onClick={handleOpenAnnouncementSettings}
+                                                    className="cursor-pointer text-xs font-semibold flex items-center gap-2 py-2"
+                                                >
+                                                    <Megaphone className="size-4" />
+                                                    <span>{locale === 'th' ? "ประกาศ" : "Announcement"}</span>
+                                                </ActionMenuItem>
+
+                                                {/* 6. แชร์: ลิงก์และการแชร์ */}
                                                 <div className="border-t my-1" />
 
                                                 <div className="px-2 py-1 text-[10px] font-bold text-muted-foreground/60">
@@ -2307,6 +2321,25 @@ function CanvasInternal({
                                                     <ExternalLink className="size-4" />
                                                     <span>{locale === 'th' ? "เปิดหน้ายื่นเอกสาร" : "Open Document Submission"}</span>
                                                 </ActionMenuItem>
+
+                                                {/* 7. ตั้งค่า: ตั้งค่าทัวร์นาเมนต์ (สุดท้าย) */}
+                                                {userInvitationRole !== 'staff' && userInvitationRole !== 'referee' && (
+                                                    <>
+                                                        <div className="border-t my-1" />
+                                                        <ActionMenuItem
+                                                            onClick={() => {
+                                                                setActiveNodeId(null);
+                                                                selectNode(null);
+                                                                setActiveSidebar('settings');
+                                                                updateUrlParams({ tab: 'settings', subtab: activeSettingsTab || 'general' });
+                                                            }}
+                                                            className="cursor-pointer text-xs font-semibold flex items-center gap-2 py-2"
+                                                        >
+                                                            <Settings className="size-4" />
+                                                            <span>{locale === 'th' ? "ตั้งค่าทัวร์นาเมนต์" : "Settings"}</span>
+                                                        </ActionMenuItem>
+                                                    </>
+                                                )}
                                             </ActionMenuContent>
                                         </ActionMenu>
                                     )}
@@ -2742,6 +2775,7 @@ function CanvasInternal({
                                                 }
                                                 teams={teams as unknown as Team[]}
                                                 tournamentId={tournament.id}
+                                                sport={tournament.sport}
                                                 format={tournament.format}
                                                 startDate={tournament.start_date}
                                                 endDate={tournament.end_date}
@@ -2899,7 +2933,7 @@ function CanvasInternal({
                                             onSelectionDragStart={readonly ? undefined : onSelectionDragStart}
                                             onSelectionDragStop={readonly ? undefined : onDragStop}
                                             onNodeClick={(event, node) => {
-                                                if (isLocked || isDraggingNodeRef.current) return;
+                                                if (isDraggingNodeRef.current) return;
                                                 const target = (event as any)?.target as HTMLElement | null;
                                                 if (target?.closest('button, input, select, [role="combobox"], [data-slot], .nodrag')) {
                                                     return;
@@ -2912,7 +2946,7 @@ function CanvasInternal({
                                                 }
                                             }}
                                             onPaneClick={() => {
-                                                if (isLocked) return;
+                                                // isLocked bypassed for selection/click
                                                 setActiveNodeId(null);
                                                 selectNode(null);
                                                 if (searchParams.get("tab") || searchParams.get("subtab")) {
@@ -2920,7 +2954,7 @@ function CanvasInternal({
                                                 }
                                             }}
                                             onEdgeClick={() => {
-                                                if (isLocked) return;
+                                                // isLocked bypassed for selection/click
                                                 setActiveNodeId(null);
                                                 selectNode(null);
                                                 if (searchParams.get("tab") || searchParams.get("subtab")) {
@@ -2936,7 +2970,7 @@ function CanvasInternal({
                                             maxZoom={1.5}
                                             nodesDraggable={!readonly && !isLocked}
                                             nodesConnectable={!readonly && !isLocked}
-                                            elementsSelectable={!readonly && !isLocked}
+                                            elementsSelectable={!readonly}
                                             panOnDrag={!readonly}
                                             panOnScroll={!readonly}
                                             zoomOnScroll={!readonly}
@@ -2969,8 +3003,9 @@ function CanvasInternal({
                                     </div>
                                 </div>
 
-                                {((!readonly && !isLocked) || activeNodeId === 'ranking-setting-node') && (
+                                {!readonly && (
                                     <NodeSettings
+                                        isLocked={isLocked}
                                         currentTournamentStatus={currentStatus}
                                         onStatusChange={setCurrentStatus}
                                         onClose={() => {

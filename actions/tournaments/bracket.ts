@@ -1,7 +1,7 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
-import { ActionResponse, BracketCanvasData } from "@/types/index";
+import { ActionResponse, BracketCanvasData, Match } from "@/types/index";
 import { validateTournamentAccess } from "@/lib/security";
 import { ApiClient } from "@/lib/api-client";
 
@@ -254,6 +254,10 @@ export async function saveBracketCanvasInternal(
                     match_index: i + 1,
                     match_number: i + 1,
                     status: existingDbMatch?.status || 'scheduled',
+                    winner_id: existingDbMatch?.winner_id || existingDbMatch?.winner_to_node_id || existingDbMatch?.score_detail?.winner_id || undefined,
+                    winner_to_node_id: existingDbMatch?.winner_to_node_id || existingDbMatch?.winner_id || existingDbMatch?.score_detail?.winner_id || undefined,
+                    penalty_home_score: existingDbMatch?.penalty_home_score ?? existingDbMatch?.home_penalty_score ?? existingDbMatch?.score_detail?.penalty_home_score ?? existingDbMatch?.score_detail?.home_penalty_score ?? undefined,
+                    penalty_away_score: existingDbMatch?.penalty_away_score ?? existingDbMatch?.away_penalty_score ?? existingDbMatch?.score_detail?.penalty_away_score ?? existingDbMatch?.score_detail?.away_penalty_score ?? undefined,
                     is_manual: true
                 });
             }
@@ -327,71 +331,37 @@ export async function saveBracketCanvasInternal(
             }
         }
 
-        const thirdPlaceNodeIds = new Set<string>();
-        const matchNodes = updatedNodes.filter(n => n.type === 'matchNode');
+        // Auto-complete tournament ONLY when ALL matches across the tournament are finished
+        let allMatchesFinished = false;
+        try {
+            const tourMatchesRes = await fetch(`${apiUrl}/tournaments/${tournamentId}/matches`, { cache: 'no-store' });
+            if (tourMatchesRes.ok) {
+                const tourMatchesData = await tourMatchesRes.json();
+                const matchesList: Match[] = Array.isArray(tourMatchesData)
+                    ? tourMatchesData
+                    : Array.isArray(tourMatchesData?.matches)
+                        ? tourMatchesData.matches
+                        : allCurrentMatches;
 
-        matchNodes.forEach(node => {
-            const hasLoserInput = canvasData.edges.some(e => e.target === node.id && e.sourceHandle?.startsWith('loser'));
-            const labelLower = ((node.data as { label?: string })?.label || "").toLowerCase();
-            if (hasLoserInput || labelLower.includes('3rd') || labelLower.includes('third') || labelLower.includes('อันดับ 3')) {
-                thirdPlaceNodeIds.add(node.id);
-            }
-        });
-
-        const grandFinalNodeIds = new Set<string>();
-        matchNodes.forEach(node => {
-            if (thirdPlaceNodeIds.has(node.id)) return;
-            const hasOutgoingWinner = canvasData.edges.some(e =>
-                e.source === node.id &&
-                (!e.sourceHandle || e.sourceHandle.startsWith('winner')) &&
-                matchNodes.some(targetNode => targetNode.id === e.target)
-            );
-            if (!hasOutgoingWinner) {
-                grandFinalNodeIds.add(node.id);
-            }
-        });
-
-        let hasChampion = false;
-
-        // Check Grand Final nodes
-        for (const finalId of grandFinalNodeIds) {
-            const node = matchNodes.find(n => n.id === finalId);
-            const nodeMatches = (node?.data as MatchNodeData)?.matches || [];
-            for (let idx = 0; idx < nodeMatches.length; idx++) {
-                const mItem = nodeMatches[idx];
-                const matchId = mItem?.dbId || mItem?.matchId;
-                const dbM = allCurrentMatches.find(m =>
-                    (matchId && m.id === matchId) ||
-                    (m.node_id === finalId && ((m.idx_match ?? m.match_index) === (idx + 1)))
-                );
-                if (dbM) {
-                    const isEnded = ['finished', 'completed', 'canceled', 'cancelled'].includes(dbM.status) || !!dbM.winner_id;
-                    if (isEnded) {
-                        const hScore = typeof dbM.home_score === 'object' && dbM.home_score !== null && 'total' in dbM.home_score
-                            ? Number((dbM.home_score as any).total) || 0
-                            : Number(dbM.home_score) || 0;
-                        const aScore = typeof dbM.away_score === 'object' && dbM.away_score !== null && 'total' in dbM.away_score
-                            ? Number((dbM.away_score as any).total) || 0
-                            : Number(dbM.away_score) || 0;
-                        if (dbM.winner_id || hScore !== aScore) {
-                            hasChampion = true;
-                            break;
-                        }
-                    }
+                if (matchesList.length > 0) {
+                    allMatchesFinished = matchesList.every(m =>
+                        ['finished', 'completed', 'canceled', 'cancelled'].includes(m.status)
+                    );
                 }
+            } else if (allCurrentMatches.length > 0) {
+                allMatchesFinished = allCurrentMatches.every(m =>
+                    ['finished', 'completed', 'canceled', 'cancelled'].includes(m.status)
+                );
             }
-            if (hasChampion) break;
+        } catch (_err) {
+            if (allCurrentMatches.length > 0) {
+                allMatchesFinished = allCurrentMatches.every(m =>
+                    ['finished', 'completed', 'canceled', 'cancelled'].includes(m.status)
+                );
+            }
         }
 
-        // Check Round Robin / Standing nodes: if all category matches are finished
-        if (!hasChampion && allCurrentMatches.length > 0) {
-            const allMatchesFinished = allCurrentMatches.every(m => ['finished', 'completed', 'canceled', 'cancelled'].includes(m.status));
-            if (allMatchesFinished) {
-                hasChampion = true;
-            }
-        }
-
-        if (hasChampion) {
+        if (allMatchesFinished) {
             let isUnlocked = false;
             try {
                 const tourRes = await fetch(`${apiUrl}/tournaments/${tournamentId}`, { cache: 'no-store' });

@@ -63,6 +63,7 @@ export interface NodeSettingsProps {
     currentTournamentStatus?: string;
     onStatusChange?: (status: TournamentStatus) => void;
     onClose?: () => void;
+    isLocked?: boolean;
 }
 
 export const isTeamApproved = (item: any) => {
@@ -78,7 +79,7 @@ export const isTeamApproved = (item: any) => {
     );
 };
 
-export function NodeSettings({ currentTournamentStatus, onStatusChange, onClose }: NodeSettingsProps = {}) {
+export function NodeSettings({ currentTournamentStatus, onStatusChange, onClose, isLocked }: NodeSettingsProps = {}) {
     const { nodes, updateNodeData, deleteNode, selectNode, setActiveNodeId, fetchTeams, activeNodeId, activeCategoryId, matches: storeMatches, setMatches: setStoreMatches, teams: storeTeams = [], generateRoundRobinMatches, generateRoundRobinMatchDays, shuffleDrawNode, generateNextRoundFromDraw, updateDrawPair, swapDrawPairSlots } = useBracketStore();
     const params = useParams();
     const tournamentId = params.id as string;
@@ -747,7 +748,7 @@ export function NodeSettings({ currentTournamentStatus, onStatusChange, onClose 
                         >
                             <HelpCircle className="size-4 text-muted-foreground" />
                         </Button>
-                        {(isRegistrationMode || type === "registrationNode") && (
+                        {(isRegistrationMode || type === "registrationNode") && !isLocked && (
                             <Button
                                 variant="default"
                                 size="sm"
@@ -758,7 +759,7 @@ export function NodeSettings({ currentTournamentStatus, onStatusChange, onClose 
                                 {locale === "th" ? "เพิ่มทีมใหม่" : "Add New Team"}
                             </Button>
                         )}
-                        {!isRegistrationMode && !isPseudoNode && (
+                        {!isRegistrationMode && !isPseudoNode && !isLocked && (
                             <Button
                                 variant="ghost"
                                 size="icon-sm"
@@ -770,7 +771,7 @@ export function NodeSettings({ currentTournamentStatus, onStatusChange, onClose 
                             </Button>
                         )}
 
-                        {type === "announcementNode" && (
+                        {type === "announcementNode" && !isLocked && (
                             <Button
                                 variant="default"
                                 size="sm"
@@ -781,7 +782,7 @@ export function NodeSettings({ currentTournamentStatus, onStatusChange, onClose 
                                 {locale === "th" ? "เพิ่มประกาศใหม่" : "New Announcement"}
                             </Button>
                         )}
-                        {type === "sponsorNode" && (
+                        {type === "sponsorNode" && !isLocked && (
                             <Button
                                 variant="default"
                                 size="sm"
@@ -1259,7 +1260,7 @@ export function NodeSettings({ currentTournamentStatus, onStatusChange, onClose 
                                                     variant="outline"
                                                     size="icon-sm"
                                                     onClick={() => handleSetTeamCount(currentTeamCount - 1)}
-                                                    disabled={currentTeamCount <= 0}
+                                                    disabled={isLocked || currentTeamCount <= 0}
                                                 >
                                                     <Minus className="size-4" />
                                                 </Button>
@@ -1268,6 +1269,7 @@ export function NodeSettings({ currentTournamentStatus, onStatusChange, onClose 
                                                     type="text"
                                                     inputMode="numeric"
                                                     value={String(currentTeamCount)}
+                                                    disabled={isLocked}
                                                     onChange={(e) => {
                                                         const val = e.target.value.replace(/[^0-9]/g, "");
                                                         const num = parseInt(val, 10) || 0;
@@ -1280,7 +1282,7 @@ export function NodeSettings({ currentTournamentStatus, onStatusChange, onClose 
                                                     variant="outline"
                                                     size="icon-sm"
                                                     onClick={() => handleSetTeamCount(currentTeamCount + 1)}
-                                                    disabled={currentTeamCount >= 64}
+                                                    disabled={isLocked || currentTeamCount >= 64}
                                                 >
                                                     <Plus className="size-4" />
                                                 </Button>
@@ -1300,7 +1302,7 @@ export function NodeSettings({ currentTournamentStatus, onStatusChange, onClose 
                                                         const nextVal = Math.max(0, current - 1);
                                                         updateNodeData(id, { advancingCount: nextVal });
                                                     }}
-                                                    disabled={(Number(data.advancingCount) || 0) <= 0}
+                                                    disabled={isLocked || (Number(data.advancingCount) || 0) <= 0}
                                                 >
                                                     <Minus className="size-4" />
                                                 </Button>
@@ -1309,6 +1311,7 @@ export function NodeSettings({ currentTournamentStatus, onStatusChange, onClose 
                                                     type="text"
                                                     inputMode="numeric"
                                                     value={data.advancingCount !== undefined && data.advancingCount !== null ? String(data.advancingCount) : "0"}
+                                                    disabled={isLocked}
                                                     onChange={(e) => {
                                                         const val = e.target.value.replace(/[^0-9]/g, "");
                                                         const num = parseInt(val, 10) || 0;
@@ -1325,7 +1328,7 @@ export function NodeSettings({ currentTournamentStatus, onStatusChange, onClose 
                                                         const nextVal = Math.min(16, current + 1);
                                                         updateNodeData(id, { advancingCount: nextVal });
                                                     }}
-                                                    disabled={(Number(data.advancingCount) || 0) >= 16}
+                                                    disabled={isLocked || (Number(data.advancingCount) || 0) >= 16}
                                                 >
                                                     <Plus className="size-4" />
                                                 </Button>
@@ -1812,7 +1815,7 @@ export function NodeSettings({ currentTournamentStatus, onStatusChange, onClose 
                                             size="sm"
                                             onClick={() => generateRoundRobinMatches(id)}
                                             className="text-node-5"
-                                            disabled={currentTeamCount < 2}
+                                            disabled={isLocked || currentTeamCount < 2}
                                             title={locale === "th" ? "สร้างแมตช์พบกันหมด (รวมในโหนดเดียว)" : "Generate Round Robin (Single Node)"}
                                         >
                                             <LayoutGrid className="size-4" />
@@ -1827,7 +1830,7 @@ export function NodeSettings({ currentTournamentStatus, onStatusChange, onClose 
                                             size="sm"
                                             onClick={() => generateRoundRobinMatchDays(id)}
                                             className="text-node-5"
-                                            disabled={currentTeamCount < 2}
+                                            disabled={isLocked || currentTeamCount < 2}
                                             title={locale === "th" ? "สร้างแมตช์แยกตาม Match Day (สุ่มประกบคู่)" : "Generate Match Days (Randomized)"}
                                         >
                                             <Layers className="size-4" />
@@ -1848,6 +1851,7 @@ export function NodeSettings({ currentTournamentStatus, onStatusChange, onClose 
                                 activeCategoryId={activeCategoryId}
                                 dbMatches={storeMatches.length > 0 ? storeMatches : dbMatches}
                                 tournament={tournamentRecord || undefined}
+                                isLocked={isLocked}
                             />
                         )}
 
@@ -1986,7 +1990,7 @@ export function NodeSettings({ currentTournamentStatus, onStatusChange, onClose 
                                             type="button"
                                             size="sm"
                                             onClick={() => shuffleDrawNode(id)}
-                                            disabled={teams.length < 2}
+                                            disabled={isLocked || teams.length < 2}
                                             className="w-full bg-node-4 hover:bg-node-4/90"
                                         >
                                             <Shuffle className="size-4" />
@@ -2064,7 +2068,8 @@ export function NodeSettings({ currentTournamentStatus, onStatusChange, onClose 
                                                         type="button"
                                                         variant="outline"
                                                         size="sm"
-                                                        onClick={() => generateNextRoundFromDraw(id, "round")}
+                                                        disabled={isLocked}
+                                            onClick={() => generateNextRoundFromDraw(id, "round")}
                                                         className="text-node-4"
                                                     >
                                                         <Layers className="size-4" />
@@ -2074,7 +2079,8 @@ export function NodeSettings({ currentTournamentStatus, onStatusChange, onClose 
                                                         type="button"
                                                         variant="outline"
                                                         size="sm"
-                                                        onClick={() => generateNextRoundFromDraw(id, "matches")}
+                                                        disabled={isLocked}
+                                            onClick={() => generateNextRoundFromDraw(id, "matches")}
                                                         className="text-node-4"
                                                     >
                                                         <GitBranch className="size-4" />
@@ -2090,24 +2096,28 @@ export function NodeSettings({ currentTournamentStatus, onStatusChange, onClose 
 
                         {type === "sponsorNode" && (
                             <div className="space-y-4" id="node-settings-sponsor-list">
-                                <AddSponsorDialog
-                                    tournamentId={tournamentId}
-                                    open={isAddSponsorOpen}
-                                    onOpenChange={setIsAddSponsorOpen}
-                                    onSuccess={loadSponsors}
-                                    trigger={null}
-                                />
+                                {!isLocked && (
+                                    <>
+                                        <AddSponsorDialog
+                                            tournamentId={tournamentId}
+                                            open={isAddSponsorOpen}
+                                            onOpenChange={setIsAddSponsorOpen}
+                                            onSuccess={loadSponsors}
+                                            trigger={null}
+                                        />
 
-                                <AddSponsorDialog
-                                    tournamentId={tournamentId}
-                                    sponsorToEdit={editingSponsor}
-                                    open={!!editingSponsor}
-                                    onOpenChange={(open) => {
-                                        if (!open) setEditingSponsor(null);
-                                    }}
-                                    onSuccess={loadSponsors}
-                                    trigger={null}
-                                />
+                                        <AddSponsorDialog
+                                            tournamentId={tournamentId}
+                                            sponsorToEdit={editingSponsor}
+                                            open={!!editingSponsor}
+                                            onOpenChange={(open) => {
+                                                if (!open) setEditingSponsor(null);
+                                            }}
+                                            onSuccess={loadSponsors}
+                                            trigger={null}
+                                        />
+                                    </>
+                                )}
 
                                 {isSponsorLoading ? (
                                     <div className="flex justify-center py-8">
@@ -2121,26 +2131,30 @@ export function NodeSettings({ currentTournamentStatus, onStatusChange, onClose 
                                     />
                                 ) : (
                                     <div className="space-y-4">
-                                        <p className="text-[10px] text-muted-foreground/60 italic">
-                                            Drag handles to reorder sponsors. Reordering updates order_index automatically.
-                                        </p>
+                                        {!isLocked && (
+                                            <p className="text-[10px] text-muted-foreground/60 italic">
+                                                Drag handles to reorder sponsors. Reordering updates order_index automatically.
+                                            </p>
+                                        )}
                                         <div className="border bg-card rounded-sm divide-y divide-border overflow-hidden">
                                             {sponsorsList.map((sponsor, idx) => (
                                                 <div
                                                     key={sponsor.id}
-                                                    draggable
-                                                    onDragStart={(e) => handleDragStart(e, idx)}
-                                                    onDragOver={(e) => handleDragOver(e, idx)}
-                                                    onDragEnd={handleDragEnd}
+                                                    draggable={!isLocked}
+                                                    onDragStart={!isLocked ? (e) => handleDragStart(e, idx) : undefined}
+                                                    onDragOver={!isLocked ? (e) => handleDragOver(e, idx) : undefined}
+                                                    onDragEnd={!isLocked ? handleDragEnd : undefined}
                                                     className={cn(
                                                         "flex items-center justify-between p-4 hover:bg-muted/40 transition-colors",
-                                                        draggedIndex === idx && "opacity-50 bg-destructive/10"
+                                                        !isLocked && draggedIndex === idx && "opacity-50 bg-destructive/10"
                                                     )}
                                                 >
                                                     <div className="flex items-center gap-2 min-w-0">
-                                                        <div className="cursor-grab active:cursor-grabbing text-muted-foreground/40 hover:text-muted-foreground p-1">
-                                                            <GripVertical className="size-4" />
-                                                        </div>
+                                                        {!isLocked && (
+                                                            <div className="cursor-grab active:cursor-grabbing text-muted-foreground/40 hover:text-muted-foreground p-1">
+                                                                <GripVertical className="size-4" />
+                                                            </div>
+                                                        )}
                                                         <div className="h-8 w-8 rounded-full bg-muted/40 flex items-center justify-center overflow-hidden border p-0.5 shrink-0">
                                                             {sponsor.logo_img ? (
                                                                 <Image
@@ -2172,33 +2186,35 @@ export function NodeSettings({ currentTournamentStatus, onStatusChange, onClose 
                                                         </div>
                                                     </div>
 
-                                                    <ActionMenu>
-                                                        <ActionMenuTrigger asChild>
-                                                            <Button
-                                                                variant="ghost"
-                                                                size="icon-sm"
-                                                                className="text-muted-foreground hover:text-foreground shrink-0"
-                                                            >
-                                                                <MoreVertical className="size-4" />
-                                                            </Button>
-                                                        </ActionMenuTrigger>
-                                                        <ActionMenuContent align="end" className="w-32 bg-card shadow-xl">
-                                                            <ActionMenuItem
-                                                                className="cursor-pointer text-xs flex items-center gap-2"
-                                                                onClick={() => handleEditSponsorClick(sponsor)}
-                                                            >
-                                                                <Pencil className="size-4 text-muted-foreground" />
-                                                                <span>{tSponsors("edit")}</span>
-                                                            </ActionMenuItem>
-                                                            <ActionMenuItem
-                                                                className="cursor-pointer text-xs flex items-center gap-2 text-destructive focus:text-destructive focus:bg-destructive/10"
-                                                                onClick={() => handleDeleteSponsorClick(sponsor.id)}
-                                                            >
-                                                                <Trash2 className="size-4" />
-                                                                <span>{tSponsors("delete")}</span>
-                                                            </ActionMenuItem>
-                                                        </ActionMenuContent>
-                                                    </ActionMenu>
+                                                    {!isLocked && (
+                                                        <ActionMenu>
+                                                            <ActionMenuTrigger asChild>
+                                                                <Button
+                                                                    variant="ghost"
+                                                                    size="icon-sm"
+                                                                    className="text-muted-foreground hover:text-foreground shrink-0"
+                                                                >
+                                                                    <MoreVertical className="size-4" />
+                                                                </Button>
+                                                            </ActionMenuTrigger>
+                                                            <ActionMenuContent align="end" className="w-32 bg-card shadow-xl">
+                                                                <ActionMenuItem
+                                                                    className="cursor-pointer text-xs flex items-center gap-2"
+                                                                    onClick={() => handleEditSponsorClick(sponsor)}
+                                                                >
+                                                                    <Pencil className="size-4 text-muted-foreground" />
+                                                                    <span>{tSponsors("edit")}</span>
+                                                                </ActionMenuItem>
+                                                                <ActionMenuItem
+                                                                    className="cursor-pointer text-xs flex items-center gap-2 text-destructive focus:text-destructive focus:bg-destructive/10"
+                                                                    onClick={() => handleDeleteSponsorClick(sponsor.id)}
+                                                                >
+                                                                    <Trash2 className="size-4" />
+                                                                    <span>{tSponsors("delete")}</span>
+                                                                </ActionMenuItem>
+                                                            </ActionMenuContent>
+                                                        </ActionMenu>
+                                                    )}
                                                 </div>
                                             ))}
                                         </div>
@@ -2211,16 +2227,18 @@ export function NodeSettings({ currentTournamentStatus, onStatusChange, onClose 
                             <div className="space-y-4">
                                 <Announcements
                                     tournamentId={tournamentId}
-                                    isEditable={true}
+                                    isEditable={!isLocked}
                                     isCompact={true}
                                     mode="list"
                                 />
-                                <AddAnnouncementDialog
-                                    tournamentId={tournamentId}
-                                    open={isAddAnnouncementOpen}
-                                    onOpenChange={setIsAddAnnouncementOpen}
-                                    trigger={null}
-                                />
+                                {!isLocked && (
+                                    <AddAnnouncementDialog
+                                        tournamentId={tournamentId}
+                                        open={isAddAnnouncementOpen}
+                                        onOpenChange={setIsAddAnnouncementOpen}
+                                        trigger={null}
+                                    />
+                                )}
                             </div>
                         )}
 

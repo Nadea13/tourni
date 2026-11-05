@@ -18,6 +18,7 @@ import {
     Select,
     SelectContent,
     SelectItem,
+    SelectTrigger,
 } from "@/components/ui/dropdown";
 import { DateTimePicker } from "@/components/ui/date-time-picker";
 import { MatchSettingTimerPill } from "./live-match-timer";
@@ -42,6 +43,7 @@ export interface MatchNodeSettingsProps {
     activeCategoryId?: string | null;
     dbMatches: Match[];
     tournament?: Tournament;
+    isLocked?: boolean;
 }
 
 export function MatchNodeSettings({
@@ -51,6 +53,7 @@ export function MatchNodeSettings({
     activeCategoryId,
     dbMatches,
     tournament,
+    isLocked = false,
 }: MatchNodeSettingsProps) {
     const locale = useLocale();
     const router = useRouter();
@@ -58,10 +61,53 @@ export function MatchNodeSettings({
     const { nodes, edges, teams, sport: storeSport, matches: storeMatches, updateNodeData, getCanvasData, setMatches: setStoreMatches, onEdgesChange } = useBracketStore();
     const [isCreatingConsoleId, setIsCreatingConsoleId] = React.useState<string | null>(null);
     const [selectedTeamForDetails, setSelectedTeamForDetails] = React.useState<Registration | null>(null);
+    const [customCourtMatchId, setCustomCourtMatchId] = React.useState<string | null>(null);
+    const [customCourtValue, setCustomCourtValue] = React.useState("");
     const activeDbMatches = storeMatches.length > 0 ? storeMatches : dbMatches;
-    const availableCourts: string[] = Array.isArray(tournament?.settings?.fields)
-        ? tournament.settings.fields
-        : [];
+
+    const availableCourts: string[] = React.useMemo(() => {
+        const set = new Set<string>();
+
+        // 1. From tournament settings.fields
+        if (Array.isArray(tournament?.settings?.fields)) {
+            tournament.settings.fields.forEach((f: unknown) => {
+                if (typeof f === 'string' && f.trim()) set.add(f.trim());
+            });
+        }
+
+        // 2. From tournament number_of_pitches
+        const numPitches = tournament?.number_of_pitches;
+        if (typeof numPitches === 'number' && numPitches > 0) {
+            for (let i = 1; i <= numPitches; i++) {
+                set.add(locale === 'th' ? `สนาม ${i}` : `Pitch ${i}`);
+            }
+        }
+
+        // 3. From all matches in canvas nodes
+        nodes.forEach(n => {
+            const matches = (n.data as any)?.matches;
+            if (Array.isArray(matches)) {
+                matches.forEach((m: any) => {
+                    const name = (m.field_name || m.venue || "").trim();
+                    if (name) set.add(name);
+                });
+            }
+        });
+
+        // 4. From activeDbMatches
+        activeDbMatches.forEach(m => {
+            const name = (m.field_name || m.venue || "").trim();
+            if (name) set.add(name);
+        });
+
+        // 5. Friendly defaults if still empty
+        if (set.size === 0) {
+            set.add(locale === 'th' ? "สนาม 1" : "Pitch 1");
+            set.add(locale === 'th' ? "สนาม 2" : "Pitch 2");
+        }
+
+        return Array.from(set);
+    }, [tournament?.settings?.fields, tournament?.number_of_pitches, nodes, activeDbMatches, locale]);
 
     // Resolve live teams from edges or database assignments
     const getResolvedTeam = React.useCallback(
@@ -605,6 +651,7 @@ export function MatchNodeSettings({
                                         {locale === "th" ? `แมตช์ที่ ${idx + 1}` : `Match #${idx + 1}`}
                                     </span>
                                     <DateTimePicker
+                                        disabled={hasResult || tournament?.status === 'completed'}
                                         date={match.match_date}
                                         time={match.match_time}
                                         onChange={(date, time) => {
@@ -614,60 +661,111 @@ export function MatchNodeSettings({
                                         size="sm"
                                         className="h-7 px-2 text-xs min-w-0"
                                     />
-                                    {/* Court / Pitch Selector or Input */}
-                                    {availableCourts.length > 0 ? (
-                                        <Select
-                                            value={match.field_name || match.venue || "none"}
-                                            onValueChange={(val) => {
-                                                const finalVal = val === "none" ? undefined : val;
-                                                updateMatch({ field_name: finalVal, venue: finalVal });
-                                                useBracketStore.setState({ isDirty: true });
-                                            }}
-                                        >
-                                            <SelectPrimitive.Trigger asChild>
-                                                <button
-                                                    type="button"
-                                                    disabled={hasResult}
-                                                    className="h-7 px-2 text-xs border rounded-sm bg-background hover:bg-muted/50 flex items-center gap-1 shrink-0 text-muted-foreground hover:text-foreground transition-colors cursor-pointer disabled:cursor-not-allowed max-w-[120px]"
+                                    {/* Court / Pitch Selector */}
+                                    {(() => {
+                                        const currentCourt = (match.field_name || match.venue || "").trim();
+                                        const matchCourts = currentCourt && !availableCourts.includes(currentCourt)
+                                            ? [currentCourt, ...availableCourts]
+                                            : availableCourts;
+                                        const isCustom = customCourtMatchId === (match.id || String(idx));
+
+                                        if (isCustom) {
+                                            return (
+                                                <div className="flex items-center gap-1 shrink-0">
+                                                    <input
+                                                        type="text"
+                                                        autoFocus
+                                                        disabled={hasResult || tournament?.status === 'completed'}
+                                                        value={customCourtValue}
+                                                        onChange={(e) => setCustomCourtValue(e.target.value)}
+                                                        onKeyDown={(e) => {
+                                                            if (e.key === "Enter") {
+                                                                const finalVal = customCourtValue.trim() ? customCourtValue.trim() : undefined;
+                                                                updateMatch({ field_name: finalVal, venue: finalVal });
+                                                                useBracketStore.setState({ isDirty: true });
+                                                                setCustomCourtMatchId(null);
+                                                            } else if (e.key === "Escape") {
+                                                                setCustomCourtMatchId(null);
+                                                            }
+                                                        }}
+                                                        placeholder={locale === "th" ? "ชื่อสนาม..." : "Court name..."}
+                                                        className="h-7 px-2 text-xs border rounded-sm bg-background text-foreground w-24 shrink-0 focus:outline-none focus:ring-1 focus:ring-primary"
+                                                    />
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => {
+                                                            const finalVal = customCourtValue.trim() ? customCourtValue.trim() : undefined;
+                                                            updateMatch({ field_name: finalVal, venue: finalVal });
+                                                            useBracketStore.setState({ isDirty: true });
+                                                            setCustomCourtMatchId(null);
+                                                        }}
+                                                        className="h-7 px-1.5 text-xs bg-primary text-black font-semibold rounded-sm hover:bg-primary/90 cursor-pointer"
+                                                        title={locale === "th" ? "บันทึกสนาม" : "Save"}
+                                                    >
+                                                        ✓
+                                                    </button>
+                                                    <button
+                                                        type="button"
+                                                        onClick={() => setCustomCourtMatchId(null)}
+                                                        className="h-7 px-1.5 text-xs border rounded-sm text-muted-foreground hover:text-foreground cursor-pointer"
+                                                        title={locale === "th" ? "ยกเลิก" : "Cancel"}
+                                                    >
+                                                        ✕
+                                                    </button>
+                                                </div>
+                                            );
+                                        }
+
+                                        return (
+                                            <Select
+                                                value={match.field_name || match.venue || "none"}
+                                                onValueChange={(val) => {
+                                                    if (val === "__custom__") {
+                                                        setCustomCourtMatchId(match.id || String(idx));
+                                                        setCustomCourtValue(match.field_name || match.venue || "");
+                                                        return;
+                                                    }
+                                                    const finalVal = val === "none" ? undefined : val;
+                                                    updateMatch({ field_name: finalVal, venue: finalVal });
+                                                    useBracketStore.setState({ isDirty: true });
+                                                }}
+                                            >
+                                                <SelectTrigger
+                                                    size="sm"
+                                                    disabled={hasResult || tournament?.status === 'completed'}
+                                                    className="h-7 px-2 text-xs border rounded-sm bg-background hover:bg-muted/50 flex items-center gap-1 shrink-0 text-muted-foreground hover:text-foreground transition-colors cursor-pointer disabled:cursor-not-allowed max-w-[130px]"
                                                     title={locale === "th" ? "เลือกสนามแข่งขัน" : "Select Court/Pitch"}
                                                 >
                                                     <span className="truncate">
                                                         {match.field_name || match.venue || (locale === "th" ? "เลือกสนาม" : "Court")}
                                                     </span>
-                                                </button>
-                                            </SelectPrimitive.Trigger>
-                                            <SelectContent position="popper" align="start">
-                                                <SelectItem value="none">
-                                                    <span className="text-muted-foreground italic">
-                                                        {locale === "th" ? "ไม่ระบุสนาม" : "No Court"}
-                                                    </span>
-                                                </SelectItem>
-                                                {availableCourts.map((cName) => (
-                                                    <SelectItem key={cName} value={cName}>
-                                                        <span>{cName}</span>
+                                                </SelectTrigger>
+                                                <SelectContent position="popper" align="start" className="min-w-[140px]">
+                                                    <SelectItem value="none">
+                                                        <span className="text-muted-foreground italic">
+                                                            {locale === "th" ? "ไม่ระบุสนาม" : "No Court"}
+                                                        </span>
                                                     </SelectItem>
-                                                ))}
-                                            </SelectContent>
-                                        </Select>
-                                    ) : (
-                                        <input
-                                            type="text"
-                                            disabled={hasResult}
-                                            value={match.field_name || match.venue || ""}
-                                            onChange={(e) => {
-                                                const val = e.target.value.trim() ? e.target.value : undefined;
-                                                updateMatch({ field_name: val, venue: val });
-                                                useBracketStore.setState({ isDirty: true });
-                                            }}
-                                            placeholder={locale === "th" ? "สนามแข่ง..." : "Court..."}
-                                            className="h-7 px-2 text-xs border rounded-sm bg-background text-foreground placeholder:text-muted-foreground w-20 shrink-0 focus:outline-none focus:ring-1 focus:ring-primary disabled:opacity-50"
-                                        />
-                                    )}
+                                                    {matchCourts.map((cName) => (
+                                                        <SelectItem key={cName} value={cName}>
+                                                            <span>{cName}</span>
+                                                        </SelectItem>
+                                                    ))}
+                                                    <SelectItem value="__custom__">
+                                                        <span className="text-primary font-medium flex items-center gap-1">
+                                                            <Plus className="size-3" />
+                                                            {locale === "th" ? "กำหนดสนามเอง..." : "Custom Court..."}
+                                                        </span>
+                                                    </SelectItem>
+                                                </SelectContent>
+                                            </Select>
+                                        );
+                                    })()}
                                 </div>
                                 {hasResult && (
                                     <Lock className="size-4 text-warning" />
                                 )}
-                                {!hasResult && (
+                                {!hasResult && !isLocked && (
                                     <div className="flex items-center gap-1 shrink-0">
                                         <button
                                             type="button"
@@ -701,7 +799,7 @@ export function MatchNodeSettings({
                                     <div className="flex flex-1 items-center justify-end gap-2 min-w-0">
                                         <Select
                                             value={displayHomeName}
-                                            disabled={hasResult}
+                                            disabled={hasResult || isLocked}
                                             onValueChange={(val) => {
                                                 if (hasResult) return;
                                                 const opp = displayAwayName;
@@ -745,7 +843,7 @@ export function MatchNodeSettings({
                                             <SelectPrimitive.Trigger asChild>
                                                 <button
                                                     type="button"
-                                                    disabled={hasResult}
+                                                    disabled={hasResult || isLocked}
                                                     className="flex flex-1 items-center justify-end min-w-0 p-1.5 rounded-sm hover:bg-muted/50 transition-colors cursor-pointer disabled:cursor-not-allowed group/home outline-none"
                                                 >
                                                     <div className="flex flex-col min-w-0 gap-1 items-end">
@@ -849,7 +947,7 @@ export function MatchNodeSettings({
 
                                         <Select
                                             value={displayAwayName}
-                                            disabled={hasResult}
+                                            disabled={hasResult || isLocked}
                                             onValueChange={(val) => {
                                                 if (hasResult) return;
                                                 const opp = displayHomeName;
@@ -893,7 +991,7 @@ export function MatchNodeSettings({
                                             <SelectPrimitive.Trigger asChild>
                                                 <button
                                                     type="button"
-                                                    disabled={hasResult}
+                                                    disabled={hasResult || isLocked}
                                                     className="flex flex-1 items-center justify-start min-w-0 p-1.5 rounded-sm hover:bg-muted/50 transition-colors cursor-pointer disabled:cursor-not-allowed group/away outline-none"
                                                 >
                                                     <div className="flex flex-col min-w-0 gap-1 items-start text-left">

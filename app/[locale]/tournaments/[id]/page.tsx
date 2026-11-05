@@ -178,10 +178,23 @@ export default async function PublicViewPage({
             match_time = match_time || parts[1]?.substring(0, 5) || null;
         }
 
+        const penalty_home_score = m.penalty_home_score ??
+            m.home_penalty_score ??
+            m.score_detail?.penalty_home_score ??
+            m.score_detail?.home_penalty_score;
+        const penalty_away_score = m.penalty_away_score ??
+            m.away_penalty_score ??
+            m.score_detail?.penalty_away_score ??
+            m.score_detail?.away_penalty_score;
+        const winner_id = m.winner_id || m.winner_to_node_id || m.score_detail?.winner_id;
+
         return {
             ...m,
             match_date,
             match_time,
+            penalty_home_score,
+            penalty_away_score,
+            winner_id,
             home_team: m.home_team ? { id: m.home_team_id, name: m.home_team.name, logo_url: m.home_team.logo_url || m.home_team.logo_img } : null,
             away_team: m.away_team ? { id: m.away_team_id, name: m.away_team.name, logo_url: m.away_team.logo_url || m.away_team.logo_img } : null,
             home_score: typeof m.home_score === 'object' && m.home_score !== null && 'total' in m.home_score ? Number((m.home_score as { total?: number }).total) || 0 : Number(m.home_score) || 0,

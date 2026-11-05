@@ -23,6 +23,7 @@ export async function updateMatch(
         timer_status?: 'playing' | 'paused' | 'stopped';
         elapsed_before_pause?: number;
         current_minute?: number | string;
+        score_detail?: Record<string, any> | null;
     },
     tournamentId: string
 ): Promise<ActionResponse> {
@@ -64,9 +65,32 @@ export async function updateMatch(
     }
     if (data.penalty_home_score !== undefined) {
         updateData.home_penalty_score = data.penalty_home_score;
+        updateData.penalty_home_score = data.penalty_home_score;
     }
     if (data.penalty_away_score !== undefined) {
         updateData.away_penalty_score = data.penalty_away_score;
+        updateData.penalty_away_score = data.penalty_away_score;
+    }
+    if (data.winner_id !== undefined) {
+        updateData.winner_id = data.winner_id;
+        updateData.winner_to_node_id = data.winner_id;
+    }
+    const scoreDetailObj: Record<string, unknown> = (data.score_detail && typeof data.score_detail === 'object') ? { ...data.score_detail } : {};
+    if (data.penalty_home_score !== undefined && data.penalty_home_score !== null) {
+        scoreDetailObj.penalty_home_score = data.penalty_home_score;
+        scoreDetailObj.home_penalty_score = data.penalty_home_score;
+    }
+    if (data.penalty_away_score !== undefined && data.penalty_away_score !== null) {
+        scoreDetailObj.penalty_away_score = data.penalty_away_score;
+        scoreDetailObj.away_penalty_score = data.penalty_away_score;
+    }
+    if (data.winner_id !== undefined && data.winner_id !== null) {
+        scoreDetailObj.winner_id = data.winner_id;
+    }
+    if (Object.keys(scoreDetailObj).length > 0) {
+        updateData.score_detail = scoreDetailObj;
+    } else if (data.score_detail !== undefined) {
+        updateData.score_detail = data.score_detail;
     }
     if (data.venue !== undefined) {
         updateData.field_name = data.venue;

@@ -359,8 +359,41 @@ export async function updateTournament(
                 }
             }
             if (formData.has("description")) updateData.description = formData.get("description") as string;
+            if (formData.has("sport_id")) {
+                const sIdRaw = formData.get("sport_id") as string;
+                const sIdNum = parseInt(sIdRaw, 10);
+                if (!isNaN(sIdNum) && sIdNum > 0) {
+                    updateData.sport_id = sIdNum;
+                    currentSettings.sport_id = sIdNum;
+                }
+            }
             if (formData.has("start_date")) updateData.start_date = formData.get("start_date") as string || null;
             if (formData.has("end_date")) updateData.end_date = formData.get("end_date") as string || null;
+
+            const checkStart = (updateData.start_date || currentTour?.start_date) as string | null;
+            const checkEnd = (updateData.end_date || currentTour?.end_date) as string | null;
+            if (checkStart && checkEnd) {
+                const sDate = new Date(checkStart);
+                const eDate = new Date(checkEnd);
+                if (eDate < sDate) {
+                    return { success: false, error: "End date cannot be earlier than start date" };
+                }
+                const diffDays = Math.ceil((eDate.getTime() - sDate.getTime()) / (1000 * 60 * 60 * 24));
+                const effectivePlan = currentTour?.plan || "free";
+                const isFreePlan = effectivePlan === "free" || effectivePlan === "match" || effectivePlan === "starter";
+                if (isFreePlan && diffDays > 30) {
+                    return {
+                        success: false,
+                        error: "แพ็กเกจฟรี (Match) รองรับระยะเวลาทัวร์นาเมนต์สูงสุดไม่เกิน 30 วัน (เหมาะกับทัวร์สุดสัปดาห์/ทัวร์สั้น) หากต้องการจัดลีกยาว 2-6 เดือน กรุณาอัปเกรดเป็นแพ็กเกจ Event หรือ Tournament"
+                    };
+                }
+                if (!isFreePlan && diffDays > 185) {
+                    return {
+                        success: false,
+                        error: "ระยะเวลาทัวร์นาเมนต์สูงสุดไม่เกิน 6 เดือน (180 วัน)"
+                    };
+                }
+            }
             delete currentSettings.document_deadline;
             if (formData.has("document_deadline")) {
                 const dl = (formData.get("document_deadline") as string) || null;
@@ -830,6 +863,27 @@ export async function createTournament(_prevState: ActionResponse, formData: For
             return { success: false, error: "Dates are required" };
         }
 
+        const startDateObj = new Date(start_date);
+        const endDateObj = new Date(end_date);
+        if (endDateObj < startDateObj) {
+            return { success: false, error: "End date cannot be earlier than start date" };
+        }
+        const diffDays = Math.ceil((endDateObj.getTime() - startDateObj.getTime()) / (1000 * 60 * 60 * 24));
+        const effectivePlan = plan || "free";
+        const isFreePlan = effectivePlan === "free" || effectivePlan === "match" || effectivePlan === "starter";
+        if (isFreePlan && diffDays > 30) {
+            return {
+                success: false,
+                error: "แพ็กเกจฟรี (Match) รองรับระยะเวลาทัวร์นาเมนต์สูงสุดไม่เกิน 30 วัน (เหมาะกับทัวร์สุดสัปดาห์/ทัวร์สั้น) หากต้องการจัดลีกยาว 2-6 เดือน กรุณาเลือกแพ็กเกจ Event หรือ Tournament"
+            };
+        }
+        if (!isFreePlan && diffDays > 185) {
+            return {
+                success: false,
+                error: "ระยะเวลาทัวร์นาเมนต์สูงสุดไม่เกิน 6 เดือน (180 วัน)"
+            };
+        }
+
         const logoFile = formData.get("logo_img") as File | null;
         const coverFile = formData.get("cover_img") as File | null;
 
@@ -868,6 +922,7 @@ export async function createTournament(_prevState: ActionResponse, formData: For
 
         // Call Go Backend API to create tournament
         const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1';
+        const sportIdNum = sport_id ? parseInt(sport_id, 10) : undefined;
         const res = await fetch(`${apiUrl}/tournaments`, {
             method: 'POST',
             headers: {
@@ -876,6 +931,7 @@ export async function createTournament(_prevState: ActionResponse, formData: For
             },
             body: JSON.stringify({
                 name,
+                sport_id: !isNaN(Number(sportIdNum)) ? sportIdNum : undefined,
                 description: description || null,
                 start_date,
                 end_date,
@@ -885,7 +941,7 @@ export async function createTournament(_prevState: ActionResponse, formData: For
                 document_deadline: document_deadline || null,
                 plan: plan || "free",
                 settings: {
-                    sport_id,
+                    sport_id: !isNaN(Number(sportIdNum)) ? sportIdNum : sport_id,
                     google_map_url,
                     plan: plan || "free",
                 }
@@ -1213,6 +1269,23 @@ export async function updateMatch(
         updateData.winner_to_node_id = data.winner_to_node_id;
     }
 
+    if (data.winner_id !== undefined) {
+        updateData.winner_id = data.winner_id;
+        if (data.winner_to_node_id === undefined && data.next_node_id === undefined) {
+            updateData.winner_to_node_id = data.winner_id;
+            updateData.next_node_id = data.winner_id;
+        }
+    }
+
+    if (data.penalty_home_score !== undefined) {
+        updateData.home_penalty_score = data.penalty_home_score;
+        updateData.penalty_home_score = data.penalty_home_score;
+    }
+    if (data.penalty_away_score !== undefined) {
+        updateData.away_penalty_score = data.penalty_away_score;
+        updateData.penalty_away_score = data.penalty_away_score;
+    }
+
     if (data.minute !== undefined) {
         const minVal = Number(data.minute);
         updateData.minute = isNaN(minVal) ? null : minVal;
@@ -1225,7 +1298,24 @@ export async function updateMatch(
 
     if (data.ph_home !== undefined) updateData.ph_home = data.ph_home;
     if (data.ph_away !== undefined) updateData.ph_away = data.ph_away;
-    if (data.score_detail !== undefined) updateData.score_detail = data.score_detail;
+
+    const scoreDetailObj: Record<string, unknown> = (data.score_detail && typeof data.score_detail === 'object') ? { ...data.score_detail } : {};
+    if (data.penalty_home_score !== undefined && data.penalty_home_score !== null) {
+        scoreDetailObj.penalty_home_score = data.penalty_home_score;
+        scoreDetailObj.home_penalty_score = data.penalty_home_score;
+    }
+    if (data.penalty_away_score !== undefined && data.penalty_away_score !== null) {
+        scoreDetailObj.penalty_away_score = data.penalty_away_score;
+        scoreDetailObj.away_penalty_score = data.penalty_away_score;
+    }
+    if (data.winner_id !== undefined && data.winner_id !== null) {
+        scoreDetailObj.winner_id = data.winner_id;
+    }
+    if (Object.keys(scoreDetailObj).length > 0) {
+        updateData.score_detail = scoreDetailObj;
+    } else if (data.score_detail !== undefined) {
+        updateData.score_detail = data.score_detail;
+    }
 
     if (data.home_score !== undefined && data.home_score !== null) {
         updateData.home_score = data.home_score;

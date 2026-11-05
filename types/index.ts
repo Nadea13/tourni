@@ -111,6 +111,8 @@ export interface Match {
     // Penalty Shootout (joined)
     penalty_home_score?: number | null;
     penalty_away_score?: number | null;
+    home_penalty_score?: number | null;
+    away_penalty_score?: number | null;
     updated_at?: string | null;
     deleted_at?: string | null;
 }
@@ -245,7 +247,7 @@ export interface GlobalPlayer {
     created_at: string;
 }
 
-export type EventType = 'goal' | 'own_goal' | 'penalty_goal' | 'missed_penalty' | 'assist' | 'yellow_card' | 'red_card' | 'foul' | 'foul_drawn' | 'penalty' | 'substitution' | 'var' | 'add_time' | 'kick_off' | 'first_half' | 'half_time' | 'second_half' | 'full_time' | 'extra_time' | 'extra_time_half_time' | 'extra_time_second_half' | 'penalties' | 'match_paused' | 'match_resumed' | 'penalty_shot' | 'save' | 'corner' | 'injury' | 'walkover' | 'point' | 'ace' | 'spike' | 'block' | 'timeout' | 'set_win' | 'possession' | 'pass' | 'missed_shot' | 'bad_pass' | 'offside' | 'cross' | 'miss_cross';
+export type EventType = 'goal' | 'own_goal' | 'penalty_goal' | 'missed_penalty' | 'assist' | 'yellow_card' | 'red_card' | 'foul' | 'foul_drawn' | 'penalty' | 'substitution' | 'var' | 'add_time' | 'kick_off' | 'first_half' | 'half_time' | 'second_half' | 'full_time' | 'extra_time' | 'extra_time_half_time' | 'extra_time_second_half' | 'penalties' | 'match_paused' | 'match_resumed' | 'penalty_shot' | 'save' | 'corner' | 'injury' | 'walkover' | 'point' | 'ace' | 'spike' | 'block' | 'timeout' | 'set_win' | 'set_end' | 'set_start' | 'match_end' | 'possession' | 'pass' | 'missed_shot' | 'bad_pass' | 'offside' | 'cross' | 'miss_cross' | 'challenge' | 'sanction';
 
 export interface MatchEvent {
     id: string;

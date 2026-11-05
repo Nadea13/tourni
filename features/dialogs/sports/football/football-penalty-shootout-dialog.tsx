@@ -29,7 +29,7 @@ interface PenaltyShootoutDialogProps {
     open?: boolean;
     onOpenChange?: (open: boolean) => void;
     trigger?: React.ReactNode;
-    onComplete?: (homeScore: number, awayScore: number) => void;
+    onComplete?: (homeScore: number, awayScore: number, winnerId: string) => void;
     onUpdate?: () => void;
     readOnly?: boolean;
 }
@@ -45,7 +45,7 @@ export function PenaltyShootoutDialog({
     open: openProp,
     onOpenChange: onOpenChangeProp,
     trigger,
-    onComplete: _onComplete,
+    onComplete,
     onUpdate,
     readOnly = false,
 }: PenaltyShootoutDialogProps) {
@@ -225,10 +225,27 @@ export function PenaltyShootoutDialog({
 
                         {/* Winner/Status Banner */}
                         {hasWinner ? (
-                            <div className="flex items-center justify-center">
+                            <div className="flex flex-col items-center justify-center gap-2">
                                 <Badge className="bg-primary/10 text-primary border-primary/20 px-4 py-1.5 text-xs font-black tracking-widest rounded-sm">
                                     {t("wins_on_penalties", { team: hasWinner === 'home' ? homeTeamName : awayTeamName })}
                                 </Badge>
+                                {!readOnly && (
+                                    <Button
+                                        type="button"
+                                        size="sm"
+                                        className="bg-primary text-black hover:bg-primary/90 font-bold text-xs h-8 gap-1.5 px-4 cursor-pointer mt-1"
+                                        onClick={() => {
+                                            const winnerId = hasWinner === 'home' ? homeTeamId : awayTeamId;
+                                            if (winnerId) {
+                                                onComplete?.(homeScore, awayScore, winnerId);
+                                                setOpen(false);
+                                            }
+                                        }}
+                                    >
+                                        <Check className="h-4 w-4" />
+                                        <span>{t("confirm_penalty_winner") || "ยืนยันผลการดวลจุดโทษ"}</span>
+                                    </Button>
+                                )}
                             </div>
                         ) : isSuddenDeath ? (
                             <div className="flex items-center justify-center">
@@ -318,7 +335,7 @@ export function PenaltyShootoutDialog({
                                         </div>
 
                                         {/* Round Number */}
-                                        <div className="flex items-center justify-center">
+                                        <div className="flex flex-col items-center justify-center gap-2">
                                             <span className="w-5 h-5 flex items-center justify-center rounded-full border border-border bg-transparent text-[10px] font-black tracking-tighter text-foreground/70">
                                                 {i + 1}
                                             </span>

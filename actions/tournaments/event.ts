@@ -10,7 +10,12 @@ export async function getMatchEvents(matchId: string): Promise<ActionResponse<Ma
     try {
         const events = await ApiClient.fetch<any[]>(`/matches/${matchId}/events`);
         const mapped: MatchEvent[] = (events || []).map((e) => {
-            const detailObj = e.detail || e.extra_info || {};
+            let detailObj = e.detail || e.extra_info || {};
+            if (typeof detailObj === 'string') {
+                try {
+                    detailObj = JSON.parse(detailObj);
+                } catch (_) {}
+            }
             const eventType = e.type || e.event_type || 'goal';
             return {
                 ...e,

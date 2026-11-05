@@ -1,6 +1,8 @@
 import { useState, useEffect } from "react";
 import { Match, MatchEvent } from "@/types";
 import Image from "next/image";
+import { cn } from "@/lib/utils";
+import { useLocale } from "next-intl";
 
 import { MatchTimer } from "./timer";
 
@@ -18,16 +20,24 @@ interface ScoreboardProps {
     homeScore: number;
     awayScore: number;
     events?: MatchEvent[];
-    onTeamClick?: (teamId: string) => void;
+    onTeamClick?: (teamId: string, side?: 'home' | 'away') => void;
     // Timer props
     timerTime?: number;
     timerReadOnly?: boolean;
     timerCustomText?: string | number | null;
     addedTime?: number | null;
     showPossession?: boolean;
+    isFutsal?: boolean;
+    homeFouls?: number;
+    awayFouls?: number;
+    homeTimeoutUsed?: boolean;
+    awayTimeoutUsed?: boolean;
 }
 
-export function Scoreboard({ match, homeScore, awayScore, events = [], onTeamClick, timerTime, timerReadOnly, timerCustomText, addedTime, showPossession = true }: ScoreboardProps) {
+export function Scoreboard({ match, homeScore, awayScore, events = [], onTeamClick, timerTime, timerReadOnly, timerCustomText, addedTime, showPossession = true, isFutsal = false, homeFouls = 0, awayFouls = 0, homeTimeoutUsed = false, awayTimeoutUsed = false }: ScoreboardProps) {
+    const locale = useLocale();
+    const isTh = locale === "th";
+    const isFutsalSport = isFutsal || (match as any).sport === 'futsal' || (match as any).sport?.includes('futsal') || (match as any).sport?.includes('ฟุตซอล');
     const [now, setNow] = useState(() => Date.now());
 
     useEffect(() => {
@@ -148,7 +158,8 @@ export function Scoreboard({ match, homeScore, awayScore, events = [], onTeamCli
                 <div className="flex items-center justify-between w-full max-w-7xl px-2 lg:px-8 gap-4 lg:gap-12">
                     <div
                         className="flex-1 flex flex-row-reverse items-center justify-start gap-2 lg:flex-col lg:items-center lg:gap-4 cursor-pointer group/home min-w-0"
-                        onClick={() => onTeamClick?.(match.home_team_id || "")}
+                        onClick={() => onTeamClick?.(match.home_team_id || match.home_team?.id || "", 'home')}
+                        title={isTh ? "ดูรายชื่อตัวจริง - สำรอง" : "View Lineup"}
                     >
                         <div className="inline-flex items-center justify-center w-12 h-12 lg:w-24 lg:h-24 rounded-full relative group/logo shrink-0">
                             {match.home_team?.logo_url ? (
@@ -175,12 +186,100 @@ export function Scoreboard({ match, homeScore, awayScore, events = [], onTeamCli
                             />
                         )}
 
-                        <div className="flex items-center gap-4 lg:gap-8 tabular-nums">
+                        <div className="flex items-center gap-3 lg:gap-8 tabular-nums">
+                            {/* Home Fouls (Futsal: same position as volleyball set) */}
+                            {isFutsalSport && (() => {
+                                const homeStep = homeFouls % 6;
+                                return (
+                                <div className="flex flex-col items-center lg:items-end gap-1">
+                                    <div className="flex items-center gap-1.5 lg:gap-2">
+                                        <div className="flex items-center gap-0.5 lg:gap-1">
+                                            {[1, 2, 3, 4, 5].map((num) => {
+                                                return (
+                                                    <span
+                                                        key={num}
+                                                        className={cn(
+                                                            "w-1.5 h-1.5 lg:w-2 lg:h-2 rounded-full transition-colors",
+                                                            homeStep >= num
+                                                                ? homeStep >= 5 ? "bg-destructive animate-pulse" : "bg-warning"
+                                                                : "bg-muted-foreground/20"
+                                                        )}
+                                                    />
+                                                );
+                                            })}
+                                        </div>
+                                        <span className={cn(
+                                            "text-2xl lg:text-5xl font-black",
+                                            homeStep >= 5 ? "text-destructive animate-pulse" : "text-primary"
+                                        )}>
+                                            {homeStep}
+                                        </span>
+                                    </div>
+                                    <div className="flex items-center gap-1.5 text-[9px] lg:text-[10px] font-semibold text-muted-foreground">
+                                        <span
+                                            title={homeTimeoutUsed ? (isTh ? "เวลานอก: ใช้แล้ว" : "Timeout: Used") : (isTh ? "เวลานอก: พร้อมใช้" : "Timeout: Available")}
+                                            className={cn(
+                                                "w-1.5 h-1.5 lg:w-2 lg:h-2 rounded-full transition-colors shrink-0",
+                                                homeTimeoutUsed ? "bg-muted-foreground/20" : "bg-node-5 shadow-[0_0_6px_var(--color-node-5)]"
+                                            )}
+                                        />
+                                        <span>{isTh ? "เวลานอก" : "TO"}</span>
+                                    </div>
+                                </div>
+                                );
+                            })()}
+
+                            {/* Home Score */}
                             <span className="text-5xl lg:text-7xl lg:text-9xl font-black tracking-tighter text-foreground">{homeScore}</span>
+
                             <div className="flex flex-col items-center gap-2">
                                 <span className="text-primary text-2xl lg:text-4xl font-black">-</span>
                             </div>
+
+                            {/* Away Score */}
                             <span className="text-5xl lg:text-7xl lg:text-9xl font-black tracking-tighter text-foreground">{awayScore}</span>
+
+                            {/* Away Fouls (Futsal: same position as volleyball set) */}
+                            {isFutsalSport && (() => {
+                                const awayStep = awayFouls % 6;
+                                return (
+                                <div className="flex flex-col items-center lg:items-start gap-1">
+                                    <div className="flex items-center gap-1.5 lg:gap-2">
+                                        <span className={cn(
+                                            "text-2xl lg:text-5xl font-black",
+                                            awayStep >= 5 ? "text-destructive animate-pulse" : "text-primary"
+                                        )}>
+                                            {awayStep}
+                                        </span>
+                                        <div className="flex items-center gap-0.5 lg:gap-1">
+                                            {[1, 2, 3, 4, 5].map((num) => {
+                                                return (
+                                                    <span
+                                                        key={num}
+                                                        className={cn(
+                                                            "w-1.5 h-1.5 lg:w-2 lg:h-2 rounded-full transition-colors",
+                                                            awayStep >= num
+                                                                ? awayStep >= 5 ? "bg-destructive animate-pulse" : "bg-warning"
+                                                                : "bg-muted-foreground/20"
+                                                        )}
+                                                    />
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                    <div className="flex items-center gap-1.5 text-[9px] lg:text-[10px] font-semibold text-muted-foreground">
+                                        <span>{isTh ? "เวลานอก" : "TO"}</span>
+                                        <span
+                                            title={awayTimeoutUsed ? (isTh ? "เวลานอก: ใช้แล้ว" : "Timeout: Used") : (isTh ? "เวลานอก: พร้อมใช้" : "Timeout: Available")}
+                                            className={cn(
+                                                "w-1.5 h-1.5 lg:w-2 lg:h-2 rounded-full transition-colors shrink-0",
+                                                awayTimeoutUsed ? "bg-muted-foreground/20" : "bg-node-5 shadow-[0_0_6px_var(--color-node-5)]"
+                                            )}
+                                        />
+                                    </div>
+                                </div>
+                                );
+                            })()}
                         </div>
 
                         {/* Penalty Shootout Score */}
@@ -193,8 +292,9 @@ export function Scoreboard({ match, homeScore, awayScore, events = [], onTeamCli
                             const showHomeScore = match.penalty_home_score !== null && match.penalty_home_score !== undefined ? match.penalty_home_score : localHomeScore;
                             const showAwayScore = match.penalty_away_score !== null && match.penalty_away_score !== undefined ? match.penalty_away_score : localAwayScore;
                             
-                            // Only show if there's at least one penalty shot logged
-                            if (pEvents.length > 0) {
+                            // Show if there is penalty score recorded or at least one penalty shot logged
+                            const hasPenaltyScore = (match.penalty_home_score !== null && match.penalty_home_score !== undefined && (Number(match.penalty_home_score) > 0 || Number(match.penalty_away_score) > 0)) || pEvents.length > 0;
+                            if (hasPenaltyScore) {
                                 return (
                                     <div className="px-2 py-0.5 rounded text-xs lg:text-base font-black tracking-widest text-primary">
                                         (PEN {showHomeScore} - {showAwayScore})
@@ -207,7 +307,8 @@ export function Scoreboard({ match, homeScore, awayScore, events = [], onTeamCli
 
                     <div
                         className="flex-1 flex flex-row items-center justify-start gap-2 lg:flex-col lg:items-center lg:gap-4 cursor-pointer group/away min-w-0"
-                        onClick={() => onTeamClick?.(match.away_team_id || "")}
+                        onClick={() => onTeamClick?.(match.away_team_id || match.away_team?.id || "", 'away')}
+                        title={isTh ? "ดูรายชื่อตัวจริง - สำรอง" : "View Lineup"}
                     >
                         <div className="inline-flex items-center justify-center w-12 h-12 lg:w-24 lg:h-24 rounded-full relative group/logo shrink-0">
                             {match.away_team?.logo_url ? (

@@ -13,7 +13,8 @@ import {
     Flag,
     FlagTriangleRight,
     Stethoscope,
-    MonitorPlay
+    MonitorPlay,
+    Crosshair
 } from "lucide-react";
 import { IconBallFootball } from "@tabler/icons-react";
 import { Button } from "@/components/ui/button";
@@ -44,14 +45,16 @@ const PERIOD_LIFECYCLE_TYPES = [
 ];
 
 const isEventVisible = (event: MatchEvent, visibleLogs?: string[], isSecondYellow?: boolean) => {
-    if (!visibleLogs) return true;
     const type = event.event_type;
+    // Do not show pause and resume events in the event log
+    if (type === 'match_paused' || type === 'match_resumed') return false;
+    if (type === 'timeout') return true;
+    if (!visibleLogs) return true;
     if (visibleLogs.includes(type)) return true;
     if (isSecondYellow && visibleLogs.includes('red_card')) return true;
     if (type === 'penalty' && visibleLogs.includes('penalty_shot')) return true;
     if (type === 'penalty_shot' && visibleLogs.includes('penalty')) return true;
     if (type === 'miss_cross' && visibleLogs.includes('cross')) return true;
-    if (type === 'match_resumed' && visibleLogs.includes('match_paused')) return true;
     if (PERIOD_LIFECYCLE_TYPES.includes(type) && visibleLogs.includes('period_lifecycle')) return true;
     return false;
 };
@@ -98,9 +101,13 @@ export function EventLog({ events, match, readOnly = false, onDelete, players = 
         return map;
     }, [events]);
 
-    const filteredEvents = visibleLogs
+    const filteredEvents = (visibleLogs
         ? events.filter(e => isEventVisible(e, visibleLogs, secondYellowMap.has(e.id)))
-        : events;
+        : events
+    ).filter(e => {
+        const t = e.event_type || (e as any).type;
+        return t !== 'match_paused' && t !== 'match_resumed';
+    });
 
     const getPlayer = (playerId?: string | null, playerName?: string | null): Player | undefined => {
         if (!players || players.length === 0) return undefined;
@@ -152,11 +159,21 @@ export function EventLog({ events, match, readOnly = false, onDelete, players = 
             if (cardType === 'red') {
                 return `${t("foul") || (locale === 'th' ? "ฟาวล์" : "Foul")} (${t("red_card") || (locale === 'th' ? "ใบแดง" : "Red Card")})`;
             }
+            if (extra.is_second_penalty) {
+                return locale === 'th' ? "จุดโทษระยะ 2" : "2nd Penalty";
+            }
+            if (extra.foul_count) {
+                return `${t("foul") || (locale === 'th' ? "ฟาวล์" : "Foul")} (${extra.foul_count}/5)`;
+            }
             return t("foul") || (locale === 'th' ? "ฟาวล์" : "Foul");
         }
 
         if (type === 'substitution') {
             return t("substitution") || (locale === 'th' ? "เปลี่ยนตัว" : "Substitution");
+        }
+
+        if (type === 'timeout') {
+            return t("timeout") || (locale === 'th' ? "ขอเวลานอก" : "Timeout");
         }
 
         const evtConfig = EVENT_TYPES.find(e => e.type === type);
@@ -224,6 +241,13 @@ export function EventLog({ events, match, readOnly = false, onDelete, players = 
 
         if (type === 'foul') {
             const cardType = extra.card_type as string | undefined;
+            if (extra.is_second_penalty) {
+                return (
+                    <span className="inline-flex items-center gap-1.5 shrink-0" title={locale === 'th' ? "จุดโทษระยะ 2" : "2nd Penalty"}>
+                        <Crosshair className="size-4 text-destructive shrink-0" />
+                    </span>
+                );
+            }
             return (
                 <span className="inline-flex items-center gap-1.5 shrink-0" title={t("foul") || "ฟาวล์"}>
                     <Hand className="size-4 text-orange-500 shrink-0" />
@@ -241,6 +265,14 @@ export function EventLog({ events, match, readOnly = false, onDelete, players = 
             return (
                 <span title={t("substitution") || "เปลี่ยนตัว"}>
                     <RotateCw className="size-4 text-blue-500 shrink-0" />
+                </span>
+            );
+        }
+
+        if (type === 'timeout') {
+            return (
+                <span title={t("timeout") || "ขอเวลานอก"}>
+                    <Clock className="size-4 text-purple-500 shrink-0" />
                 </span>
             );
         }
@@ -325,6 +357,10 @@ export function EventLog({ events, match, readOnly = false, onDelete, players = 
                         />
                     ) : (
                         filteredEvents.map((event: MatchEvent) => {
+                            const currentType = event.event_type || (event as any).type;
+                            if (currentType === 'match_paused' || currentType === 'match_resumed') {
+                                return null;
+                            }
                             const evtConfig = EVENT_TYPES.find(e => e.type === event.event_type);
                             const globalEventTypes = [
                                 'kick_off',
@@ -336,15 +372,21 @@ export function EventLog({ events, match, readOnly = false, onDelete, players = 
                                 'extra_time_half_time',
                                 'extra_time_second_half',
                                 'penalties',
-                                'match_paused',
-                                'match_resumed',
                                 'add_time'
                             ];
-                            const isNeutral = !event.team_id || globalEventTypes.includes(event.event_type);
+                            const homeId = match.home_team_id || match.home_team?.id || 'home';
+                            const awayId = match.away_team_id || match.away_team?.id || 'away';
+                            const extra = ((event.extra_info || event.detail || {}) as Record<string, unknown>);
+                            const teamSide = extra.team_side as string | undefined;
+
+                            const isExplicitHome = teamSide === 'home' || event.team_id === homeId || (Boolean(match.home_team_id) && event.team_id === match.home_team_id);
+                            const isExplicitAway = teamSide === 'away' || event.team_id === awayId || (Boolean(match.away_team_id) && event.team_id === match.away_team_id);
+
+                            const isNeutral = globalEventTypes.includes(event.event_type) || (!isExplicitHome && !isExplicitAway && !event.team_id);
                             const isGoal = event.event_type === 'goal';
                             const isSpecialCentered = isNeutral || isGoal;
-                            const isHome = !isNeutral && event.team_id === match.home_team_id;
-                            const eventTeam = isHome ? match.home_team : (event.team_id === match.away_team_id ? match.away_team : null);
+                            const isHome = isExplicitHome || (!isNeutral && !isExplicitAway);
+                            const eventTeam = isHome ? match.home_team : (isExplicitAway ? match.away_team : null);
                             const isUnknownPlayer = 
                                 !event.player_name ||
                                 event.player_id === 'unknown' ||
@@ -531,28 +573,39 @@ export function EventLog({ events, match, readOnly = false, onDelete, players = 
 
                                                     <div className="min-w-0">
                                                         {/* Details Row: Player Name or Substitution details */}
-                                                        {event.event_type === 'substitution' ? (
-                                                            <div className={cn(
-                                                                "flex items-center gap-3 flex-wrap",
-                                                                isHome ? "flex-row justify-start" : "flex-row-reverse justify-start"
-                                                            )}>
-                                                                {/* Out Player */}
-                                                                <div className="flex items-center gap-1.5">
-                                                                    <PlayerAvatar size="sm" player={outPlayer} name={String(event.extra_info?.out_player_name || '')} />
-                                                                    <span className="text-xs font-bold text-foreground">
-                                                                        <span className="text-red-500 mr-1">▼</span>{String(event.extra_info?.out_player_name || t("unknown_player"))}
-                                                                    </span>
-                                                                </div>
+                                                        {event.event_type === 'substitution' ? (() => {
+                                                            const extra = (event.extra_info || event.detail) as Record<string, unknown> | null;
+                                                            const isPenaltyReturn = Boolean(extra?.is_penalty_return || extra?.out_player_name === '-' || !extra?.out_player_id || extra?.out_player_id === 'none');
+                                                            return (
+                                                                <div className={cn(
+                                                                    "flex items-center gap-3 flex-wrap",
+                                                                    isHome ? "flex-row justify-start" : "flex-row-reverse justify-start"
+                                                                )}>
+                                                                    {/* Out Player (only if not penalty return) */}
+                                                                    {!isPenaltyReturn && (
+                                                                        <div className="flex items-center gap-1.5">
+                                                                            <PlayerAvatar size="sm" player={outPlayer} name={String(extra?.out_player_name || '')} />
+                                                                            <span className="text-xs font-bold text-foreground">
+                                                                                <span className="text-red-500 mr-1">▼</span>{String(extra?.out_player_name || t("unknown_player"))}
+                                                                            </span>
+                                                                        </div>
+                                                                    )}
 
-                                                                {/* In Player */}
-                                                                <div className="flex items-center gap-1.5">
-                                                                    <PlayerAvatar size="sm" player={inPlayer} name={String(event.extra_info?.in_player_name || '')} />
-                                                                    <span className="text-xs font-bold text-foreground">
-                                                                        <span className="text-emerald-500 mr-1">▲</span>{String(event.extra_info?.in_player_name || t("unknown_player"))}
-                                                                    </span>
+                                                                    {/* In Player */}
+                                                                    <div className="flex items-center gap-1.5">
+                                                                        <PlayerAvatar size="sm" player={inPlayer} name={String(extra?.in_player_name || '')} />
+                                                                        <span className="text-xs font-bold text-foreground">
+                                                                            <span className="text-emerald-500 mr-1">▲</span>{String(extra?.in_player_name || t("unknown_player"))}
+                                                                            {isPenaltyReturn && (
+                                                                                <span className="ml-1 text-[10px] font-semibold text-emerald-500 bg-emerald-500/10 px-1 py-0.5 rounded border border-emerald-500/20">
+                                                                                    {locale === 'th' ? "เติมผู้เล่นพ้นโทษใบแดง" : "Full strength return"}
+                                                                                </span>
+                                                                            )}
+                                                                        </span>
+                                                                    </div>
                                                                 </div>
-                                                            </div>
-                                                        ) : (
+                                                            );
+                                                        })() : (
                                                             <div className={cn(
                                                                 "text-xs font-bold tracking-wide flex flex-wrap items-center gap-1.5 text-foreground",
                                                                 isHome ? "justify-start" : "justify-end"
@@ -571,15 +624,9 @@ export function EventLog({ events, match, readOnly = false, onDelete, players = 
 
                                                                 {/* Foul extras: penalty, fouled player */}
                                                                 {event.event_type === 'foul' && (() => {
-                                                                    const isPen = !!(event.extra_info as Record<string, unknown> | null)?.is_penalty;
                                                                     const fouledName = (event.extra_info as Record<string, unknown> | null)?.fouled_player_name as string | undefined;
                                                                     return (
                                                                         <span className="inline-flex flex-wrap items-center gap-1 text-[11px] font-bold text-muted-foreground">
-                                                                            {isPen && (
-                                                                                <span className="text-destructive font-black bg-destructive/10 px-1.5 py-0.5 rounded-xs border border-destructive/20">
-                                                                                    ⚽ {t("penalty")}
-                                                                                </span>
-                                                                            )}
                                                                             {fouledName && (
                                                                                 <span className="text-muted-foreground bg-muted/50 px-1.5 py-0.5 rounded-xs">
                                                                                     {t("fouled_player")}: {fouledName}
@@ -618,7 +665,8 @@ export function EventLog({ events, match, readOnly = false, onDelete, players = 
                                                                     event.event_type === 'goal' ? "text-emerald-500" :
                                                                     isEffectivelyRedCard ? "text-red-500" :
                                                                     event.event_type === 'yellow_card' ? "text-amber-500" :
-                                                                    event.event_type === 'foul' ? "text-orange-500" :
+                                                                    event.event_type === 'foul' ? ((event.extra_info as Record<string, unknown> | null)?.is_second_penalty ? "text-destructive font-black" : "text-orange-500") :
+                                                                    event.event_type === 'timeout' ? "text-purple-500 font-bold" :
                                                                     "text-muted-foreground"
                                                                 )}>
                                                                     {getEventLabel(event, isSecondYellow)}

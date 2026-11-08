@@ -38,11 +38,19 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     }
   }
 
-  // Attempt to fetch public tournaments for dynamic sitemap indexing (with strict 3s timeout to avoid blocking build)
+  // Skip dynamic external API fetching during CI, Vercel build, or when targeting remote servers
+  // to avoid hanging static page generation workers when the backend is sleeping/cold.
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1';
+  const isRemote = !apiUrl.includes('localhost') && !apiUrl.includes('127.0.0.1');
+
+  if (process.env.CI || process.env.VERCEL || isRemote) {
+    return staticEntries;
+  }
+
+  // Attempt to fetch public tournaments for dynamic sitemap indexing (local backend only)
   try {
-    const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1';
     const res = await fetch(`${apiUrl}/tournaments`, {
-      signal: AbortSignal.timeout(3000),
+      signal: AbortSignal.timeout(2000),
       next: { revalidate: 3600 },
     });
     if (res.ok) {
@@ -68,7 +76,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
       }
     }
   } catch (e: any) {
-    // Graceful fallback to static routes if backend is sleeping or unreachable during build
     console.warn(`[sitemap] Dynamic tournaments fetch skipped (${e?.message || 'timeout/unreachable'}). Using static entries.`);
   }
 

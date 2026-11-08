@@ -83,4 +83,5 @@ jobs:
       - name: Verify Next.js Production Build
         run: npm run build
         env:
-          NEXT_PUBLIC_API_URL: https://leagueflow-v80x.onrender.com/api/v1
+          NEXT_PUBLIC_API_URL: http://127.0.0.1:8080/api/v1
+          CI: true

@@ -38,12 +38,16 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     }
   }
 
-  // Attempt to fetch public tournaments for dynamic sitemap indexing
+  // Attempt to fetch public tournaments for dynamic sitemap indexing (with strict 3s timeout to avoid blocking build)
   try {
     const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8080/api/v1';
-    const res = await fetch(`${apiUrl}/tournaments`, { next: { revalidate: 3600 } });
+    const res = await fetch(`${apiUrl}/tournaments`, {
+      signal: AbortSignal.timeout(3000),
+      next: { revalidate: 3600 },
+    });
     if (res.ok) {
-      const { data: tournaments } = await res.json();
+      const json = await res.json().catch(() => ({}));
+      const tournaments = json.data || (Array.isArray(json) ? json : []);
       if (tournaments && tournaments.length > 0) {
         for (const t of tournaments) {
           for (const locale of locales) {
@@ -63,8 +67,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
         }
       }
     }
-  } catch (e) {
-    console.error('Error fetching tournaments for sitemap:', e);
+  } catch (e: any) {
+    // Graceful fallback to static routes if backend is sleeping or unreachable during build
+    console.warn(`[sitemap] Dynamic tournaments fetch skipped (${e?.message || 'timeout/unreachable'}). Using static entries.`);
   }
 
   return staticEntries;

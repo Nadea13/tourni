@@ -44,8 +44,8 @@ export interface UnifiedRankingItem {
 export function RankingNodeSettings({
     tournamentId,
     categoryId,
-    currentTournamentStatus,
-    onStatusChange,
+    currentTournamentStatus: _currentTournamentStatus,
+    onStatusChange: _onStatusChange,
 }: {
     tournamentId: string;
     categoryId?: string;

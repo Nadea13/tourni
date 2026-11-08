@@ -13,9 +13,6 @@ import {
     Trophy,
     Ban,
     Volleyball,
-    Play,
-    Pause,
-    CheckCircle2,
     Video,
     Square
 } from "lucide-react";

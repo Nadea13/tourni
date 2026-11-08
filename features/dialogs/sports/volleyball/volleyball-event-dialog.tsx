@@ -51,7 +51,7 @@ export function VolleyballEventDialog({
     eventType,
     initialSet = 1,
     players,
-    opponentPlayers = [],
+    opponentPlayers: _opponentPlayers = [],
     activeLineupIds = [],
     onSave
 }: VolleyballEventDialogProps) {

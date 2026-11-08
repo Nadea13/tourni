@@ -26,7 +26,6 @@ import {
     AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
 import {
-    Hand,
     Clock,
     ArrowLeft,
     Undo,

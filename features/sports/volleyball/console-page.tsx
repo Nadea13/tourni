@@ -443,27 +443,6 @@ export function VolleyballConsolePage({
         };
     }, [events, isHomeEvent, isAwayEvent, maxSets]);
 
-    const addPoint = useCallback(async (teamSide: 'home' | 'away', eventType: EventType = 'point', playerId?: string, playerName?: string) => {
-        if (readOnly || match.status !== 'live') return;
-        const teamId = teamSide === 'home' ? match.home_team_id : match.away_team_id;
-        const teamName = teamSide === 'home' ? match.home_team?.name : match.away_team?.name;
-        const playerText = playerName ? ` (${playerName})` : "";
-
-        await addEvent(
-            teamId || null,
-            eventType,
-            currentSet,
-            playerId || null,
-            {
-                text: `Set ${currentSet} - Point for ${teamName || teamSide} (${eventType.toUpperCase()})${playerText}`,
-                set: currentSet,
-                team_side: teamSide,
-                player_name: playerName
-            },
-            playerName || teamName || "Team"
-        );
-    }, [readOnly, match.status, match.home_team_id, match.away_team_id, match.home_team?.name, match.away_team?.name, currentSet, addEvent]);
-
     const handleTriggerActionEvent = (teamSide: 'home' | 'away', eventType: VolleyballActionType) => {
         if (readOnly || match.status !== 'live') return;
         setActionConfig({ teamSide, eventType });

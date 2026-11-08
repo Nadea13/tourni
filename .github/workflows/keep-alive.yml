@@ -15,13 +15,19 @@ jobs:
       - name: Ping Backend Health Endpoint
         run: |
           echo "Pinging Tourni Render Backend..."
-          HTTP_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 30 https://leagueflow-v80x.onrender.com/health)
+          # Use || echo "000" to prevent curl exit code 28 (timeout) from crashing the bash script
+          HTTP_STATUS=$(curl -s -L -o /dev/null -w "%{http_code}" --max-time 60 https://leagueflow-v80x.onrender.com/health || echo "000")
           echo "Backend HTTP Status: $HTTP_STATUS"
-          if [ "$HTTP_STATUS" -ne 200 ]; then
-            echo "::warning ::Backend returned HTTP $HTTP_STATUS, retrying in 5s..."
-            sleep 5
-            RETRY_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 60 https://leagueflow-v80x.onrender.com/health)
+          if [ "$HTTP_STATUS" != "200" ]; then
+            echo "::warning ::Backend returned HTTP $HTTP_STATUS (likely waking up from sleep). Retrying in 10s with 90s timeout..."
+            sleep 10
+            RETRY_STATUS=$(curl -s -L -o /dev/null -w "%{http_code}" --max-time 90 https://leagueflow-v80x.onrender.com/health || echo "000")
             echo "Retry HTTP Status: $RETRY_STATUS"
+            if [ "$RETRY_STATUS" = "200" ]; then
+              echo "Backend is alive and healthy! 🚀"
+            else
+              echo "::warning ::Backend ping returned $RETRY_STATUS. It may still be booting up or suspended on Render."
+            fi
           else
             echo "Backend is alive and healthy! 🚀"
           fi
@@ -29,5 +35,5 @@ jobs:
       - name: Ping Frontend Vercel
         run: |
           echo "Pinging Tourni Vercel Frontend..."
-          FRONTEND_STATUS=$(curl -s -o /dev/null -w "%{http_code}" --max-time 15 https://leagueflow.vercel.app)
+          FRONTEND_STATUS=$(curl -s -L -o /dev/null -w "%{http_code}" --max-time 20 https://tourni-th.vercel.app || echo "000")
           echo "Frontend HTTP Status: $FRONTEND_STATUS"

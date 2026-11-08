@@ -178,6 +178,15 @@ func main() {
 		return c.Next()
 	}
 
+	// Root route (friendly status landing)
+	app.Get("/", func(c *fiber.Ctx) error {
+		return c.JSON(fiber.Map{
+			"status":  "ok",
+			"service": "Tourni API Server",
+			"version": "1.0.0",
+		})
+	})
+
 	// Health check route (unlimited)
 	app.Get("/health", func(c *fiber.Ctx) error {
 		return c.JSON(fiber.Map{

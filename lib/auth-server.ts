@@ -23,6 +23,7 @@ export async function getServerSession(): Promise<{ user: ServerAuthUser; token:
                 Authorization: `Bearer ${token}`,
             },
             cache: 'no-store',
+            signal: AbortSignal.timeout(4000),
         });
 
         if (!res.ok) return null;
